@@ -13,12 +13,12 @@ Progress: tick `[x]` when a task is done.
 
 ## Phase 0: Project setup
 
-### [ ] 0.1 Code structure
+### [x] 0.1 Code structure
 - **Build:** pnpm workspace with `apps/api` (NestJS), `apps/web` (React + Vite), `packages/shared` (types, enums, zod schemas). TypeScript strict, ESLint, Prettier.
 - **Depends on:** —
 - **Done when:** `pnpm dev` starts both apps; lint and typecheck pass.
 
-### [ ] 0.2 Local services
+### [x] 0.2 Local services
 - **Build:** Docker Compose with PostgreSQL 16, MinIO (S3-compatible storage), Mailpit (catches test emails). `.env.example`.
 - **Depends on:** 0.1
 - **Done when:** `docker compose up` starts all three; the API connects to the database.

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 
@@ -15,5 +16,9 @@ async function bootstrap(): Promise<void> {
   await app.listen(process.env.PORT ?? 3000);
 }
 
-// Startup errors are logged where they happen; just exit non-zero.
-bootstrap().catch(() => process.exit(1));
+bootstrap().catch((error: unknown) => {
+  new Logger('Bootstrap').error(
+    `API failed to start: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exit(1);
+});

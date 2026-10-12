@@ -10,27 +10,28 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-docsign}
       POSTGRES_DB: ${POSTGRES_DB:-docsign}
       TZ: UTC
-      PGTZ: UTC
     ports:
       - '${POSTGRES_PORT:-5432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
       interval: 5s
       timeout: 5s
       retries: 10
     restart: unless-stopped
 
+  # Official minio/minio images stopped in 2025; pgsty is a community build used for local dev only.
+  # Production uses AWS S3 / Azure Blob.
   minio:
-    image: minio/minio:MINIO_TAG
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     command: server /data --console-address :9001
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
     ports:
-      - '${MINIO_API_PORT:-9000}:9000'
-      - '${MINIO_CONSOLE_PORT:-9001}:9001'
+      - '9000:9000'
+      - '9001:9001'
     volumes:
       - miniodata:/data
     healthcheck:
@@ -42,29 +43,23 @@ services:
 
   # One-shot: creates the documents bucket, then exits.
   minio-init:
-    image: minio/mc:MC_TAG
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z@sha256:cfc83108c3abb371f8fb84d99c1fdc88f8c237e022409b0081fb7c0a3be634dd
     depends_on:
       minio:
         condition: service_healthy
     environment:
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
-      S3_BUCKET: ${S3_BUCKET:-documents}
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        mc alias set local http://minio:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" &&
-        mc mb --ignore-existing "local/$$S3_BUCKET"
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && mc mb --ignore-existing local/${S3_BUCKET:-documents}
     restart: 'no'
 
   mailpit:
-    image: axllent/mailpit:MAILPIT_TAG
-    environment:
-      TZ: Asia/Jerusalem
+    image: axllent/mailpit:v1.31.5
     ports:
-      - '${SMTP_PORT:-1025}:1025'
-      - '${MAILPIT_UI_PORT:-8025}:8025'
+      - '1025:1025'
+      - '8025:8025'
     restart: unless-stopped
 
 volumes:
