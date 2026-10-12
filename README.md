@@ -58,6 +58,13 @@ Behind a filtering proxy that intercepts HTTPS (e.g. NetFree), Prisma can't down
 setx NODE_OPTIONS --use-system-ca
 ```
 
+## CI
+
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every push and pull request:
+`pnpm install --frozen-lockfile`, build `packages/shared`, then `pnpm lint`, `pnpm typecheck`,
+`pnpm format:check` and `pnpm test`. A newer push to the same branch cancels the older run.
+No database runs in CI yet.
+
 ## How `@doc-signing/shared` is consumed
 
 - **API** imports the compiled output in `packages/shared/dist`. In `pnpm dev`, the shared package runs `tsc --watch`.

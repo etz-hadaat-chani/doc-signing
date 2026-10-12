@@ -28,7 +28,7 @@ Progress: tick `[x]` when a task is done.
 - **Depends on:** 0.1
 - **Done when:** The file exists and its commands run.
 
-### [ ] 0.4 Automatic checks (CI)
+### [x] 0.4 Automatic checks (CI)
 - **Build:** GitHub Actions running lint, typecheck and tests on every push.
 - **Depends on:** 0.1
 - **Done when:** The pipeline passes on the main branch.

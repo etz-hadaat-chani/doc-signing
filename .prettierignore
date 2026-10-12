@@ -4,3 +4,8 @@ pnpm-lock.yaml
 *.tsbuildinfo
 test-results
 playwright-report
+
+# Hand-edited planning docs (the PRD's source of truth is Claude Docs).
+CLAUDE.md
+PRD.md
+TASKS.md
