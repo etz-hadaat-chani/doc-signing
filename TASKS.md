@@ -37,7 +37,7 @@ Progress: tick `[x]` when a task is done.
 
 ## Phase 1: Database
 
-### [ ] 1.1 Prisma and enums
+### [x] 1.1 Prisma and enums
 - **Build:** Prisma setup and all enums from PRD section 12.
 - **Depends on:** 0.2
 - **Done when:** The first migration runs.

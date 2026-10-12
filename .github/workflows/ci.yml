@@ -31,6 +31,10 @@ jobs:
       - name: Build shared
         run: pnpm --filter @doc-signing/shared build
 
+      # Typed lint and typecheck need the generated Prisma client (no database needed).
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm format:check

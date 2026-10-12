@@ -1,5 +1,6 @@
 dist
 coverage
+apps/api/src/generated
 pnpm-lock.yaml
 *.tsbuildinfo
 test-results

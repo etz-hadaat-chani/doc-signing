@@ -40,7 +40,10 @@ docker compose ps       # postgres, minio, mailpit should be "healthy"
 
 ```sh
 pnpm install
-pnpm db:migrate    # prisma migrate dev (apps/api/prisma)
+pnpm db:migrate    # prisma migrate dev, then generate the client (apps/api/prisma)
+pnpm db:generate   # regenerate the Prisma client into apps/api/src/generated (git-ignored)
+pnpm db:studio     # browse the database in Prisma Studio
+pnpm db:reset      # drop the database, re-apply all migrations, run the seed
 pnpm db:seed       # prisma db seed; safe to run repeatedly
 pnpm dev           # builds shared, then runs shared (watch), api and web together
 pnpm test          # Vitest in every package
@@ -61,7 +64,7 @@ setx NODE_OPTIONS --use-system-ca
 ## CI
 
 GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every push and pull request:
-`pnpm install --frozen-lockfile`, build `packages/shared`, then `pnpm lint`, `pnpm typecheck`,
+`pnpm install --frozen-lockfile`, build `packages/shared`, generate the Prisma client, then `pnpm lint`, `pnpm typecheck`,
 `pnpm format:check` and `pnpm test`. A newer push to the same branch cancels the older run.
 No database runs in CI yet.
 
