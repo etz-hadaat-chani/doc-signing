@@ -1,0 +1,24 @@
+{
+  "name": "@doc-signing/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@doc-signing/shared": "workspace:*",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.4"
+  }
+}
