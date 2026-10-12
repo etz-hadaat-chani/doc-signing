@@ -123,6 +123,7 @@ Everything is tracked per **assignment**: one employee in one send round. That i
 | Opened (נפתח) | The employee entered a correct ID number. |
 | Signed (נחתם) | The employee signed digitally. |
 | Signed manually (נחתם ידנית) | A manager uploaded a scan of a paper signature. |
+| Delivered (נמסר) | Delivery-only round (later): the email provider accepted the email. No  signature needed. |
 | No email (אין מייל) | The employee has no email address; needs manual handling. |
 | Invalid email (מייל שגוי) | The email bounced; needs manual handling. |
 | Cancelled (בוטל) | A manager cancelled the round or this employee. |
@@ -568,6 +569,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | id | uuid PK |  |
 | name | varchar(150) |  |
 | mode | enum `single_template` / `by_department` |  |
+| requires_signature | boolean | Default true. False = delivery-only round (later) |
 | status | enum `draft` / `sending` / `active` / `closed` / `cancelled` |  |
 | reminders\_enabled | boolean |  |
 | reminder\_interval\_days | int | Default 3 |
@@ -595,7 +597,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | employee\_id | uuid FK → employees |  |
 | template\_id | uuid FK → templates NULL | NULL for an external report (later) |
 | source\_file\_key | text NULL | Ready per-employee PDF, e.g. Har Gal (later) |
-| status | enum `pending` / `sent` / `opened` / `signed` / `signed_manual` / `no_email` / `invalid_email` / `cancelled` |  |
+| status | enum `pending` / `sent` / `opened` / `signed` / `signed_manual` / `delivered` / `no_email` / `invalid_email` / `cancelled` | `delivered` is used only by delivery-only rounds (later) |
 | failed\_attempts | smallint | Wrong ID attempts |
 | locked\_at | timestamptz NULL | Set at 5 attempts; cleared on unlock |
 | sent\_at, first\_opened\_at, last\_reminder\_at, signed\_at | timestamptz NULL |  |
