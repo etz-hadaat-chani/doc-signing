@@ -40,11 +40,22 @@ docker compose ps       # postgres, minio, mailpit should be "healthy"
 
 ```sh
 pnpm install
+pnpm db:migrate    # prisma migrate dev (apps/api/prisma)
+pnpm db:seed       # prisma db seed; safe to run repeatedly
 pnpm dev           # builds shared, then runs shared (watch), api and web together
+pnpm test          # Vitest in every package
+pnpm test:e2e      # Playwright (apps/web/e2e, files named *.e2e.ts); needs `pnpm dev` running
 pnpm typecheck     # all packages
 pnpm lint          # ESLint across the repo (typed rules)
 pnpm format        # Prettier write; format:check to verify
 pnpm build
+```
+
+Behind a filtering proxy that intercepts HTTPS (e.g. NetFree), Prisma can't download its engines
+("unable to get local issuer certificate"). Let Node trust the Windows certificate store, once per machine:
+
+```sh
+setx NODE_OPTIONS --use-system-ca
 ```
 
 ## How `@doc-signing/shared` is consumed

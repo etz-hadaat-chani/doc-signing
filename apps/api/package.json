@@ -8,7 +8,10 @@
     "dev": "nest start --watch --preserveWatchOutput",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed"
   },
   "dependencies": {
     "@doc-signing/shared": "workspace:*",
@@ -22,6 +25,9 @@
   "devDependencies": {
     "@nestjs/cli": "^12.0.8",
     "@nestjs/schematics": "^12.0.6",
-    "@types/pg": "^8.23.1"
+    "@types/pg": "^8.23.1",
+    "prisma": "7.10.0",
+    "tsx": "4.23.15",
+    "vitest": "5.0.4"
   }
 }

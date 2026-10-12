@@ -1,0 +1,6 @@
+// Database schema. Models and enums are added from task 1.1 on (PRD section 12).
+// The connection URL comes from prisma.config.ts.
+
+datasource db {
+  provider = "postgresql"
+}

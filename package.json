@@ -11,6 +11,10 @@
     "typecheck": "pnpm --filter @doc-signing/shared build && pnpm --recursive typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "test": "pnpm --filter @doc-signing/shared build && pnpm --recursive test",
+    "test:e2e": "pnpm --filter @doc-signing/web test:e2e",
+    "db:migrate": "pnpm --filter @doc-signing/api db:migrate",
+    "db:seed": "pnpm --filter @doc-signing/api db:seed",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

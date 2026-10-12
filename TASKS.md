@@ -23,7 +23,7 @@ Progress: tick `[x]` when a task is done.
 - **Depends on:** 0.1
 - **Done when:** `docker compose up` starts all three; the API connects to the database.
 
-### [ ] 0.3 CLAUDE.md
+### [x] 0.3 CLAUDE.md
 - **Build:** Place CLAUDE.md in the root; make sure every command in it works.
 - **Depends on:** 0.1
 - **Done when:** The file exists and its commands run.
