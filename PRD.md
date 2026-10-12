@@ -98,8 +98,10 @@ The MVP covers one document type: a department PDF that needs only the employee'
 | Activity log screen | Log is already recorded | `audit_log` table |
 | Editing email texts in the interface | MVP uses fixed Hebrew texts | `settings` table |
 | Organizational digital seal on the PDF | Not required | — |
+| Delivery-only rounds (no signature) | Not needed for launch | `rounds.requires_signature`, `delivered` status, `assignments.source_file_key` |
 
-**Delivery-only documents (later, for reports such as Har Gal):** a round can be marked "no signature needed". It is sent once, with no reminders and no need to open it; the status becomes "Delivered" when the email is accepted. Har Gal input stays open: one PDF per employee, one large PDF split by employee, or Excel.
+**Delivery-only documents (later, for reports such as Har Gal):** a round can be marked "no signature needed" (`requires_signature = false`). It is sent once, with no reminders and no ID check; the status becomes "Delivered" when the email is accepted. Accepted files: PDF, Word (.docx), Excel (.xlsx) and images (PNG, JPG); macro files (.docm, .xlsm) are refused, and the file content is checked, not just its name. The file is sent as it is, with nothing filled in, as a download link in the email, not an attachment, because filters often block attachments. Har Gal input stays open: one PDF per employee, one large PDF split by employee, or Excel.
+
 
 ## 5. Core ideas and status model
 
