@@ -461,7 +461,8 @@ All management endpoints need a staff session; the role column says who may call
 | --- | --- | --- |
 | POST | `/api/webhooks/email` | Delivery and bounce notices from the email provider; the provider's signature is verified |
 
-## 12. Data model
+## 
+12. Data model
 
 The database has 14 PostgreSQL tables built around `assignments`, which links one employee, one round and one PDF. Conventions: primary keys are `uuid`, dates are `timestamptz`, and every table has `created_at` and `updated_at` (not repeated below).
 
