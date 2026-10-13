@@ -33,6 +33,12 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # Catches the emails of the email tests (SMTP 1025, API 8025). Same image as docker-compose.yml.
+      mailpit:
+        image: axllent/mailpit:v1.31.5
+        ports:
+          - 1025:1025
+          - 8025:8025
 
     env:
       TEST_DATABASE_URL: postgresql://docsign:docsign@localhost:5432/docsign_test
@@ -43,6 +49,13 @@ jobs:
       S3_SECRET_KEY: minioadmin
       S3_FORCE_PATH_STYLE: 'true'
       TEST_S3_BUCKET: documents-test
+      # Email: the mailpit service above; the tests read the emails back through its API.
+      SMTP_HOST: localhost
+      SMTP_PORT: '1025'
+      EMAIL_FROM_ADDRESS: no-reply@doc-signing.local
+      APP_PUBLIC_URL: http://localhost:5173
+      HR_CONTACT_PHONE: 02-0000000
+      MAILPIT_API_URL: http://localhost:8025
 
     steps:
       - uses: actions/checkout@v7
@@ -82,5 +95,5 @@ jobs:
           docker logs minio
           exit 1
 
-      # Unit tests and DB tests (against the postgres service and MinIO above).
+      # Unit tests and DB tests (against the postgres and mailpit services and MinIO above).
       - run: pnpm test

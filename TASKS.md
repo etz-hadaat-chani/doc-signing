@@ -100,9 +100,10 @@ Progress: tick `[x]` when a task is done.
 - **Depends on:** 2.1
 - **Done when:** Tests save and read a PDF; download links expire.
 
-### [ ] 2.6 Email
+### [x] 2.6 Email
 - **Build:** Email adapter interface, SMTP implementation for Mailpit, 3 Hebrew RTL HTML emails (invitation, reminder, signed copy).
 - **Depends on:** 2.1
+- **Note for later tasks:** send through `EmailService` (`common/email`): `sendInvitation` / `sendReminder` (raw token, optional `expiresAt` = `round.linkExpiresAt`), `sendSignedCopy` (PDF + Hebrew file name). Each returns `providerMessageId` (store it in `email_messages`). Failures throw `EmailSendError`: `kind` `temporary` → let pg-boss retry; `permanent` → mark the send failed. Never log the link or the token. `pnpm email:preview` sends all 3 samples to Mailpit.
 - **Done when:** All 3 emails arrive in Mailpit, right to left.
 
 ### [ ] 2.7 Job queue and worker
@@ -184,6 +185,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.10 Bulk sending
 - **Build:** `POST /rounds/:id/send` enqueues jobs; worker sends in batches, creates a token per email (hash only) in `email_messages`, status → sent; round `sending` → `active`.
 - **Depends on:** 3.9, 2.6, 2.7
+- **Note:** `EmailService.sendInvitation` (2.6) takes the raw token and the round's `linkExpiresAt`; on `EmailSendError` with `kind: 'permanent'` mark the email message `failed`, on `temporary` rethrow so the job retries.
 - **Done when:** Sending to 50 employees puts 50 emails in Mailpit, each with a unique link.
 
 ### [ ] 3.11 Reading rounds
@@ -204,6 +206,7 @@ Progress: tick `[x]` when a task is done.
 - **Note:** Storage keys are ASCII only (2.5); the employee's name is not in the key. `StorageAdapter.upload` never overwrites (it throws `StorageAlreadyExistsError`).
 - **Note:** If submit is retried and the signed file already exists, do not upload again. Read the existing file back and store ITS SHA-256 in signed_file_sha256, never the hash of a newly built PDF (it has a different timestamp), so the stored hash always matches the stored file.
 - **Note:** The `department` folder in the signed file path comes from `assignments.department_id` (department at send time), not the employee's current department.
+- **Note:** The signed-copy email (`EmailService.sendSignedCopy`, 2.6) attaches the stored PDF as `<document name> - <first> <last>.pdf` (Hebrew; the email layer cleans the name).
 - **Note:** `submit` needs a higher JSON body size limit for the signature image (Express default is 100 KB); raise it for that route only.
 - **Note:** Configure Express "trust proxy" for the cloud load balancer so `req.ip` is the employee's real IP (used for `signer_ip` and the per-IP rate limit). See also 7.6.
 - **Done when:** Signing via an old reminder link works; 6th wrong attempt refused; link shows "Already signed" afterwards.
@@ -336,6 +339,7 @@ Progress: tick `[x]` when a task is done.
 
 ### [ ] 7.3 Hebrew quality check
 - **Build:** PDFs with mixed names, emails in Outlook and Gmail, Hebrew ZIP names on Windows.
+- **Note:** `pnpm email:preview <address>` sends the 3 sample emails (2.6) to any inbox once a real SMTP provider is set; check right-to-left layout, the button, the written-out link and the Hebrew attachment name (sent RFC 2047 encoded).
 - **Depends on:** 7.1
 - **Done when:** Checklist signed off.
 

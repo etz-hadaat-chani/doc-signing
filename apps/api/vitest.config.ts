@@ -1,7 +1,8 @@
 import { defineConfig } from 'vitest/config';
 
 // Two projects: `unit` needs nothing; `db` needs the docker services: the test database
-// (docsign_test, created and migrated by global setup) and the MinIO test bucket (documents-test).
+// (docsign_test, created and migrated by global setup), the MinIO test bucket (documents-test)
+// and Mailpit (the email tests).
 // These test files are named *.db.spec.ts.
 export default defineConfig({
   test: {

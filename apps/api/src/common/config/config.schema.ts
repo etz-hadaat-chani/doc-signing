@@ -7,6 +7,15 @@ const optional = <T extends z.ZodType>(schema: T) =>
 /** S3 bucket naming rules: 3–63 characters, lowercase letters, digits, dots and hyphens. */
 const bucketName = z.string().regex(/^(?=.{3,63}$)[a-z0-9][a-z0-9.-]*[a-z0-9]$/);
 
+/** http(s) URL, optionally with a path; no query, hash or user info. Trailing slash removed. */
+const publicUrl = z
+  .url({ protocol: /^https?$/ })
+  .refine((value) => {
+    const url = new URL(value);
+    return !url.search && !url.hash && !url.username && !url.password;
+  })
+  .transform((value) => value.replace(/\/+$/, ''));
+
 // Only what the API needs today; later tasks add their own variables here.
 const envSchema = z
   .object({
@@ -22,11 +31,40 @@ const envSchema = z
     S3_SECRET_KEY: optional(z.string().optional()),
     // Not z.coerce.boolean: it reads 'false' as true.
     S3_FORCE_PATH_STYLE: optional(z.enum(['true', 'false']).default('false')),
+    // Email (SMTP; Mailpit locally). User and password both or neither (Mailpit needs none).
+    SMTP_HOST: optional(z.string().min(1)),
+    SMTP_PORT: optional(z.coerce.number().int().min(1).max(65535).default(587)),
+    SMTP_SECURE: optional(z.enum(['true', 'false']).default('false')),
+    SMTP_USER: optional(z.string().optional()),
+    SMTP_PASSWORD: optional(z.string().optional()),
+    // Address only; the display name is the sender_name setting.
+    EMAIL_FROM_ADDRESS: optional(z.email()),
+    // Base of the signing links in emails: <APP_PUBLIC_URL>/sign/<token>.
+    APP_PUBLIC_URL: optional(publicUrl),
+    // HR contact in every email footer (later also the signing pages). Phone, email or both.
+    HR_CONTACT_NAME: optional(z.string().trim().min(1).max(100).default('מחלקת משאבי אנוש')),
+    HR_CONTACT_PHONE: optional(
+      z
+        .string()
+        .regex(/^[0-9+\-\s()]{6,20}$/)
+        .optional(),
+    ),
+    HR_CONTACT_EMAIL: optional(z.email().optional()),
   })
   .superRefine((env, ctx) => {
     if ((env.S3_ACCESS_KEY === undefined) !== (env.S3_SECRET_KEY === undefined)) {
       const missing = env.S3_ACCESS_KEY === undefined ? 'S3_ACCESS_KEY' : 'S3_SECRET_KEY';
       ctx.addIssue({ code: 'custom', path: [missing], message: 'Set both S3 keys or neither' });
+    }
+    if ((env.SMTP_USER === undefined) !== (env.SMTP_PASSWORD === undefined)) {
+      const missing = env.SMTP_USER === undefined ? 'SMTP_USER' : 'SMTP_PASSWORD';
+      ctx.addIssue({ code: 'custom', path: [missing], message: 'Set both SMTP keys or neither' });
+    }
+    if (env.NODE_ENV === 'production' && !env.APP_PUBLIC_URL.startsWith('https://')) {
+      ctx.addIssue({ code: 'custom', path: ['APP_PUBLIC_URL'], message: 'https in production' });
+    }
+    if (env.HR_CONTACT_PHONE === undefined && env.HR_CONTACT_EMAIL === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['HR_CONTACT_PHONE'], message: 'Phone or email' });
     }
   });
 
@@ -39,12 +77,32 @@ export interface StorageConfig {
   readonly forcePathStyle: boolean;
 }
 
+export interface HrContact {
+  readonly name: string;
+  readonly phone: string | undefined;
+  readonly email: string | undefined;
+}
+
+export interface EmailConfig {
+  readonly smtp: {
+    readonly host: string;
+    readonly port: number;
+    readonly secure: boolean;
+    readonly auth: { readonly user: string; readonly pass: string } | undefined;
+  };
+  readonly fromAddress: string;
+  /** No trailing slash. */
+  readonly publicUrl: string;
+  readonly hrContact: HrContact;
+}
+
 /** Validated settings. Injected by class: `constructor(private readonly config: AppConfig)`. */
 export class AppConfig {
   readonly nodeEnv!: 'development' | 'test' | 'production';
   readonly port!: number;
   readonly databaseUrl!: string;
   readonly storage!: StorageConfig;
+  readonly email!: EmailConfig;
 }
 
 /**
@@ -79,6 +137,24 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
           ? Object.freeze({ accessKeyId: data.S3_ACCESS_KEY, secretAccessKey: data.S3_SECRET_KEY })
           : undefined,
       forcePathStyle: data.S3_FORCE_PATH_STYLE === 'true',
+    }),
+    email: Object.freeze({
+      smtp: Object.freeze({
+        host: data.SMTP_HOST,
+        port: data.SMTP_PORT,
+        secure: data.SMTP_SECURE === 'true',
+        auth:
+          data.SMTP_USER !== undefined && data.SMTP_PASSWORD !== undefined
+            ? Object.freeze({ user: data.SMTP_USER, pass: data.SMTP_PASSWORD })
+            : undefined,
+      }),
+      fromAddress: data.EMAIL_FROM_ADDRESS,
+      publicUrl: data.APP_PUBLIC_URL,
+      hrContact: Object.freeze({
+        name: data.HR_CONTACT_NAME,
+        phone: data.HR_CONTACT_PHONE,
+        email: data.HR_CONTACT_EMAIL,
+      }),
     }),
   });
 }

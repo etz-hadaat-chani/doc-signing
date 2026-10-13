@@ -258,8 +258,8 @@ Wherever a department is shown or picked (lists, filters, cards, wizard, exports
 
 ### Emails (Hebrew, right to left)
 
-1. **Invitation:** document name and personal link.
-2. **Reminder:** the same request with a different subject; carries its own working link.
+1. **Invitation:** document name, personal link and the link's expiry date (DD/MM/YYYY).
+2. **Reminder:** the same request with a different subject; carries its own working link and the expiry date.
 3. **Signed copy:** the signed PDF attached.
 
 Emails stay short and light on images, to pass spam and internet filters.
@@ -725,7 +725,7 @@ The data includes ID numbers and signed employment documents, so security and pr
 ### Security: signing links
 
 - NFR-SEC-1: Link tokens are random, 256 bits. Only their SHA-256 hash is stored.
-- NFR-SEC-2: URLs and emails carry no ID numbers. The email shows only the employee's name, the document name and the link.
+- NFR-SEC-2: URLs and emails carry no ID numbers. The email shows only the employee's name, the document name, the link and its expiry date.
 - NFR-SEC-3: ID check uses a constant-time comparison, locks at 5 wrong attempts per assignment, has a rate limit per IP address, and logs every attempt.
 - NFR-SEC-4: The signing session is a short-lived cookie (15 minutes, `httpOnly`, `Secure`), cleared when the browser closes.
 - NFR-SEC-5: After signing, every link of the assignment shows only "Already signed".

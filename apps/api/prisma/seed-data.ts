@@ -2,6 +2,7 @@
 // ID numbers are hard-coded with a correct check digit; some start with 0.
 // Names mix Hebrew, numbers and hyphens on purpose, for the PDF tests (NFR-HEB-3).
 
+import { SETTING_DEFAULTS } from '../src/common/settings/settings.defaults.js';
 import type { UserRole } from '../src/generated/prisma/client.js';
 
 export const seedUsers: { fullName: string; email: string; role: UserRole }[] = [
@@ -188,10 +189,7 @@ export const seedEmployees: {
   },
 ];
 
-/** Default settings (FR-ADM-2). The app has the same built-in defaults for missing keys (task 3.18). */
-export const seedSettings: { key: string; value: number | string | null }[] = [
-  { key: 'reminder_interval_days', value: 3 },
-  { key: 'max_reminders', value: null }, // null = no limit
-  { key: 'link_expiry_days', value: 60 },
-  { key: 'sender_name', value: 'מערכת חתימות' },
-];
+/** Default settings (FR-ADM-2): the app's built-in defaults, so the two never differ. */
+export const seedSettings: { key: string; value: number | string | null }[] = Object.entries(
+  SETTING_DEFAULTS,
+).map(([key, value]) => ({ key, value }));

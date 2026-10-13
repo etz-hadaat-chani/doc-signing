@@ -104,5 +104,6 @@ pnpm db:migrate && pnpm db:seed
 pnpm dev            # api + worker + web
 pnpm test           # unit + api
 pnpm test:e2e
+pnpm email:preview  # the 3 emails with sample data → Mailpit (http://localhost:8025)
 pnpm lint && pnpm typecheck
 ```
