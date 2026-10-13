@@ -58,12 +58,12 @@ Progress: tick `[x]` when a task is done.
 - **Done when:** Migration runs; a test shows two NULL-department rows in one round are rejected.
 
 ### [ ] 1.5 Log, settings, indexes, seed data
-- **Build:** `audit_log`, `settings`, all indexes from PRD section 12. Seed script: 1 manager, 1 officer, 3 departments, 20 employees, default settings.
+- **Build:** `audit_log`, `settings`, all indexes from PRD section 12. The database blocks UPDATE, DELETE and TRUNCATE on `audit_log` (triggers), so rows can't change even outside the app. Seed script: 1 manager, 1 officer, 3 departments, 20 employees, default settings.
 - **Depends on:** 1.4
 - **Done when:** `pnpm db:seed` works and can be run again safely.
 
 ### [ ] 1.6 Shared logic
-- **Build:** Israeli ID check-digit validator; `displayStatus()` combining status with locked/expired flags; Hebrew status labels; unit tests.
+- **Build:** Israeli ID check-digit validator; `displayStatus()` combining status with locked/expired flags; Hebrew status labels; unit tests, including one that fails if the shared enum values differ from the Prisma enums.
 - **Depends on:** 0.1
 - **Done when:** Tests pass, including invalid IDs and IDs with leading zeros.
 

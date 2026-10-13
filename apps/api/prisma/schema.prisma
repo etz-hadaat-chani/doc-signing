@@ -9,7 +9,7 @@
 //   Foreign keys to them are @db.Uuid too. PRD exceptions: audit_log (bigserial),
 //   settings (key), template_departments (composite key).
 // - Dates are timestamptz with millisecond precision: @db.Timestamptz(3)
-// - Every table has:
+// - Every table has (except audit_log: append-only, createdAt only):
 //     createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 //     updatedAt DateTime @updatedAt     @map("updated_at") @db.Timestamptz(3)
 // - Every relation sets onDelete: Restrict. Rows are archived (isActive / isArchived), never deleted.
