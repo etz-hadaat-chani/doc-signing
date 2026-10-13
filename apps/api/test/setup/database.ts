@@ -8,12 +8,29 @@ export function createTestPrisma(): PrismaClient {
   });
 }
 
-/** Empties every table except Prisma's migration history. Call in beforeEach. */
+/**
+ * Empties every table except Prisma's migration history. Call in beforeEach.
+ *
+ * audit_log has triggers that reject TRUNCATE, so this runs with session_replication_role =
+ * replica, which skips ordinary triggers (needs a superuser). SET LOCAL ends with the
+ * transaction, so the pooled connection never keeps the triggers off. Test database only;
+ * the name check runs before anything else.
+ */
 export async function resetDatabase(prisma: PrismaClient): Promise<void> {
-  const tables = await prisma.$queryRaw<{ tablename: string }[]>`
-    SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
-  if (tables.length === 0) return;
-  const list = tables.map(({ tablename }) => `"public"."${tablename}"`).join(', ');
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+  await prisma.$transaction(async (tx) => {
+    const [row] = await tx.$queryRaw<{ name: string }[]>`SELECT current_database() AS name`;
+    const name = row?.name ?? '';
+    if (!name.endsWith('_test')) {
+      throw new Error(`resetDatabase only runs on a *_test database, got "${name}".`);
+    }
+
+    const tables = await tx.$queryRaw<{ tablename: string }[]>`
+      SELECT tablename FROM pg_tables
+      WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
+    if (tables.length === 0) return;
+    const list = tables.map(({ tablename }) => `"public"."${tablename}"`).join(', ');
+
+    await tx.$executeRawUnsafe('SET LOCAL session_replication_role = replica');
+    await tx.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+  });
 }

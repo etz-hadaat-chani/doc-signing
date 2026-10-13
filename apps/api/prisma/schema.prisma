@@ -21,8 +21,11 @@
 //   rounds.reminder_interval_days > 0, max_reminders > 0 (NULL allowed);
 //   assignments.failed_attempts 0–5, reminder_count >= 0, signed_file_sha256 64 lowercase hex,
 //   template_id or source_file_key set, signed/signed_manual need signed_at and signed_file_key;
-//   email_messages.token_hash 64 lowercase hex, NULL exactly when type = signed_copy.
+//   email_messages.token_hash 64 lowercase hex, NULL exactly when type = signed_copy;
+//   audit_log.actor_type = 'user' exactly when user_id is set.
 //   Unique index with NULLS NOT DISTINCT: round_templates (round_id, department_id).
+// - audit_log is append-only: triggers in the migration SQL reject UPDATE, DELETE and TRUNCATE.
+//   The test reset bypasses them with session_replication_role = replica (test/setup/database.ts).
 // - Staff emails (users.email) are stored lowercase; the unique index is on the stored value.
 //   Enforced in code (task 3.1), not by the database.
 
@@ -178,6 +181,8 @@ model User {
   templates          Template[]
   rounds             Round[]
   handledAssignments Assignment[]
+  auditLogs          AuditLog[]
+  updatedSettings    Setting[]
 
   @@map("users")
 }
@@ -215,6 +220,7 @@ model Employee {
   lastImport  ImportBatch? @relation(fields: [lastImportId], references: [id], onDelete: Restrict)
   assignments Assignment[]
 
+  @@index([departmentId])
   @@map("employees")
 }
 
@@ -392,6 +398,9 @@ model Assignment {
   responses AssignmentResponse[]
 
   @@unique([roundId, employeeId])
+  @@index([roundId, status]) // Round counts
+  @@index([employeeId]) // Employee history
+  @@index([status, lastReminderAt]) // Reminder job
   @@map("assignments")
 }
 
@@ -411,6 +420,8 @@ model EmailMessage {
 
   assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
 
+  @@index([assignmentId])
+  @@index([providerMessageId]) // Bounce lookup
   @@map("email_messages")
 }
 
@@ -428,4 +439,41 @@ model AssignmentResponse {
 
   @@unique([assignmentId, templateFieldId])
   @@map("assignment_responses")
+}
+
+// ---------------------------------------------------------------------------
+// Log and settings (task 1.5)
+// ---------------------------------------------------------------------------
+
+// Activity log, append only: triggers reject UPDATE, DELETE and TRUNCATE. No updated_at.
+model AuditLog {
+  id         BigInt    @id @default(autoincrement())
+  userId     String?   @map("user_id") @db.Uuid // NULL for employee or system
+  actorType  ActorType @map("actor_type")
+  action     String    @db.VarChar(50) // e.g. round.send, assignment.sign, document.view
+  entityType String    @map("entity_type") @db.VarChar(50)
+  entityId   String?   @map("entity_id") @db.Uuid
+  details    Json      @default("{}")
+  ip         String?   @db.Inet
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+// Key/value settings, e.g. reminder_interval_days, link_expiry_days, sender_name.
+// The app has built-in defaults for missing keys (task 3.18); the seed fills them in dev only.
+model Setting {
+  key         String   @id @db.VarChar(100)
+  value       Json
+  updatedById String?  @map("updated_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@map("settings")
 }

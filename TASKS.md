@@ -57,7 +57,7 @@ Progress: tick `[x]` when a task is done.
 - **Depends on:** 1.3
 - **Done when:** Migration runs; a test shows two NULL-department rows in one round are rejected.
 
-### [ ] 1.5 Log, settings, indexes, seed data
+### [x] 1.5 Log, settings, indexes, seed data
 - **Build:** `audit_log`, `settings`, all indexes from PRD section 12. The database blocks UPDATE, DELETE and TRUNCATE on `audit_log` (triggers), so rows can't change even outside the app. Seed script: 1 manager, 1 officer, 3 departments, 20 employees, default settings.
 - **Depends on:** 1.4
 - **Note:** `resetDatabase()` (apps/api/test/setup/database.ts) empties tables with TRUNCATE, so once the `audit_log` TRUNCATE trigger exists the test reset must bypass it, e.g. `SET session_replication_role = replica` in the same session as the TRUNCATE (needs superuser). Test database only; never in app code.
@@ -66,6 +66,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 1.6 Shared logic
 - **Build:** Israeli ID check-digit validator; `displayStatus()` combining status with locked/expired flags; Hebrew status labels; unit tests, including one that fails if the shared enum values differ from the Prisma enums.
 - **Depends on:** 0.1
+- **Note:** The seed test (apps/api/test/db/seed.db.spec.ts) has its own `isValidIsraeliId` helper; replace it with the shared validator.
 - **Done when:** Tests pass, including invalid IDs and IDs with leading zeros.
 
 ---
@@ -203,6 +204,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.18 Settings API
 - **Build:** Read/update default reminder interval, link expiry, sender name.
 - **Depends on:** 2.3
+- **Note:** The seed doesn't run in production, so the settings code has built-in defaults used when a key is missing: `reminder_interval_days` 3, `max_reminders` null (no limit), `link_expiry_days` 60, `sender_name` "מערכת חתימות".
 - **Done when:** New rounds pick up the defaults.
 
 ---
@@ -319,6 +321,8 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 7.6 Deployment
 - **Build:** Docker images, migrations on deploy, secrets, backups, Israel region. Needs the AWS/Azure decision.
 - **Depends on:** 7.2, 7.5
+- **Note:** In production the app connects as a separate non-owner database role with no UPDATE, DELETE or TRUNCATE on `audit_log` (an owner could disable its triggers); migrations run as the owner.
+- **Note:** The seed refuses to run in production, so add a one-time command to create the first manager there.
 - **Done when:** Test environment is up; a backup restore has been tried.
 
 ### [ ] 7.7 Filter whitelisting and pilot
