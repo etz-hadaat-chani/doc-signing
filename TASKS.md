@@ -42,7 +42,7 @@ Progress: tick `[x]` when a task is done.
 - **Depends on:** 0.2
 - **Done when:** The first migration runs.
 
-### [ ] 1.2 Employee tables
+### [x] 1.2 Employee tables
 - **Build:** `users`, `departments`, `employees` (employee_number and id_number unique), `import_batches`.
 - **Depends on:** 1.1
 - **Done when:** Migration runs; unique rules are enforced.

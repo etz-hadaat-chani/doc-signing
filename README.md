@@ -36,6 +36,15 @@ docker compose ps       # postgres, minio, mailpit should be "healthy"
 - The API checks the database at startup and exits if it can't connect.
 - If you change `POSTGRES_PORT`, change the port in `DATABASE_URL` to match.
 
+## Database tests
+
+API tests that touch the database are named `*.db.spec.ts` and run in the `db` Vitest project
+([apps/api/vitest.config.ts](apps/api/vitest.config.ts)). They use a separate database, `docsign_test`, on the same
+Postgres server, so they never touch dev data. Before the tests start, global setup creates it if missing and runs
+`prisma migrate deploy` on it. Call `resetDatabase()` from [apps/api/test/setup/database.ts](apps/api/test/setup/database.ts)
+in `beforeEach` to start each test with empty tables. Set `TEST_DATABASE_URL` to use another database; its name must
+end in `_test`.
+
 ## Commands
 
 ```sh
@@ -46,7 +55,8 @@ pnpm db:studio     # browse the database in Prisma Studio
 pnpm db:reset      # drop the database, re-apply all migrations, run the seed
 pnpm db:seed       # prisma db seed; safe to run repeatedly
 pnpm dev           # builds shared, then runs shared (watch), api and web together
-pnpm test          # Vitest in every package
+pnpm test          # Vitest in every package (API: unit + DB tests; needs Postgres running)
+pnpm test:db       # only the API DB tests
 pnpm test:e2e      # Playwright (apps/web/e2e, files named *.e2e.ts); needs `pnpm dev` running
 pnpm typecheck     # all packages
 pnpm lint          # ESLint across the repo (typed rules)
@@ -66,7 +76,7 @@ setx NODE_OPTIONS --use-system-ca
 GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every push and pull request:
 `pnpm install --frozen-lockfile`, build `packages/shared`, generate the Prisma client, then `pnpm lint`, `pnpm typecheck`,
 `pnpm format:check` and `pnpm test`. A newer push to the same branch cancels the older run.
-No database runs in CI yet.
+A `postgres:16-alpine` service container provides the test database for the DB tests.
 
 ## How `@doc-signing/shared` is consumed
 

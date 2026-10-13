@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "pnpm --filter @doc-signing/shared build && pnpm --recursive test",
+    "test:db": "pnpm --filter @doc-signing/api test:db",
     "test:e2e": "pnpm --filter @doc-signing/web test:e2e",
     "db:migrate": "pnpm --filter @doc-signing/api db:migrate",
     "db:generate": "pnpm --filter @doc-signing/api db:generate",
