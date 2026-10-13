@@ -15,7 +15,9 @@
 //   (@default(now()) on updatedAt gives the column a database default, for rows inserted by raw SQL.)
 // - Every relation sets onDelete: Restrict. Rows are archived (isActive / isArchived), never deleted.
 // - Constraints Prisma can't express (e.g. UNIQUE NULLS NOT DISTINCT, CHECK) go in the migration SQL.
-//   Current CHECKs: employees.id_number ~ '^[0-9]{9}$'.
+//   Current CHECKs: employees.id_number ~ '^[0-9]{9}$';
+//   templates.version >= 1, templates.page_count >= 1;
+//   template_fields.page >= 1, x >= 0, y >= 0, width > 0, height > 0, font_size > 0 (NULL allowed).
 // - Staff emails (users.email) are stored lowercase; the unique index is on the stored value.
 //   Enforced in code (task 3.1), not by the database.
 
@@ -168,6 +170,7 @@ model User {
   updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   importBatches ImportBatch[]
+  templates     Template[]
 
   @@map("users")
 }
@@ -179,7 +182,8 @@ model Department {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  employees Employee[]
+  employees           Employee[]
+  templateDepartments TemplateDepartment[]
 
   @@map("departments")
 }
@@ -226,4 +230,72 @@ model ImportBatch {
   employees  Employee[]
 
   @@map("import_batches")
+}
+
+// ---------------------------------------------------------------------------
+// Templates (task 1.3)
+// ---------------------------------------------------------------------------
+
+// Department PDFs. Locked after first send; edits create a new version that points to the
+// previous one. parent_template_id is UNIQUE, so a template has at most one next version.
+model Template {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String       @db.VarChar(150)
+  kind             TemplateKind @default(signature) // MVP uses `signature`
+  fileKey          String       @map("file_key") // Original PDF
+  pageCount        Int          @map("page_count")
+  version          Int          @default(1) // Starts at 1
+  parentTemplateId String?      @unique @map("parent_template_id") @db.Uuid // Earlier version
+  isLocked         Boolean      @default(false) @map("is_locked") // True after first send
+  isArchived       Boolean      @default(false) @map("is_archived")
+  createdById      String       @map("created_by") @db.Uuid
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy   User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  parent      Template?            @relation("TemplateVersions", fields: [parentTemplateId], references: [id], onDelete: Restrict)
+  nextVersion Template?            @relation("TemplateVersions")
+  departments TemplateDepartment[]
+  fields      TemplateField[]
+
+  @@map("templates")
+}
+
+// Templates ↔ departments (M:N). A department may have more than one active template;
+// in by-department rounds the manager picks one (saved in round_templates).
+model TemplateDepartment {
+  templateId   String   @map("template_id") @db.Uuid
+  departmentId String   @map("department_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  template   Template   @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+
+  @@id([templateId, departmentId])
+  @@index([departmentId])
+  @@map("template_departments")
+}
+
+// Where text and signature are drawn on the PDF. Positions and sizes are in PDF points.
+model TemplateField {
+  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  templateId String            @map("template_id") @db.Uuid
+  fieldType  TemplateFieldType @map("field_type")
+  page       Int // From 1
+  x          Decimal           @db.Decimal(7, 2)
+  y          Decimal           @db.Decimal(7, 2)
+  width      Decimal           @db.Decimal(7, 2)
+  height     Decimal           @db.Decimal(7, 2)
+  fontSize   Int?              @map("font_size")
+  label      String?           @db.VarChar(255) // Checkbox text (later)
+  isRequired Boolean           @default(true) @map("is_required")
+  sortOrder  Int               @default(0) @map("sort_order")
+  createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  @@index([templateId])
+  @@map("template_fields")
 }

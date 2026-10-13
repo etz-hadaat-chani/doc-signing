@@ -47,7 +47,7 @@ Progress: tick `[x]` when a task is done.
 - **Depends on:** 1.1
 - **Done when:** Migration runs; unique rules are enforced.
 
-### [ ] 1.3 Template tables
+### [x] 1.3 Template tables
 - **Build:** `templates`, `template_departments`, `template_fields`.
 - **Depends on:** 1.2
 - **Done when:** Migration runs; a template can link to several departments.
@@ -134,6 +134,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.5 Templates API
 - **Build:** Upload PDF (check type and size), link departments, save field positions, archive. Lock after send; edits create a new version.
 - **Depends on:** 2.5, 2.3
+- **Note:** A department may be linked to more than one active template (not archived, no newer version). Don't block it; the manager picks one per department when creating a round (3.8).
 - **Done when:** Editing a locked template creates version 2.
 
 ### [ ] 3.6 Personalized PDF
@@ -149,6 +150,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.8 Recipient preview
 - **Build:** Resolve recipient choice (all / departments / chosen / one) and template per department. Return counts: will send, no email, already signed, departments missing a template.
 - **Depends on:** 3.4, 3.5
+- **Note:** In by-department mode a department may have more than one active template. The manager picks one; the choice is saved in `round_templates` (1.4). Warn when a department has none, and ask for a choice when it has several.
 - **Done when:** Tests for every choice type, including combinations.
 
 ### [ ] 3.9 Create a round
