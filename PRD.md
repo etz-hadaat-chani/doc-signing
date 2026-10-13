@@ -456,6 +456,12 @@ All management endpoints need a staff session; the role column says who may call
 | GET | `/api/sign/:token/document` | The personalized PDF; needs the signing session |
 | POST | `/api/sign/:token/submit` | Body `{ signatureImage, acknowledged: true }`. Builds and saves the signed PDF, emails the copy, closes all links of the assignment. |
 
+### System
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/health` | 200 `{ status: "ok", database: "ok" }`, or 503 with `database: "down"`. No versions or other details. Public. |
+
 ### Webhooks
 
 | Method | Path | Purpose |

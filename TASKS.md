@@ -73,7 +73,7 @@ Progress: tick `[x]` when a task is done.
 
 ## Phase 2: Back-end foundation
 
-### [ ] 2.1 API skeleton
+### [x] 2.1 API skeleton
 - **Build:** Config module, Prisma service, global error filter (Hebrew messages, standard error format), `/health`.
 - **Depends on:** 1.5
 - **Done when:** `/health` returns OK including database status.
@@ -198,6 +198,8 @@ Progress: tick `[x]` when a task is done.
 - **Build:** `GET /sign/:token` (state only); `verify` (lock at 5, IP rate limit, 15-min session, status → opened); `document`; `submit` (build signed PDF, save to `round/department/employeeNumber_name.pdf`, status → signed, queue signed-copy email, close all links).
 - **Depends on:** 3.7, 3.10
 - **Note:** The `department` folder in the signed file path comes from `assignments.department_id` (department at send time), not the employee's current department.
+- **Note:** `submit` needs a higher JSON body size limit for the signature image (Express default is 100 KB); raise it for that route only.
+- **Note:** Configure Express "trust proxy" for the cloud load balancer so `req.ip` is the employee's real IP (used for `signer_ip` and the per-IP rate limit). See also 7.6.
 - **Done when:** Signing via an old reminder link works; 6th wrong attempt refused; link shows "Already signed" afterwards.
 
 ### [ ] 3.14 Reminder job
@@ -344,6 +346,7 @@ Progress: tick `[x]` when a task is done.
 - **Build:** Docker images, migrations on deploy, secrets, backups, Israel region. Needs the AWS/Azure decision.
 - **Depends on:** 7.2, 7.5
 - **Note:** In production the app connects as a separate non-owner database role with no UPDATE, DELETE or TRUNCATE on `audit_log` (an owner could disable its triggers); migrations run as the owner.
+- **Note:** Set Express "trust proxy" to match the real proxy chain (e.g. one hop) so `req.ip` is the client's IP, not the load balancer's (see 3.13). Don't trust all hops: `X-Forwarded-For` could then be spoofed.
 - **Note:** The seed refuses to run in production, so add a one-time command to create the first manager there.
 - **Done when:** Test environment is up; a backup restore has been tried.
 
