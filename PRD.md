@@ -666,6 +666,29 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | value | jsonb |  |
 | updated\_by | uuid FK → users NULL |  |
 
+**`sessions`**: staff login sessions
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | uuid PK |  |
+| user\_id | uuid FK → users |  |
+| token\_hash | char(64) UNIQUE | SHA-256 of the cookie token; the token itself is never stored |
+| expires\_at | timestamptz | Absolute limit: login + 12 hours |
+| last\_used\_at | timestamptz | Idle limit: + 30 minutes; extended on use |
+| ip | inet NULL |  |
+| user\_agent | text NULL |  |
+
+**`login_attempts`**: login attempts for the failed-login limit
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigserial PK |  |
+| email | varchar(255) | Lowercased, as typed; may belong to no user |
+| ip | inet NULL |  |
+| created\_at | timestamptz |  |
+
+Rows of `sessions` and `login_attempts` are short-lived and deleted (logout, expiry, successful login, daily cleanup); nothing references them.
+
 ### Relationships
 
 | From | To | Type | Meaning |
@@ -681,6 +704,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | assignments | email\_messages | 1:N | Invite, reminders, copy; each with its own link |
 | assignments | assignment\_responses | 1:N | Checkbox answers (later) |
 | users | rounds, templates, import\_batches, audit\_log | 1:N | Who created or did what |
+| users | sessions | 1:N | Staff login sessions |
 | import\_batches | employees | 1:N | Last import that touched each employee |
 
 ### Indexes and rules
@@ -690,7 +714,9 @@ The employee number is a good business key, not a primary key: if it is ever reu
 - `assignments(status, last_reminder_at)` for the reminder job.
 - `email_messages(token_hash)` UNIQUE for link lookup; `email_messages(provider_message_id)` for bounces.
 - `audit_log(entity_type, entity_id)` and `audit_log(created_at)`.
-- `ON DELETE RESTRICT` everywhere: employees and templates with signed documents are archived, never deleted.
+- `sessions(token_hash)` UNIQUE for cookie lookup; `sessions(user_id)`.
+- `login_attempts(email, created_at)` and `login_attempts(ip, created_at)` for the login limit.
+- `ON DELETE RESTRICT` everywhere: employees and templates with signed documents are archived, never deleted. Exception: `sessions` and `login_attempts` rows are deleted.
 
 ## 13. Non-functional requirements
 
@@ -712,7 +738,7 @@ The data includes ID numbers and signed employment documents, so security and pr
 
 ### Security: staff and data
 
-- NFR-SEC-6: Passwords are hashed with Argon2. Session cookies are `httpOnly`, `Secure`, `SameSite=Strict`, with a timeout after inactivity.
+- NFR-SEC-6: Passwords are hashed with Argon2. Session cookies are `httpOnly`, `Secure`, `SameSite=Strict`, and end when the browser closes. Sessions are stored in the database (token hash only) and end after 30 minutes of inactivity or 12 hours after login. Login allows 5 failed attempts per email (20 per IP address) in 15 minutes, then answers "too many attempts". Wrong email, wrong password and disabled user get the same answer.
 - NFR-SEC-7: Role checks run on the server for every endpoint.
 - NFR-SEC-8: Storage is private. Signed files are reached only through links that expire within minutes, after a permission check. Each view is logged.
 - NFR-SEC-9: Uploads accept only PDF and Excel, with size limits, and the file content is checked, not just its name.

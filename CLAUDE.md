@@ -92,6 +92,8 @@ docker-compose.yml      # postgres, minio, mailpit
 - Excel exports: neutralize cells starting with `= + - @`. ZIP names UTF-8.
 - Tests: unit tests for logic, API tests for every endpoint's happy path + permissions. Tests must pass before commit.
 - Small commits, one task per session. Migrations via Prisma only; never edit an applied migration.
+- Migration order: some migrations have hand-written timestamps (e.g. `20261013140000`). Every new migration folder name must sort after the newest existing one. Create it with `prisma migrate dev --create-only --name <name>`; if Prisma's timestamp is earlier, rename the folder before applying it.
+- Python is not installed on this machine. For helper scripts use Node.js (node -e or a .mjs file), never python.
 
 ## Commands
 ```

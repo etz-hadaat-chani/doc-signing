@@ -78,7 +78,7 @@ Progress: tick `[x]` when a task is done.
 - **Depends on:** 1.5
 - **Done when:** `/health` returns OK including database status.
 
-### [ ] 2.2 Staff login
+### [x] 2.2 Staff login
 - **Build:** `/api/auth/login`, `logout`, `me`. Argon2, secure session cookie stored in Postgres, login attempt limit.
 - **Depends on:** 2.1
 - **Done when:** A seed user logs in; a wrong password is refused; the cookie has secure flags.
@@ -91,6 +91,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 2.4 Activity log
 - **Build:** `AuditService` recording user, action, entity, IP, details.
 - **Depends on:** 2.1
+- **Note:** Log `auth.login` (success), `auth.login_failed` (email typed, IP; never the password) and `auth.logout` in `audit_log` from AuthService (2.2).
 - **Done when:** Rows are written; no way to update or delete them.
 
 ### [ ] 2.5 File storage
@@ -106,6 +107,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 2.7 Job queue and worker
 - **Build:** pg-boss setup; separate worker process from the same code.
 - **Depends on:** 2.1
+- **Note:** Daily cleanup job: delete `sessions` past their absolute or idle limit and `login_attempts` older than 1 day (tables from 2.2).
 - **Done when:** A test job added by the API is run by the worker.
 
 ---
@@ -115,6 +117,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.1 Staff users API
 - **Build:** `/api/users` list, create, update (manager only).
 - **Depends on:** 2.3
+- **Note:** Disabling a user also deletes their sessions (2.2 already refuses them on the next request). Resetting a user's password deletes all of that user's sessions, like disabling does. Store the email lowercased (login lowercases it before lookup).
 - **Done when:** Create an officer, disable a user; a disabled user can't log in.
 
 ### [ ] 3.2 Employees API

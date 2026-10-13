@@ -11,6 +11,7 @@ export const ERROR_MESSAGES = {
   INVALID_VALUE: 'הערך אינו תקין',
   INVALID_ID_NUMBER: 'מספר תעודת הזהות אינו תקין',
   BAD_REQUEST: 'הבקשה אינה תקינה',
+  INVALID_CREDENTIALS: 'האימייל או הסיסמה שגויים',
   UNAUTHORIZED: 'יש להתחבר למערכת',
   FORBIDDEN: 'אין לך הרשאה לבצע פעולה זו',
   NOT_FOUND: 'הפריט המבוקש לא נמצא',

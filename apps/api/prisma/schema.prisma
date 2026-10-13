@@ -23,9 +23,12 @@
 //   template_id or source_file_key set, signed/signed_manual need signed_at and signed_file_key;
 //   email_messages.token_hash 64 lowercase hex, NULL exactly when type = signed_copy;
 //   audit_log.actor_type = 'user' exactly when user_id is set.
+//   sessions.token_hash 64 lowercase hex.
 //   Unique index with NULLS NOT DISTINCT: round_templates (round_id, department_id).
 // - audit_log is append-only: triggers in the migration SQL reject UPDATE, DELETE and TRUNCATE.
 //   The test reset bypasses them with session_replication_role = replica (test/setup/database.ts).
+// - Exception to "never deleted": sessions and login_attempts rows are short-lived and deleted
+//   (logout, expiry, cleanup job in task 2.7). Nothing references them.
 // - Staff emails (users.email) are stored lowercase; the unique index is on the stored value.
 //   Enforced in code (task 3.1), not by the database.
 
@@ -183,6 +186,7 @@ model User {
   handledAssignments Assignment[]
   auditLogs          AuditLog[]
   updatedSettings    Setting[]
+  sessions           Session[]
 
   @@map("users")
 }
@@ -481,4 +485,40 @@ model Setting {
   updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: Restrict)
 
   @@map("settings")
+}
+
+// ---------------------------------------------------------------------------
+// Staff login (task 2.2)
+// ---------------------------------------------------------------------------
+
+// Staff login sessions. The cookie holds a random 256-bit token; only its SHA-256 is stored.
+// Rows are deleted on logout, expiry, a refused request, or by the cleanup job (task 2.7).
+model Session {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  tokenHash  String   @unique @map("token_hash") @db.Char(64)
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3) // Absolute limit: login + 12 h
+  lastUsedAt DateTime @map("last_used_at") @db.Timestamptz(3) // Idle limit: + 30 min
+  ip         String?  @db.Inet
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// Login attempts for the limit (5 per email, 20 per IP, in 15 minutes). Written before the
+// password check; a successful login deletes that email's rows. No updated_at: never changed.
+model LoginAttempt {
+  id        BigInt   @id @default(autoincrement())
+  email     String   @db.VarChar(255) // Lowercased, as typed; may not belong to any user
+  ip        String?  @db.Inet
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
+  @@map("login_attempts")
 }

@@ -1,0 +1,65 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PrismaService } from '../../common/prisma/prisma.service.js';
+import { AuthService } from './auth.service.js';
+import type { LoginLimitService } from './login-limit.service.js';
+import type { SessionService } from './session.service.js';
+
+const argon2 = vi.hoisted(() => ({
+  hash: vi.fn<(password: string) => Promise<string>>(() => Promise.resolve('$argon2id$dummy')),
+  verify: vi.fn<(hash: string, password: string) => Promise<boolean>>(() => Promise.resolve(true)),
+}));
+vi.mock('@node-rs/argon2', () => argon2);
+
+const findUnique = vi.fn();
+const prisma = { user: { findUnique, update: vi.fn() } } as unknown as PrismaService;
+const clearForEmail = vi.fn();
+const createSession = vi.fn();
+const loginLimit = { recordAttempt: vi.fn(), clearForEmail } as unknown as LoginLimitService;
+const sessions = { create: createSession } as unknown as SessionService;
+
+const input = { email: 'nobody@doc-signing.local', password: 'secret' };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('AuthService.login', () => {
+  it('runs one Argon2 verify against a dummy hash when the email does not exist', async () => {
+    findUnique.mockResolvedValue(null);
+    const service = new AuthService(prisma, loginLimit, sessions);
+
+    await expect(service.login(input, null, null)).rejects.toMatchObject({
+      code: 'INVALID_CREDENTIALS',
+    });
+    expect(argon2.verify).toHaveBeenCalledTimes(1);
+    expect(argon2.verify).toHaveBeenCalledWith('$argon2id$dummy', 'secret');
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
+  it('computes the dummy hash once', async () => {
+    findUnique.mockResolvedValue(null);
+    const service = new AuthService(prisma, loginLimit, sessions);
+    await expect(service.login(input, null, null)).rejects.toThrow();
+    await expect(service.login(input, null, null)).rejects.toThrow();
+    expect(argon2.hash).toHaveBeenCalledTimes(1);
+    expect(argon2.verify).toHaveBeenCalledTimes(2);
+  });
+
+  it('still verifies the real hash of a disabled user, then refuses', async () => {
+    findUnique.mockResolvedValue({
+      id: 'u1',
+      email: input.email,
+      fullName: 'x',
+      role: 'officer',
+      isActive: false,
+      passwordHash: '$argon2id$real',
+    });
+    const service = new AuthService(prisma, loginLimit, sessions);
+
+    await expect(service.login(input, null, null)).rejects.toMatchObject({
+      code: 'INVALID_CREDENTIALS',
+    });
+    expect(argon2.verify).toHaveBeenCalledWith('$argon2id$real', 'secret');
+    expect(clearForEmail).not.toHaveBeenCalled();
+  });
+});
