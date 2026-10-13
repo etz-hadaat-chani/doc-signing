@@ -13,7 +13,9 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    # Pinned so the ubuntu-latest switch to Ubuntu 26 (2026-10-19) cannot change CI by surprise.
+    # Moving to a newer image is a deliberate later step.
+    runs-on: ubuntu-24.04
 
     # Test database for the DB tests (apps/api, *.db.spec.ts). Their global setup applies the migrations.
     services:
@@ -43,12 +45,12 @@ jobs:
       TEST_S3_BUCKET: documents-test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Reads the version from "packageManager" in package.json.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
