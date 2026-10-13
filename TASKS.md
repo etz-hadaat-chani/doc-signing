@@ -83,7 +83,7 @@ Progress: tick `[x]` when a task is done.
 - **Depends on:** 2.1
 - **Done when:** A seed user logs in; a wrong password is refused; the cookie has secure flags.
 
-### [ ] 2.3 Role checks
+### [x] 2.3 Role checks
 - **Build:** `@Roles()` and `@Public()` decorators plus a global guard; default is deny.
 - **Depends on:** 2.2
 - **Done when:** Officer gets 403 on a manager-only route; signed-out user gets 401.

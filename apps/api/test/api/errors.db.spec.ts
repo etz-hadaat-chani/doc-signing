@@ -16,12 +16,14 @@ import { z } from 'zod';
 import { AppException } from '../../src/common/errors/app.exception.js';
 import { PrismaService } from '../../src/common/prisma/prisma.service.js';
 import { ZodValidationPipe } from '../../src/common/validation/zod-validation.pipe.js';
+import { Public } from '../../src/modules/auth/access.decorators.js';
 import { createTestApp, httpServer } from '../setup/app.js';
 import { resetDatabase } from '../setup/database.js';
 
 const bodySchema = z.object({ idNumber: idNumberSchema, name: z.string().min(1) });
 
 /** Test-only routes, one per kind of error. */
+@Public()
 @Controller('test-errors')
 class ErrorsTestController {
   constructor(private readonly prisma: PrismaService) {}
