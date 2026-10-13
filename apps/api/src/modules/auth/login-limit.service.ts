@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { AuditService } from '../../common/audit/audit.service.js';
 import { AppException } from '../../common/errors/app.exception.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { Db } from '../../common/prisma/prisma.types.js';
@@ -20,6 +21,7 @@ export class LoginLimitService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly repository: AuthRepository,
+    private readonly audit: AuditService,
   ) {}
 
   /** Records the attempt; throws 429 when the email or the IP is over its limit. */
@@ -31,8 +33,36 @@ export class LoginLimitService {
       ip === null ? Promise.resolve(0) : this.repository.countLoginAttemptsSince({ ip }, since),
     ]);
     if (byEmail > MAX_ATTEMPTS_PER_EMAIL || byIp > MAX_ATTEMPTS_PER_IP) {
+      await this.logFirstBlock(email, ip, byEmail, byIp);
       throw new AppException('TOO_MANY_REQUESTS', HttpStatus.TOO_MANY_REQUESTS);
     }
+  }
+
+  /**
+   * Logs `auth.login_blocked` only on the attempt that goes from the limit to limit + 1, so an
+   * attack leaves permanent evidence (login_attempts is cleaned daily) but one IP can't grow the
+   * log. Two requests at the very same moment may both count limit + 2; then none is logged.
+   */
+  private async logFirstBlock(
+    email: string,
+    ip: string | null,
+    byEmail: number,
+    byIp: number,
+  ): Promise<void> {
+    const limitedBy =
+      byEmail === MAX_ATTEMPTS_PER_EMAIL + 1
+        ? 'email'
+        : byIp === MAX_ATTEMPTS_PER_IP + 1
+          ? 'ip'
+          : null;
+    if (!limitedBy) return;
+    await this.audit.record({
+      actor: { type: 'system' },
+      action: 'auth.login_blocked',
+      entity: { type: 'user', id: null },
+      ip,
+      details: { email, limitedBy },
+    });
   }
 
   /** After a successful login: clears this email's attempts, nobody else's. */

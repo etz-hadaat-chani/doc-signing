@@ -186,6 +186,123 @@ describe('POST /api/auth/login', () => {
   });
 });
 
+describe('activity log of logins', () => {
+  function logRows(action: string) {
+    return prisma.auditLog.findMany({ where: { action }, orderBy: { id: 'asc' } });
+  }
+
+  it('logs a successful login inside its transaction: actor user, user id, IP', async () => {
+    await loginOk();
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: manager } });
+    const rows = await prisma.auditLog.findMany();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorType: 'user',
+      userId: user.id,
+      action: 'auth.login',
+      entityType: 'user',
+      entityId: user.id,
+      ip: expect.stringContaining('127.0.0.1') as string,
+    });
+  });
+
+  it('logs every failed login, unknown emails too, and never the password', async () => {
+    await prisma.user.update({ where: { email: officer }, data: { isActive: false } });
+    const wrong = 'Wrong-Password-123';
+    await login(manager, wrong);
+    await login('nobody@doc-signing.local', wrong);
+    await login(officer);
+
+    const users = await prisma.user.findMany();
+    const idOf = (email: string) => users.find((user) => user.email === email)?.id;
+    const rows = await logRows('auth.login_failed');
+    expect(
+      rows.map(({ actorType, userId, entityId, ip, details }) => ({
+        actorType,
+        userId,
+        entityId,
+        hasIp: ip !== null,
+        details,
+      })),
+    ).toEqual([
+      {
+        actorType: 'system',
+        userId: null,
+        entityId: idOf(manager),
+        hasIp: true,
+        details: { email: manager, reason: 'wrong_password' },
+      },
+      {
+        actorType: 'system',
+        userId: null,
+        entityId: null,
+        hasIp: true,
+        details: { email: 'nobody@doc-signing.local', reason: 'unknown_email' },
+      },
+      {
+        actorType: 'system',
+        userId: null,
+        entityId: idOf(officer),
+        hasIp: true,
+        details: { email: officer, reason: 'user_disabled' },
+      },
+    ]);
+    const all = JSON.stringify(await prisma.$queryRaw`SELECT * FROM audit_log`, (_key, value) =>
+      typeof value === 'bigint' ? value.toString() : (value as unknown),
+    );
+    expect(all).not.toContain(wrong);
+    expect(all).not.toContain(password);
+  });
+
+  it('logs auth.login_blocked once, on the attempt that crosses the email limit', async () => {
+    for (let i = 0; i < 5; i++) await login(manager, 'wrong-password');
+    expect(await logRows('auth.login_blocked')).toHaveLength(0);
+
+    expect((await login(manager, 'wrong-password')).status).toBe(429);
+    const rows = await logRows('auth.login_blocked');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorType: 'system',
+      userId: null,
+      entityId: null,
+      ip: expect.stringContaining('127.0.0.1') as string,
+      details: { email: manager, limitedBy: 'email' },
+    });
+
+    expect((await login(manager, 'wrong-password')).status).toBe(429);
+    expect((await login(manager)).status).toBe(429);
+    expect(await logRows('auth.login_blocked')).toHaveLength(1);
+    // Blocked attempts are not logged as failures either.
+    expect(await logRows('auth.login_failed')).toHaveLength(5);
+  });
+
+  it('logs auth.login_blocked once when the IP limit is crossed', async () => {
+    for (let i = 0; i < 20; i++) await login(`user${i}@doc-signing.local`);
+    expect((await login('one-more@doc-signing.local')).status).toBe(429);
+    expect((await login('and-another@doc-signing.local')).status).toBe(429);
+
+    const rows = await logRows('auth.login_blocked');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.details).toEqual({ email: 'one-more@doc-signing.local', limitedBy: 'ip' });
+  });
+
+  it('logs a logout with the user id', async () => {
+    const cookie = await loginOk(officer);
+    await request(httpServer(app)).post('/api/auth/logout').set('Cookie', cookie);
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: officer } });
+    const rows = await logRows('auth.logout');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorType: 'user',
+      userId: user.id,
+      entityId: user.id,
+      ip: expect.stringContaining('127.0.0.1') as string,
+      details: {},
+    });
+  });
+});
+
 describe('GET /api/auth/me', () => {
   it('returns the signed-in user', async () => {
     const response = await me(await loginOk(officer));

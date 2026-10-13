@@ -88,10 +88,11 @@ Progress: tick `[x]` when a task is done.
 - **Depends on:** 2.2
 - **Done when:** Officer gets 403 on a manager-only route; signed-out user gets 401.
 
-### [ ] 2.4 Activity log
+### [x] 2.4 Activity log
 - **Build:** `AuditService` recording user, action, entity, IP, details.
 - **Depends on:** 2.1
 - **Note:** Log `auth.login` (success), `auth.login_failed` (email typed, IP; never the password) and `auth.logout` in `audit_log` from AuthService (2.2).
+- **Note for later tasks:** add each new action, its details type and entity type to `apps/api/src/common/audit/audit.actions.ts` (document views 3.17, sends, reminders, signing with `fileSha256`, ID attempts, unlocks, imports, manual handling). Status changes call `audit.record(…, tx)` inside the same transaction as the change.
 - **Done when:** Rows are written; no way to update or delete them.
 
 ### [ ] 2.5 File storage

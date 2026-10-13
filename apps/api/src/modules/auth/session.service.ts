@@ -73,8 +73,8 @@ export class SessionService {
   }
 
   /** Ends a session. Already gone is fine. */
-  async revoke(sessionId: string): Promise<void> {
-    await this.prisma.session.deleteMany({ where: { id: sessionId } });
+  async revoke(sessionId: string, db: Db = this.prisma): Promise<void> {
+    await db.session.deleteMany({ where: { id: sessionId } });
   }
 
   /** Ends the session a cookie token points to, if any (e.g. the old one at a new login). */

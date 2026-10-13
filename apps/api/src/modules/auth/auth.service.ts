@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { AuthUser, LoginInput } from '@doc-signing/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { hash, verify } from '@node-rs/argon2';
+import { AuditService } from '../../common/audit/audit.service.js';
 import { AppException } from '../../common/errors/app.exception.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { LoginLimitService } from './login-limit.service.js';
@@ -12,6 +13,12 @@ export interface LoginContext {
   ip: string | null;
   userAgent: string | null;
   oldToken: unknown;
+}
+
+/** Who logs out, and from where. */
+export interface LogoutContext {
+  userId: string;
+  ip: string | null;
 }
 
 export interface LoginResult {
@@ -28,6 +35,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly loginLimit: LoginLimitService,
     private readonly sessions: SessionService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -56,6 +64,17 @@ export class AuthService {
     });
     const passwordOk = await this.verifyPassword(user?.passwordHash ?? null, password);
     if (!user || !passwordOk || !user.isActive) {
+      // Every reason writes one row, so timing still reveals nothing. Never the password.
+      await this.audit.record({
+        actor: { type: 'system' },
+        action: 'auth.login_failed',
+        entity: { type: 'user', id: user?.id ?? null },
+        ip,
+        details: {
+          email,
+          reason: !user ? 'unknown_email' : !passwordOk ? 'wrong_password' : 'user_disabled',
+        },
+      });
       throw new AppException('INVALID_CREDENTIALS', HttpStatus.UNAUTHORIZED);
     }
 
@@ -63,6 +82,16 @@ export class AuthService {
       await this.loginLimit.clearForEmail(email, tx);
       await tx.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
       await this.sessions.revokeToken(oldToken, tx);
+      await this.audit.record(
+        {
+          actor: { type: 'user', userId: user.id },
+          action: 'auth.login',
+          entity: { type: 'user', id: user.id },
+          ip,
+          details: { userAgent },
+        },
+        tx,
+      );
       return this.sessions.create(user.id, ip, userAgent, tx);
     });
     return {
@@ -71,9 +100,21 @@ export class AuthService {
     };
   }
 
-  /** Ends a session (logout). Already gone is fine. */
-  async logout(sessionId: string): Promise<void> {
-    await this.sessions.revoke(sessionId);
+  /** Ends a session (logout) and logs it, together. Already gone is fine. */
+  async logout(sessionId: string, { userId, ip }: LogoutContext): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.sessions.revoke(sessionId, tx);
+      await this.audit.record(
+        {
+          actor: { type: 'user', userId },
+          action: 'auth.logout',
+          entity: { type: 'user', id: userId },
+          ip,
+          details: {},
+        },
+        tx,
+      );
+    });
   }
 
   /** One verify either way; a hash that can't be parsed counts as a wrong password. */
