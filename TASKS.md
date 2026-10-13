@@ -52,7 +52,7 @@ Progress: tick `[x]` when a task is done.
 - **Depends on:** 1.2
 - **Done when:** Migration runs; a template can link to several departments.
 
-### [ ] 1.4 Round tables
+### [x] 1.4 Round tables
 - **Build:** `rounds`, `round_templates` (raw-SQL `UNIQUE NULLS NOT DISTINCT`), `assignments`, `email_messages`, `assignment_responses`.
 - **Depends on:** 1.3
 - **Done when:** Migration runs; a test shows two NULL-department rows in one round are rejected.
@@ -156,6 +156,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.9 Create a round
 - **Build:** Round + round templates + one assignment per employee (`pending` or `no_email`).
 - **Depends on:** 3.8
+- **Note:** A `single_template` round has exactly one `round_templates` row with `department_id` NULL; a `by_department` round has none (one row per department instead). Enforced in the service, not the database.
 - **Done when:** No duplicate employees in a round; right template per department.
 
 ### [ ] 3.10 Bulk sending
@@ -171,6 +172,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.12 Round actions
 - **Build:** Remind (one or whole round), resend, unlock, cancel (one or whole round). All logged.
 - **Depends on:** 3.10
+- **Note:** Unlock clears `locked_at` AND resets `failed_attempts` to 0 (the database CHECK allows at most 5).
 - **Done when:** Tests per action with correct status changes.
 
 ### [ ] 3.13 Public signing API
