@@ -16,14 +16,10 @@ import { SESSION_COOKIE, sessionCookieOptions } from './auth.constants.js';
 import { AuthService } from './auth.service.js';
 import { CurrentUser } from './current-user.decorator.js';
 import { type AuthRequest, SessionGuard, sessionCookie } from './session.guard.js';
-import { SessionService } from './session.service.js';
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly auth: AuthService,
-    private readonly sessions: SessionService,
-  ) {}
+  constructor(private readonly auth: AuthService) {}
 
   /** Email + password → session cookie. Always a new session; an old one is ended. */
   // Public once the role guard exists (task 2.3): mark with @Public().
@@ -34,12 +30,11 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthUser> {
-    const { token, user } = await this.auth.login(
-      body,
-      request.ip ?? null,
-      request.get('user-agent') ?? null,
-    );
-    await this.sessions.revokeToken(sessionCookie(request));
+    const { token, user } = await this.auth.login(body, {
+      ip: request.ip ?? null,
+      userAgent: request.get('user-agent') ?? null,
+      oldToken: sessionCookie(request),
+    });
     response.cookie(SESSION_COOKIE, token, sessionCookieOptions());
     return user;
   }
@@ -52,7 +47,7 @@ export class AuthController {
     @Req() request: AuthRequest,
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
-    if (request.auth) await this.sessions.revoke(request.auth.sessionId);
+    if (request.auth) await this.auth.logout(request.auth.sessionId);
     response.clearCookie(SESSION_COOKIE, sessionCookieOptions());
   }
 

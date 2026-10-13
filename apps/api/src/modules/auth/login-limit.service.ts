@@ -1,11 +1,13 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { AppException } from '../../common/errors/app.exception.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
+import type { Db } from '../../common/prisma/prisma.types.js';
 import {
   ATTEMPT_WINDOW_MS,
   MAX_ATTEMPTS_PER_EMAIL,
   MAX_ATTEMPTS_PER_IP,
 } from './auth.constants.js';
+import { AuthRepository } from './auth.repository.js';
 
 /**
  * Failed-login limit, kept in Postgres (login_attempts) so it holds across restarts and processes.
@@ -15,17 +17,18 @@ import {
  */
 @Injectable()
 export class LoginLimitService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly repository: AuthRepository,
+  ) {}
 
   /** Records the attempt; throws 429 when the email or the IP is over its limit. */
   async recordAttempt(email: string, ip: string | null, now = new Date()): Promise<void> {
     await this.prisma.loginAttempt.create({ data: { email, ip, createdAt: now } });
     const since = new Date(now.getTime() - ATTEMPT_WINDOW_MS);
     const [byEmail, byIp] = await Promise.all([
-      this.prisma.loginAttempt.count({ where: { email, createdAt: { gt: since } } }),
-      ip === null
-        ? Promise.resolve(0)
-        : this.prisma.loginAttempt.count({ where: { ip, createdAt: { gt: since } } }),
+      this.repository.countLoginAttemptsSince({ email }, since),
+      ip === null ? Promise.resolve(0) : this.repository.countLoginAttemptsSince({ ip }, since),
     ]);
     if (byEmail > MAX_ATTEMPTS_PER_EMAIL || byIp > MAX_ATTEMPTS_PER_IP) {
       throw new AppException('TOO_MANY_REQUESTS', HttpStatus.TOO_MANY_REQUESTS);
@@ -33,7 +36,7 @@ export class LoginLimitService {
   }
 
   /** After a successful login: clears this email's attempts, nobody else's. */
-  async clearForEmail(email: string): Promise<void> {
-    await this.prisma.loginAttempt.deleteMany({ where: { email } });
+  async clearForEmail(email: string, db: Db = this.prisma): Promise<void> {
+    await db.loginAttempt.deleteMany({ where: { email } });
   }
 }

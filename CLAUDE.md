@@ -88,6 +88,7 @@ docker-compose.yml      # postgres, minio, mailpit
 - **API:** REST under `/api`, JSON, camelCase. Lists → `{ items, total, page, pageSize }`. Errors → `{ error: { code: "SNAKE_CASE", message: "<Hebrew>", details? } }` via one global exception filter. Correct HTTP codes (400 validation, 401, 403, 404, 409 conflict, 423 locked, 429).
 - Every route needs `@Roles(...)` or `@Public()`; default is deny.
 - Business logic in services, not controllers. External services (storage, email) only through adapters.
+- **Layering:** each feature module has controller (HTTP only: input, output, decorators) → service (business rules) → data access. Controllers never use `PrismaService`. Simple single-table reads/writes may stay in the service. Complex or shared queries (joins, counts, queries used by more than one service, and **all assignment status changes**) go in a `<feature>.repository.ts` inside the module. Multi-step changes run in one transaction started by the service (`prisma.$transaction(async (tx) => …)`); methods that take part accept an optional `db: Db = this.prisma` (`common/prisma/prisma.types.ts`).
 - Dates stored UTC; displayed `DD/MM/YYYY` in `Asia/Jerusalem`.
 - Excel exports: neutralize cells starting with `= + - @`. ZIP names UTF-8.
 - Tests: unit tests for logic, API tests for every endpoint's happy path + permissions. Tests must pass before commit.

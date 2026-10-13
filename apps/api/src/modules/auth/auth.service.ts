@@ -7,6 +7,13 @@ import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { LoginLimitService } from './login-limit.service.js';
 import { SessionService } from './session.service.js';
 
+/** Where a login comes from; `oldToken` is the session cookie sent along, ended on success. */
+export interface LoginContext {
+  ip: string | null;
+  userAgent: string | null;
+  oldToken: unknown;
+}
+
 export interface LoginResult {
   token: string;
   user: AuthUser;
@@ -27,13 +34,13 @@ export class AuthService {
    * Checks email and password and starts a new session. "No such email", "wrong password" and
    * "disabled user" all run exactly one Argon2 verify (against a dummy hash when there is no
    * user) and give the same 401, so neither the answer nor its timing reveals which emails exist.
-   * The email arrives lowercased (loginSchema).
+   * The email arrives lowercased (loginSchema). Always a new session; the old one is ended.
    */
   async login(
     { email, password }: LoginInput,
-    ip: string | null,
-    userAgent: string | null,
+    { ip, userAgent, oldToken }: LoginContext,
   ): Promise<LoginResult> {
+    // Outside the transaction on purpose: the attempt must stay even when the login then fails.
     await this.loginLimit.recordAttempt(email, ip);
 
     const user = await this.prisma.user.findUnique({
@@ -52,13 +59,21 @@ export class AuthService {
       throw new AppException('INVALID_CREDENTIALS', HttpStatus.UNAUTHORIZED);
     }
 
-    await this.loginLimit.clearForEmail(email);
-    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-    const token = await this.sessions.create(user.id, ip, userAgent);
+    const token = await this.prisma.$transaction(async (tx) => {
+      await this.loginLimit.clearForEmail(email, tx);
+      await tx.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+      await this.sessions.revokeToken(oldToken, tx);
+      return this.sessions.create(user.id, ip, userAgent, tx);
+    });
     return {
       token,
       user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role },
     };
+  }
+
+  /** Ends a session (logout). Already gone is fine. */
+  async logout(sessionId: string): Promise<void> {
+    await this.sessions.revoke(sessionId);
   }
 
   /** One verify either way; a hash that can't be parsed counts as a wrong password. */
