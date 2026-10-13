@@ -10,10 +10,14 @@
 //   settings (key), template_departments (composite key).
 // - Dates are timestamptz with millisecond precision: @db.Timestamptz(3)
 // - Every table has (except audit_log: append-only, createdAt only):
-//     createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-//     updatedAt DateTime @updatedAt     @map("updated_at") @db.Timestamptz(3)
+//     createdAt DateTime @default(now())            @map("created_at") @db.Timestamptz(3)
+//     updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+//   (@default(now()) on updatedAt gives the column a database default, for rows inserted by raw SQL.)
 // - Every relation sets onDelete: Restrict. Rows are archived (isActive / isArchived), never deleted.
-// - Constraints Prisma can't express (e.g. UNIQUE NULLS NOT DISTINCT) go in the migration SQL.
+// - Constraints Prisma can't express (e.g. UNIQUE NULLS NOT DISTINCT, CHECK) go in the migration SQL.
+//   Current CHECKs: employees.id_number ~ '^[0-9]{9}$'.
+// - Staff emails (users.email) are stored lowercase; the unique index is on the stored value.
+//   Enforced in code (task 3.1), not by the database.
 
 generator client {
   provider            = "prisma-client"
@@ -161,7 +165,7 @@ model User {
   isActive     Boolean   @default(true) @map("is_active")
   lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(3)
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   importBatches ImportBatch[]
 
@@ -173,7 +177,7 @@ model Department {
   name      String   @unique @db.VarChar(100) // Must match the Excel department names
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   employees Employee[]
 
@@ -193,7 +197,7 @@ model Employee {
   isActive       Boolean     @default(true) @map("is_active")
   lastImportId   String?     @map("last_import_id") @db.Uuid
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   department Department   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   lastImport ImportBatch? @relation(fields: [lastImportId], references: [id], onDelete: Restrict)
@@ -216,7 +220,7 @@ model ImportBatch {
   errors        Json         @default("[]") // Rows with errors and the reason
   committedAt   DateTime?    @map("committed_at") @db.Timestamptz(3)
   createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   uploadedBy User       @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
   employees  Employee[]

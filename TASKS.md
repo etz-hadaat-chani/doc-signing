@@ -60,6 +60,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 1.5 Log, settings, indexes, seed data
 - **Build:** `audit_log`, `settings`, all indexes from PRD section 12. The database blocks UPDATE, DELETE and TRUNCATE on `audit_log` (triggers), so rows can't change even outside the app. Seed script: 1 manager, 1 officer, 3 departments, 20 employees, default settings.
 - **Depends on:** 1.4
+- **Note:** `resetDatabase()` (apps/api/test/setup/database.ts) empties tables with TRUNCATE, so once the `audit_log` TRUNCATE trigger exists the test reset must bypass it, e.g. `SET session_replication_role = replica` in the same session as the TRUNCATE (needs superuser). Test database only; never in app code.
 - **Done when:** `pnpm db:seed` works and can be run again safely.
 
 ### [ ] 1.6 Shared logic
