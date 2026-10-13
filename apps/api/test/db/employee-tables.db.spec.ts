@@ -12,8 +12,8 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-async function createDepartment(name = 'מחלקת בדיקות') {
-  return prisma.department.create({ data: { name } });
+async function createDepartment(code = 15, name = 'מחלקת בדיקות') {
+  return prisma.department.create({ data: { code, name } });
 }
 
 function employeeData(departmentId: string, employeeNumber: string, idNumber: string) {
@@ -78,10 +78,21 @@ describe('users', () => {
 });
 
 describe('departments', () => {
-  it('rejects a duplicate name', async () => {
-    await createDepartment('כספים');
+  it('rejects a duplicate code', async () => {
+    await createDepartment(15, 'ממלאות מקום ירושלים');
 
-    await expect(createDepartment('כספים')).rejects.toMatchObject({ code: 'P2002' });
+    await expect(createDepartment(15, 'שם אחר')).rejects.toMatchObject({ code: 'P2002' });
+  });
+
+  it('allows a duplicate name under different codes', async () => {
+    await createDepartment(15, 'ממלאות מקום');
+
+    await expect(createDepartment(19, 'ממלאות מקום')).resolves.toMatchObject({ code: 19 });
+  });
+
+  // CHECK (code > 0); see the id_number CHECK test above for why we match the name.
+  it.each([0, -1])('rejects code %i', async (code) => {
+    await expect(createDepartment(code)).rejects.toThrow(/departments_code_check/);
   });
 
   it("can't be deleted while it has employees", async () => {

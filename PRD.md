@@ -91,7 +91,7 @@ The MVP covers one document type: a department PDF that needs only the employee'
 | Employee notice and hearing notice (checkbox acknowledgment) | New form type | `checkbox` field type and `assignment_responses` table |
 | Attendance reports from Har Gal (one ready PDF per employee) | Depends on the Har Gal export format | `assignments.source_file_key` |
 | Visual drag-and-drop field editor | MVP sets field positions once per PDF | `template_fields` table |
-| Column matching for different Excel layouts | MVP uses one fixed format | `import_batches` table |
+| Column matching for different Excel layouts | MVP reads the Har Gal export by fixed header names | `import_batches` table |
 | Two-step login for staff (code by email) | Not needed for launch | — |
 | Scheduled sending at a later time | Not needed for launch | — |
 | Dashboard charts | MVP shows counts | — |
@@ -143,11 +143,11 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 
 | ID | Requirement |
 | --- | --- |
-| FR-EMP-1 | A manager can upload an `.xlsx` file in a fixed format (sample file downloadable): employee number, ID number, first name, last name, department, email, phone. |
-| FR-EMP-2 | Before saving, the system shows a preview: new, updated, unchanged and rows with errors (with the reason per row). |
-| FR-EMP-3 | Checks: valid Israeli ID number (check digit), no repeated employee numbers or ID numbers in the file, valid email format, known department. |
+| FR-EMP-1 | A manager can upload the **Har Gal employee export** (`.xlsx`) as it is. Columns are found by these exact Hebrew headers, in any order; all other columns are ignored: מספר עובד, תעודת זהות, שם פרטי, שם משפחה, מחלקה, E-Mail, קידומת, טלפון, נייד פרטי - קידומת, נייד פרטי - מספר. A missing required header fails the whole file. Employee number and ID number may arrive as numbers: they are read as text, and the ID number gets its leading zeros back. The department cell is "code - name" (for example "15 - ממלאות מקום ירושלים"). Phone = mobile prefix + number if present, otherwise landline prefix + number, stored as `050-1234567` (a prefix that lost its leading 0 gets it back); reference only. An empty E-Mail means "No email". |
+| FR-EMP-2 | Before saving, the system shows a preview: new, updated, unchanged and rows with errors (with the reason per row), plus new departments and **renamed departments** (known code, different name). |
+| FR-EMP-3 | Checks: valid Israeli ID number (check digit), no repeated employee numbers or ID numbers in the file, valid email format when present, and a department cell in the form code - name: digits, optional spaces, "-", optional spaces, name. It is split at the **first** hyphen only, because names can contain hyphens and numbers ("45 - ממלאות מקום אלעד-45"). The code must be a whole number above 0, and the name must not be empty. A bad cell makes that row an error. |
 | FR-EMP-4 | On confirm, rows are matched by **employee number**: new numbers create employees, existing numbers update them. Employees missing from the file are left as they are, because payroll exports may be filtered by department. A manager can mark an employee inactive by hand. |
-| FR-EMP-5 | New department names in the file can be created during import, after the manager confirms them. |
+| FR-EMP-5 | Departments are matched by **code**, not by name. New codes in the file are created during import, after the manager confirms them. A known code with a different name renames the department on confirm (shown as "department renamed" in the preview). |
 | FR-EMP-6 | Employees without a valid email are marked "No email" and appear in manual handling. |
 | FR-EMP-7 | A manager can add or edit a single employee (for example, fix an email). |
 | FR-EMP-8 | Every import is recorded: who, when, file, and counts. |
@@ -227,6 +227,8 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 
 The MVP has 12 management screens and 5 employee screens, all in Hebrew, right to left.
 
+Wherever a department is shown or picked (lists, filters, cards, wizard, exports), it appears as **"code - name"**, for example "15 - ממלאות מקום ירושלים", the way HR knows it from Har Gal. Department lists are sorted by code.
+
 ### Management area (managers and officers)
 
 | # | Screen | Main contents | Who |
@@ -234,12 +236,12 @@ The MVP has 12 management screens and 5 employee screens, all in Hebrew, right t
 | A1 | Login (כניסה) | Email and password | All staff |
 | A2 | Dashboard (לוח בקרה) | Totals across active rounds; rounds that need attention | All staff |
 | A3 | Send rounds (סבבי שליחה) | Rounds with document, date, recipients, % signed, state | All staff |
-| A4 | Round details (פרטי סבב) | One row per employee: status, last update, reminders, link to signed PDF; filters, search, export, ZIP; manager actions (remind, resend, cancel, unlock, manual signature, office signing) | All staff; actions for managers |
-| A5 | New round wizard (אשף סבב חדש) | Name and mode, document, recipients, summary, settings, preview, send | Manager |
-| A6 | Employees (עובדים) | List with search and filters, email status mark, import and add buttons | All staff; edits for managers |
-| A7 | Employee card (כרטיס עובד) | Details, history across rounds, signed documents, "Send document" shortcut | All staff; edits for managers |
-| A8 | Excel import (ייבוא מאקסל) | Upload, check report, preview, confirm | Manager |
-| A9 | Templates (תבניות) | Templates with departments, version, preview | Manager |
+| A4 | Round details (פרטי סבב) | One row per employee: status, department ("15 - name"), last update, reminders, link to signed PDF; filters (including department), search, export, ZIP; manager actions (remind, resend, cancel, unlock, manual signature, office signing) | All staff; actions for managers |
+| A5 | New round wizard (אשף סבב חדש) | Name and mode, document, recipients (departments as "15 - name"), summary, settings, preview, send | Manager |
+| A6 | Employees (עובדים) | List with department ("15 - name"), search and filters, email status mark, import and add buttons | All staff; edits for managers |
+| A7 | Employee card (כרטיס עובד) | Details including department ("15 - name"), history across rounds, signed documents, "Send document" shortcut | All staff; edits for managers |
+| A8 | Excel import (ייבוא מאקסל) | Upload the Har Gal export, check report, preview (including new and renamed departments as "15 - name"), confirm | Manager |
+| A9 | Templates (תבניות) | Templates with departments ("15 - name"), version, preview | Manager |
 | A10 | Manual handling (טיפול ידני) | Employees with no or bad email across rounds; print, upload scan, fix email | Manager |
 | A11 | Settings (הגדרות) | Reminder interval, maximum reminders, link expiry, sender name | Manager |
 | A12 | Staff users (משתמשי מערכת) | Add, disable, change role | Manager |
@@ -268,9 +270,9 @@ Seven flows cover the MVP. The core is flow 3 (create a round) and flow 4 (signi
 
 ### Flow 1: Import employees (manager)
 
-1. Employees → Import from Excel; upload the `.xlsx` file in the fixed format.
-2. The system checks every row (FR-EMP-3) and shows the preview: new, updated, unchanged, errors.
-3. The manager confirms any new department names.
+1. Employees → Import from Excel; upload the Har Gal employee export (`.xlsx`) as it is (FR-EMP-1).
+2. The system checks every row (FR-EMP-3) and shows the preview: new, updated, unchanged, errors, new and renamed departments.
+3. The manager confirms any new departments (by code) and renames.
 4. Confirm: new employee numbers are created, existing ones updated, missing ones left as they are.
 5. Employees without a valid email are marked "No email".
 
@@ -369,7 +371,7 @@ The API puts jobs (send emails, build signed PDFs) in a queue inside PostgreSQL;
 - **Text is drawn at stored positions, not into PDF form fields.** The department PDFs are used as they are. The system draws the name, ID number, date and signature at the positions in `template_fields`. This avoids a known weakness: PDF form fields handle Hebrew right-to-left text poorly.
 - **The personalized PDF is built when the employee opens it**, not ahead of time. The final signed PDF is built once, at signing.
 - **Every email carries its own link token.** Only a hash of each token is stored, so a reminder can't resend the original link. Instead each reminder gets a new token, and all tokens of an assignment work until it is signed or expires.
-- **The Excel file has one fixed format** in the MVP, with a sample file to download.
+- **The import reads the Har Gal employee export as it is**: columns are found by exact Hebrew header names, other columns are ignored, and departments are matched by their Har Gal code. No sample file.
 
 ## 11. API endpoints
 
@@ -397,8 +399,7 @@ All management endpoints need a staff session; the role column says who may call
 | PATCH | `/api/employees/:id` | Edit an employee | M |
 | POST | `/api/employees/import/preview` | Upload Excel; returns the check report, saves nothing | M |
 | POST | `/api/employees/import/:batchId/commit` | Apply a previewed import | M |
-| GET | `/api/employees/import/sample` | Download the sample Excel file | M |
-| GET | `/api/departments` | List departments | M, O |
+| GET | `/api/departments` | List departments (code, name), sorted by code | M, O |
 
 ### Templates
 
@@ -471,7 +472,7 @@ The database has 14 PostgreSQL tables built around `assignments`, which links on
 | Key | Used for | Why |
 | --- | --- | --- |
 | `id` (uuid) | Internal primary key and all foreign keys | Never changes and never leaves the system; length doesn't matter to the database |
-| `employee_number` | **Matching rows on Excel import**, search, display, Har Gal file matching | Short, known to HR, and likely what Har Gal exports use |
+| `employee_number` | **Matching rows on Excel import**, search, display | Short, known to HR, and the "מספר עובד" column of the Har Gal export |
 | `id_number` | **Employee identity check when signing**; printed on the PDF | The employee knows it by heart; the employee number may not be known to them |
 
 The employee number is a good business key, not a primary key: if it is ever reused or changed, only one field changes, and no history breaks. Confirmed: it is present for every employee, unique, and never reused.
@@ -495,7 +496,8 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | uuid PK |  |
-| name | varchar(100) UNIQUE | Must match the Excel department names |
+| code | integer UNIQUE, CHECK (code > 0) | Har Gal department number: the department's identity; the import matches by it |
+| name | varchar(100) | Not unique and can change; the import updates it by code. Shown as "code - name" |
 | is\_active | boolean |  |
 
 **`employees`**
@@ -510,7 +512,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | department\_id | uuid FK → departments |  |
 | email | varchar(255) NULL |  |
 | email\_status | enum `valid` / `missing` / `invalid` / `bounced` |  |
-| phone | varchar(20) NULL | Reference only; nothing is sent to it |
+| phone | varchar(20) NULL | Reference only; nothing is sent to it. From the import: mobile, else landline, as `050-1234567` |
 | is\_active | boolean |  |
 | last\_import\_id | uuid FK → import\_batches NULL |  |
 
@@ -675,7 +677,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 
 ### Indexes and rules
 
-- `employees(employee_number)` and `employees(id_number)` UNIQUE.
+- `employees(employee_number)` and `employees(id_number)` UNIQUE; `departments(code)` UNIQUE.
 - `assignments(round_id, status)` for round counts; `assignments(employee_id)` for history.
 - `assignments(status, last_reminder_at)` for the reminder job.
 - `email_messages(token_hash)` UNIQUE for link lookup; `email_messages(provider_message_id)` for bounces.

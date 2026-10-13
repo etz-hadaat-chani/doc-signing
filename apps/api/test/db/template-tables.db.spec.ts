@@ -23,8 +23,8 @@ async function createUser() {
   });
 }
 
-async function createDepartment(name = 'מחלקת בדיקות') {
-  return prisma.department.create({ data: { name } });
+async function createDepartment(code = 15, name = 'מחלקת בדיקות') {
+  return prisma.department.create({ data: { code, name } });
 }
 
 async function createTemplate(
@@ -63,7 +63,7 @@ describe('templates', () => {
   it('links one template to 3 departments, with default values', async () => {
     const user = await createUser();
     const template = await createTemplate(user.id);
-    const departments = await Promise.all(['כספים', 'משאבי אנוש', 'תפעול'].map(createDepartment));
+    const departments = await Promise.all([15, 19, 61].map((code) => createDepartment(code)));
     await prisma.templateDepartment.createMany({
       data: departments.map((d) => ({ templateId: template.id, departmentId: d.id })),
     });

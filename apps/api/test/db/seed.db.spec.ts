@@ -33,7 +33,7 @@ function isValidIsraeliId(id: string): boolean {
 async function snapshot() {
   return {
     users: await prisma.user.findMany({ orderBy: { email: 'asc' } }),
-    departments: await prisma.department.findMany({ orderBy: { name: 'asc' } }),
+    departments: await prisma.department.findMany({ orderBy: { code: 'asc' } }),
     employees: await prisma.employee.findMany({ orderBy: { employeeNumber: 'asc' } }),
     settings: await prisma.setting.findMany({ orderBy: { key: 'asc' } }),
   };
@@ -46,6 +46,7 @@ describe('seed', () => {
 
     const { users, departments, employees, settings } = await snapshot();
     expect(users.map(({ role }) => role).sort()).toEqual(['manager', 'officer']);
+    expect(departments.map(({ code }) => code)).toEqual([15, 19, 61]);
     expect(departments.every(({ name }) => /[֐-׿]/.test(name))).toBe(true);
     expect(Object.fromEntries(settings.map(({ key, value }) => [key, value]))).toEqual({
       reminder_interval_days: 3,

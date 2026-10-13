@@ -9,16 +9,21 @@ export const seedUsers: { fullName: string; email: string; role: UserRole }[] = 
   { fullName: 'ממונה צפייה', email: 'officer@doc-signing.local', role: 'officer' },
 ];
 
-export const seedDepartments = ['משאבי אנוש', 'כספים', 'תפעול'] as const;
+// Codes and names as in the Har Gal export ("15 - ממלאות מקום ירושלים"); code is the identity.
+export const seedDepartments = [
+  { code: 15, name: 'ממלאות מקום ירושלים' },
+  { code: 19, name: 'ממ חינוך מיוחד' },
+  { code: 61, name: 'ממלאות מקום אלעד-61' },
+] as const;
 
-type SeedDepartment = (typeof seedDepartments)[number];
+type SeedDepartmentCode = (typeof seedDepartments)[number]['code'];
 
 export const seedEmployees: {
   employeeNumber: string;
   idNumber: string;
   firstName: string;
   lastName: string;
-  department: SeedDepartment;
+  departmentCode: SeedDepartmentCode;
   email: string | null; // null = no email (email_status missing)
 }[] = [
   {
@@ -26,7 +31,7 @@ export const seedEmployees: {
     idNumber: '012345674',
     firstName: 'משה',
     lastName: 'כהן',
-    department: 'משאבי אנוש',
+    departmentCode: 15,
     email: 'e1001@example.com',
   },
   {
@@ -34,7 +39,7 @@ export const seedEmployees: {
     idNumber: '023456783',
     firstName: 'שרה',
     lastName: 'כהן-לוי 2',
-    department: 'משאבי אנוש',
+    departmentCode: 15,
     email: 'e1002@example.com',
   },
   {
@@ -42,7 +47,7 @@ export const seedEmployees: {
     idNumber: '034567891',
     firstName: 'אברהם-חיים',
     lastName: 'פרידמן',
-    department: 'משאבי אנוש',
+    departmentCode: 15,
     email: 'e1003@example.com',
   },
   {
@@ -50,7 +55,7 @@ export const seedEmployees: {
     idNumber: '045678919',
     firstName: 'רבקה',
     lastName: 'בן-דוד 3',
-    department: 'משאבי אנוש',
+    departmentCode: 15,
     email: 'e1004@example.com',
   },
   {
@@ -58,7 +63,7 @@ export const seedEmployees: {
     idNumber: '312345671',
     firstName: 'יעקב',
     lastName: 'גולדשטיין',
-    department: 'משאבי אנוש',
+    departmentCode: 15,
     email: 'e1005@example.com',
   },
   {
@@ -66,7 +71,7 @@ export const seedEmployees: {
     idNumber: '203456785',
     firstName: 'רחל',
     lastName: 'וייס',
-    department: 'משאבי אנוש',
+    departmentCode: 15,
     email: 'e1006@example.com',
   },
   {
@@ -74,7 +79,7 @@ export const seedEmployees: {
     idNumber: '314159260',
     firstName: 'יוסף 2',
     lastName: 'שפירא',
-    department: 'משאבי אנוש',
+    departmentCode: 15,
     email: null,
   },
   {
@@ -82,7 +87,7 @@ export const seedEmployees: {
     idNumber: '271828188',
     firstName: 'לאה',
     lastName: 'רוזנברג',
-    department: 'כספים',
+    departmentCode: 19,
     email: 'e1008@example.com',
   },
   {
@@ -90,7 +95,7 @@ export const seedEmployees: {
     idNumber: '300012341',
     firstName: 'דוד',
     lastName: 'הלוי-כץ',
-    department: 'כספים',
+    departmentCode: 19,
     email: 'e1009@example.com',
   },
   {
@@ -98,7 +103,7 @@ export const seedEmployees: {
     idNumber: '212121214',
     firstName: 'מרים',
     lastName: 'פישר',
-    department: 'כספים',
+    departmentCode: 19,
     email: 'e1010@example.com',
   },
   {
@@ -106,7 +111,7 @@ export const seedEmployees: {
     idNumber: '323232322',
     firstName: 'שמואל-אליהו',
     lastName: 'ברגר',
-    department: 'כספים',
+    departmentCode: 19,
     email: 'e1011@example.com',
   },
   {
@@ -114,7 +119,7 @@ export const seedEmployees: {
     idNumber: '234567899',
     firstName: 'חנה',
     lastName: 'קליין 4',
-    department: 'כספים',
+    departmentCode: 19,
     email: 'e1012@example.com',
   },
   {
@@ -122,7 +127,7 @@ export const seedEmployees: {
     idNumber: '345678908',
     firstName: 'יצחק',
     lastName: 'שוורץ',
-    department: 'כספים',
+    departmentCode: 19,
     email: 'e1013@example.com',
   },
   {
@@ -130,7 +135,7 @@ export const seedEmployees: {
     idNumber: '256789017',
     firstName: 'אסתר',
     lastName: 'לנדאו',
-    department: 'תפעול',
+    departmentCode: 61,
     email: 'e1014@example.com',
   },
   {
@@ -138,7 +143,7 @@ export const seedEmployees: {
     idNumber: '367890126',
     firstName: 'נחום',
     lastName: 'בלום-הורוביץ',
-    department: 'תפעול',
+    departmentCode: 61,
     email: null,
   },
   {
@@ -146,7 +151,7 @@ export const seedEmployees: {
     idNumber: '278901236',
     firstName: 'דבורה',
     lastName: 'אדלר',
-    department: 'תפעול',
+    departmentCode: 61,
     email: 'e1016@example.com',
   },
   {
@@ -154,7 +159,7 @@ export const seedEmployees: {
     idNumber: '389012345',
     firstName: 'מנחם 3',
     lastName: 'גרינברג',
-    department: 'תפעול',
+    departmentCode: 61,
     email: 'e1017@example.com',
   },
   {
@@ -162,7 +167,7 @@ export const seedEmployees: {
     idNumber: '290123454',
     firstName: 'פנינה',
     lastName: 'זילבר',
-    department: 'תפעול',
+    departmentCode: 61,
     email: 'e1018@example.com',
   },
   {
@@ -170,7 +175,7 @@ export const seedEmployees: {
     idNumber: '301234563',
     firstName: 'אהרן',
     lastName: 'טננבאום',
-    department: 'תפעול',
+    departmentCode: 61,
     email: 'e1019@example.com',
   },
   {
@@ -178,7 +183,7 @@ export const seedEmployees: {
     idNumber: '222333445',
     firstName: 'יהודית',
     lastName: 'בר-און 5',
-    department: 'תפעול',
+    departmentCode: 61,
     email: 'e1020@example.com',
   },
 ];

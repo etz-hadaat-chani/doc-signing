@@ -26,8 +26,8 @@ async function createUser() {
   });
 }
 
-async function createDepartment(name = 'מחלקת בדיקות') {
-  return prisma.department.create({ data: { name } });
+async function createDepartment(code = 15, name = 'מחלקת בדיקות') {
+  return prisma.department.create({ data: { code, name } });
 }
 
 async function createEmployee(
@@ -136,7 +136,7 @@ describe('round_templates', () => {
 
   it('allows different departments in one round', async () => {
     const { department, template, round } = await createBase();
-    const other = await createDepartment('כספים');
+    const other = await createDepartment(19);
     await prisma.roundTemplate.createMany({
       data: [department, other].map((d) => ({
         roundId: round.id,

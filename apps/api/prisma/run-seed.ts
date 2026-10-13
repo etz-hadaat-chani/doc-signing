@@ -11,7 +11,7 @@ export interface SeedResult {
 
 /**
  * Inserts the development seed data. Insert-only: rows that already exist (matched by user
- * email, department name, employee number, settings key) are left untouched, so a second run
+ * email, department code, employee number, settings key) are left untouched, so a second run
  * changes nothing, not even updated_at or password hashes, and keeps settings a manager changed.
  * Returns how many rows were created per table. Refuses to run in production.
  */
@@ -42,19 +42,19 @@ export async function runSeed(
   });
 
   const createdDepartments = await prisma.department.createMany({
-    data: seedDepartments.map((name) => ({ name })),
+    data: seedDepartments.map(({ code, name }) => ({ code, name })),
     skipDuplicates: true,
   });
 
   const departments = await prisma.department.findMany({
-    where: { name: { in: [...seedDepartments] } },
-    select: { id: true, name: true },
+    where: { code: { in: seedDepartments.map(({ code }) => code) } },
+    select: { id: true, code: true },
   });
-  const departmentIds = new Map(departments.map(({ id, name }) => [name, id]));
+  const departmentIds = new Map(departments.map(({ id, code }) => [code, id]));
   const createdEmployees = await prisma.employee.createMany({
-    data: seedEmployees.map(({ department, email, ...employee }) => {
-      const departmentId = departmentIds.get(department);
-      if (!departmentId) throw new Error(`Seed department "${department}" is missing.`);
+    data: seedEmployees.map(({ departmentCode, email, ...employee }) => {
+      const departmentId = departmentIds.get(departmentCode);
+      if (!departmentId) throw new Error(`Seed department ${departmentCode} is missing.`);
       return {
         ...employee,
         departmentId,

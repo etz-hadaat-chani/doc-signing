@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Full spec: PRD (Claude Docs) https://claude.ai/code/artifact/5b7d5eb5-84c6-4289-a613-bda337a041cd — read only the sections a task names.
+Full spec: [PRD.md](PRD.md) in the repo root, the **only source of truth** — read only the sections a task names. Don't use the Claude Docs connector or any online copy of the PRD; update PRD.md itself when the spec changes.
 
 ## 1. Project overview
 Internal web system that sends personalized PDFs to ~1,500 employees, collects a mouse-drawn signature, stores the signed PDF by department and emails the employee a copy. Managers and officers track every employee's status in real time; reminders go out automatically until signed. UI is **Hebrew only, RTL**.
@@ -35,7 +35,7 @@ Modular monolith, one codebase, **two processes**: `api` (HTTP) and `worker` (jo
 
 ## 4. Core entities
 - **User** — email, passwordHash, role (manager|officer), isActive
-- **Department** — name (unique, matches Excel)
+- **Department** — code (int, unique, > 0, Har Gal department number = identity), name (not unique, can change; import updates it by code). Displayed as "15 - name"
 - **Employee** — employeeNumber (unique, import key), idNumber (char 9, unique, signing check), first/lastName, departmentId, email?, emailStatus (valid|missing|invalid|bounced), phone (reference only), isActive
 - **ImportBatch** — file, status (preview|committed|failed), counts, errors jsonb
 - **Template** — name, kind (signature; later acknowledgment|external_report), fileKey, version, parentTemplateId, isLocked; M:N departments via **TemplateDepartment**
@@ -77,7 +77,7 @@ docker-compose.yml      # postgres, minio, mailpit
 - **Templates:** locked after first send; edits create a new version.
 - **Rounds are flexible:** all / departments / hand-picked / single employee; by-department mode picks each department's template and warns if one is missing.
 - **Reminders:** every 3 days until signed, no max by default; stop on sign, cancel or link expiry. Job must be idempotent and single-instance.
-- **Excel import:** fixed columns; validate (ID check digit, duplicates, email, department); preview before commit; upsert by `employeeNumber`; **never deactivate employees missing from a file** (exports may be per department).
+- **Excel import:** the Har Gal employee export as is; columns found by exact Hebrew header names, others ignored (TASKS.md 3.3); department cell "code - name" split at the first hyphen, departments matched by **code**, never by name; validate (ID check digit, duplicates, email, department); preview before commit; upsert by `employeeNumber`; **never deactivate employees missing from a file** (exports may be per department).
 - **No email / bounced:** handled manually — print personalized PDF, upload scan (`signed_manual`), or office kiosk (employee still enters ID).
 - **Roles:** manager = everything; officer = read-only (dashboard, statuses, signed docs, exports). Enforce on the server for every route.
 - **Every important action → AuditLog** (sends, imports, signs, document views, unlocks).

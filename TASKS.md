@@ -64,7 +64,7 @@ Progress: tick `[x]` when a task is done.
 - **Done when:** `pnpm db:seed` works and can be run again safely.
 
 ### [ ] 1.6 Shared logic
-- **Build:** Israeli ID check-digit validator; `displayStatus()` combining status with locked/expired flags; Hebrew status labels; unit tests, including one that fails if the shared enum values differ from the Prisma enums.
+- **Build:** Israeli ID check-digit validator; `normalizeIdNumber()` (number or text → 9-digit text with leading zeros put back; used by the import, task 3.3); `displayStatus()` combining status with locked/expired flags; Hebrew status labels; unit tests, including one that fails if the shared enum values differ from the Prisma enums.
 - **Depends on:** 0.1
 - **Note:** The seed test (apps/api/test/db/seed.db.spec.ts) has its own `isValidIsraeliId` helper; replace it with the shared validator.
 - **Done when:** Tests pass, including invalid IDs and IDs with leading zeros.
@@ -123,13 +123,25 @@ Progress: tick `[x]` when a task is done.
 - **Done when:** Search by name, employee number or ID; filter by department and email status.
 
 ### [ ] 3.3 Excel import: preview
-- **Build:** Read fixed-format `.xlsx` (ExcelJS), validate every row, compute new / updated / unchanged / errors, save `import_batch` as preview. Sample file download.
+- **Build:** Read the Har Gal employee export `.xlsx` (ExcelJS), validate every row, compute new / updated / unchanged / errors plus new and renamed departments, save `import_batch` as preview.
 - **Depends on:** 3.2, 1.6
+- **Note (Har Gal export, PRD FR-EMP-1, FR-EMP-3):**
+  - Find columns by these exact Hebrew headers, in any order; ignore every other column: מספר עובד, תעודת זהות, שם פרטי, שם משפחה, מחלקה, E-Mail, קידומת, טלפון, נייד פרטי - קידומת, נייד פרטי - מספר. A missing header fails the file.
+  - מספר עובד and תעודת זהות arrive as numbers: convert to text (no `.0`, no exponent); the ID gets its leading zeros back with `normalizeIdNumber` (1.6).
+  - מחלקה is "code - name", e.g. "15 - ממלאות מקום ירושלים", "5 - ממ חינוך מיוחד", "45 - ממלאות מקום אלעד-45". Pattern: digits, optional spaces, "-", optional spaces, name (`^(\d+)\s*-\s*(.+)$`), split at the **first** hyphen only, since names can contain hyphens and numbers. Code must be > 0; trim the name. A cell that doesn't match is an error row.
+  - Departments match by code. Unknown code → "new department"; known code with a different name → "department renamed". Both are listed in the preview.
+  - Phone = נייד פרטי - קידומת + נייד פרטי - מספר if present, otherwise קידומת + טלפון, as `050-1234567`; a prefix that arrived as a number (`50`) gets its leading 0 back. Reference only.
+  - Empty E-Mail → `email_status = missing`.
+  - Tests: build a fake `.xlsx` in the test with the same headers (plus a few extra columns to ignore) and made-up data only, never the real export. Include a department name with a hyphen, an ID that lost its leading 0, a row with no email, and planted errors.
 - **Done when:** A test file with planted errors gives exact counts and reasons; employee table unchanged.
 
 ### [ ] 3.4 Excel import: confirm
 - **Build:** Upsert employees by employee number, create confirmed departments, set email status, log it.
 - **Depends on:** 3.3
+- **Note (PRD FR-EMP-4, FR-EMP-5):**
+  - Departments are upserted by **code**: create confirmed new codes and apply "department renamed" (update the name by code). Never match a department by name.
+  - Employees are upserted by `employeeNumber`; employees missing from the file are never deactivated.
+  - Empty E-Mail → `email_status = missing`; phone stored as `050-1234567` (see 3.3).
 - **Done when:** Running the same import twice changes nothing; missing employees untouched.
 
 ### [ ] 3.5 Templates API
