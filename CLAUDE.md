@@ -72,7 +72,7 @@ docker-compose.yml      # postgres, minio, mailpit
 - **"Opened" = correct ID entered**, not email open tracking.
 - **Locked / expired are flags, not statuses** — compute display status with `displayStatus()`.
 - **PDF personalization:** draw name, ID number and date at `TemplateField` positions on the department's original PDF (do NOT use AcroForm fields). Embedded Hebrew font + bidi ordering.
-- **Signed PDF:** signature + date + footer (date, time, reference), flattened, SHA-256 stored. Path: `{round}/{department}/{employeeNumber}_{name}.pdf`, department = `assignments.departmentId` (at send time).
+- **Signed PDF:** signature + date + footer (date, time, reference), flattened, SHA-256 stored. Path: `rounds/{roundId}/{departmentCode}/{employeeNumber}.pdf`, department = `assignments.departmentId` (at send time). Storage keys are ASCII only; Hebrew names only in download names and the ZIP. Uploads never overwrite.
 - **After signing:** status `signed`, reminders stop, signed copy emailed automatically (PDF attached).
 - **Templates:** locked after first send; edits create a new version.
 - **Rounds are flexible:** all / departments / hand-picked / single employee; by-department mode picks each department's template and warns if one is missing.

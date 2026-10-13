@@ -613,7 +613,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | sent\_at, first\_opened\_at, last\_reminder\_at, signed\_at | timestamptz NULL |  |
 | reminder\_count | smallint |  |
 | sign\_method | enum `digital` / `manual` / `kiosk` NULL |  |
-| signed\_file\_key | text NULL | `round/department/employee-number_name.pdf` |
+| signed\_file\_key | text NULL | `rounds/<round_id>/<department_code>/<employee_number>.pdf`; department = `department_id` above (at send time). Storage keys are ASCII only (ids and numbers); the Hebrew name appears only in the download file name and in the ZIP |
 | signed\_file\_sha256 | char(64) NULL | Proves the file hasn't changed |
 | signer\_ip | inet NULL |  |
 | signer\_user\_agent | text NULL |  |

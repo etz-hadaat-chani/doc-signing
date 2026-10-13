@@ -3,11 +3,13 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import type { TestProject } from 'vitest/node';
+import { testBucketName } from './test-bucket.js';
 import { testDatabaseUrl } from './test-database-url.js';
 
 declare module 'vitest' {
   export interface ProvidedContext {
     databaseUrl: string;
+    s3Bucket: string;
   }
 }
 
@@ -29,7 +31,10 @@ async function createDatabaseIfMissing(databaseUrl: string): Promise<void> {
   }
 }
 
-/** Runs once before the DB tests: create the test database and apply all migrations to it. */
+/**
+ * Runs once before the DB tests: create the test database and apply all migrations to it; pick
+ * the test bucket (the storage adapter creates it).
+ */
 export default async function setup(project: TestProject): Promise<void> {
   const databaseUrl = testDatabaseUrl();
   await createDatabaseIfMissing(databaseUrl);
@@ -42,4 +47,5 @@ export default async function setup(project: TestProject): Promise<void> {
   });
 
   project.provide('databaseUrl', databaseUrl);
+  project.provide('s3Bucket', testBucketName());
 }

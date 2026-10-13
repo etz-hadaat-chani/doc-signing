@@ -95,7 +95,7 @@ Progress: tick `[x]` when a task is done.
 - **Note for later tasks:** add each new action, its details type and entity type to `apps/api/src/common/audit/audit.actions.ts` (document views 3.17, sends, reminders, signing with `fileSha256`, ID attempts, unlocks, imports, manual handling). Status changes call `audit.record(…, tx)` inside the same transaction as the change.
 - **Done when:** Rows are written; no way to update or delete them.
 
-### [ ] 2.5 File storage
+### [x] 2.5 File storage
 - **Build:** S3-compatible storage adapter: upload, download, stream, short-lived download links.
 - **Depends on:** 2.1
 - **Done when:** Tests save and read a PDF; download links expire.
@@ -199,8 +199,10 @@ Progress: tick `[x]` when a task is done.
 - **Done when:** Tests per action with correct status changes.
 
 ### [ ] 3.13 Public signing API
-- **Build:** `GET /sign/:token` (state only); `verify` (lock at 5, IP rate limit, 15-min session, status → opened); `document`; `submit` (build signed PDF, save to `round/department/employeeNumber_name.pdf`, status → signed, queue signed-copy email, close all links).
+- **Build:** `GET /sign/:token` (state only); `verify` (lock at 5, IP rate limit, 15-min session, status → opened); `document`; `submit` (build signed PDF, save to `rounds/<roundId>/<departmentCode>/<employeeNumber>.pdf`, status → signed, queue signed-copy email, close all links).
 - **Depends on:** 3.7, 3.10
+- **Note:** Storage keys are ASCII only (2.5); the employee's name is not in the key. `StorageAdapter.upload` never overwrites (it throws `StorageAlreadyExistsError`).
+- **Note:** If submit is retried and the signed file already exists, do not upload again. Read the existing file back and store ITS SHA-256 in signed_file_sha256, never the hash of a newly built PDF (it has a different timestamp), so the stored hash always matches the stored file.
 - **Note:** The `department` folder in the signed file path comes from `assignments.department_id` (department at send time), not the employee's current department.
 - **Note:** `submit` needs a higher JSON body size limit for the signature image (Express default is 100 KB); raise it for that route only.
 - **Note:** Configure Express "trust proxy" for the cloud load balancer so `req.ip` is the employee's real IP (used for `signer_ip` and the per-IP rate limit). See also 7.6.
@@ -226,6 +228,7 @@ Progress: tick `[x]` when a task is done.
 - **Build:** Status export to Excel (formula-safe), ZIP of signed files streamed by department with UTF-8 names, signed-document links that log each view.
 - **Depends on:** 3.13
 - **Note:** The Excel export's department column and the ZIP's department folders use `assignments.department_id` (department at send time), matching the signed file paths from 3.13.
+- **Note:** Storage keys hold no names (2.5), so Hebrew names are built at export time: ZIP entries like `15 - <department name>/<employeeNumber>_<first> <last>.pdf` (UTF-8), streamed with `downloadStream`. Signed-document links come from `createDownloadLink` (at most 5 minutes, Hebrew `fileName`) after the role check; log each one as `document.view`.
 - **Done when:** ZIP opens in Windows with Hebrew names; a cell starting with `=` is neutralized.
 
 ### [ ] 3.18 Settings API
@@ -352,9 +355,11 @@ Progress: tick `[x]` when a task is done.
 - **Note:** In production the app connects as a separate non-owner database role with no UPDATE, DELETE or TRUNCATE on `audit_log` (an owner could disable its triggers); migrations run as the owner.
 - **Note:** Set Express "trust proxy" to match the real proxy chain (e.g. one hop) so `req.ip` is the client's IP, not the load balancer's (see 3.13). Don't trust all hops: `X-Forwarded-For` could then be spoofed.
 - **Note:** The seed refuses to run in production, so add a one-time command to create the first manager there.
+- **Note (storage, 2.5):** Create the production bucket with the infrastructure (the app only checks it exists): default encryption at rest (SSE) turned on, all public access blocked. The app's storage permissions: get, put, head and list only, no delete. If the API reaches storage through an internal endpoint, download links must still point to the public one.
 - **Done when:** Test environment is up; a backup restore has been tried.
 
 ### [ ] 7.7 Filter whitelisting and pilot
 - **Build:** Whitelist with NetFree, Etrog, Nativ, Rimon; test from each; pilot with one department.
 - **Depends on:** 7.6 (start the whitelisting requests now)
+- **Note:** Signed-document download links (2.5) point straight to the storage domain (e.g. the S3 bucket host in il-central-1, or the Azure blob host), so whitelist that domain too with all 4 filters, not only the app domain. Test a download through each.
 - **Done when:** Signing works through all 4 filters; pilot department over 80% signed.

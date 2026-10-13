@@ -34,6 +34,13 @@ jobs:
 
     env:
       TEST_DATABASE_URL: postgresql://docsign:docsign@localhost:5432/docsign_test
+      # MinIO for the storage tests (started below); the adapter creates the test bucket.
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_FORCE_PATH_STYLE: 'true'
+      TEST_S3_BUCKET: documents-test
 
     steps:
       - uses: actions/checkout@v4
@@ -59,5 +66,19 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm format:check
-      # Unit tests and DB tests (against the postgres service above).
+      # Same image as docker-compose.yml. Not a `services:` entry: those can't pass `server /data`.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372 \
+            server /data
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && exit 0
+            sleep 1
+          done
+          docker logs minio
+          exit 1
+
+      # Unit tests and DB tests (against the postgres service and MinIO above).
       - run: pnpm test
