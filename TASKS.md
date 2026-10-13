@@ -63,7 +63,7 @@ Progress: tick `[x]` when a task is done.
 - **Note:** `resetDatabase()` (apps/api/test/setup/database.ts) empties tables with TRUNCATE, so once the `audit_log` TRUNCATE trigger exists the test reset must bypass it, e.g. `SET session_replication_role = replica` in the same session as the TRUNCATE (needs superuser). Test database only; never in app code.
 - **Done when:** `pnpm db:seed` works and can be run again safely.
 
-### [ ] 1.6 Shared logic
+### [x] 1.6 Shared logic
 - **Build:** Israeli ID check-digit validator; `normalizeIdNumber()` (number or text → 9-digit text with leading zeros put back; used by the import, task 3.3); `displayStatus()` combining status with locked/expired flags; Hebrew status labels; unit tests, including one that fails if the shared enum values differ from the Prisma enums.
 - **Depends on:** 0.1
 - **Note:** The seed test (apps/api/test/db/seed.db.spec.ts) has its own `isValidIsraeliId` helper; replace it with the shared validator.

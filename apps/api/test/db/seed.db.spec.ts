@@ -1,3 +1,4 @@
+import { isValidIdNumber } from '@doc-signing/shared';
 import { verify } from '@node-rs/argon2';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
@@ -18,16 +19,6 @@ afterEach(() => {
 afterAll(async () => {
   await prisma.$disconnect();
 });
-
-// Israeli ID check digit. TODO(task 1.6): use the shared validator instead.
-function isValidIsraeliId(id: string): boolean {
-  if (!/^\d{9}$/.test(id)) return false;
-  const sum = [...id].reduce((total, char, i) => {
-    const product = Number(char) * ((i % 2) + 1);
-    return total + (product > 9 ? product - 9 : product);
-  }, 0);
-  return sum % 10 === 0;
-}
 
 /** Every seeded row, ordered, so two runs can be compared exactly. */
 async function snapshot() {
@@ -56,7 +47,8 @@ describe('seed', () => {
     });
 
     for (const employee of employees) {
-      expect(isValidIsraeliId(employee.idNumber), employee.idNumber).toBe(true);
+      expect(employee.idNumber).toMatch(/^\d{9}$/);
+      expect(isValidIdNumber(employee.idNumber), employee.idNumber).toBe(true);
     }
     expect(employees.some(({ idNumber }) => idNumber.startsWith('0'))).toBe(true);
     const noEmail = employees.filter(({ emailStatus }) => emailStatus === 'missing');

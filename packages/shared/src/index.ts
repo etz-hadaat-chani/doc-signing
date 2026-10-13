@@ -1,3 +1,6 @@
 // Public entry point for code shared between apps/api and apps/web.
-// Domain types, enums and Zod schemas are added here by later tasks.
-export {};
+// Must not import Prisma or anything from apps/: the web app uses it too.
+export * from './department.js';
+export * from './enums.js';
+export * from './id-number.js';
+export * from './status.js';
