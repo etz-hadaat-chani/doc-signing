@@ -81,6 +81,7 @@ async function createAssignment(
     data: {
       roundId: base.round.id,
       employeeId: base.employee.id,
+      departmentId: base.department.id,
       templateId: base.template.id,
       ...overrides,
     },
@@ -211,6 +212,34 @@ describe('assignments', () => {
     await createAssignment(base);
 
     await expect(createAssignment(base, { roundId: other.id })).resolves.toBeDefined();
+  });
+
+  it('keeps the department from send time when the employee moves', async () => {
+    const base = await createBase();
+    const assignment = await createAssignment(base);
+    const other = await createDepartment(19);
+    await prisma.employee.update({
+      where: { id: base.employee.id },
+      data: { departmentId: other.id },
+    });
+
+    await expect(
+      prisma.assignment.findUniqueOrThrow({ where: { id: assignment.id } }),
+    ).resolves.toMatchObject({ departmentId: base.department.id });
+  });
+
+  it('blocks deleting a department that only assignments still use', async () => {
+    const base = await createBase();
+    await createAssignment(base);
+    const other = await createDepartment(19);
+    await prisma.employee.update({
+      where: { id: base.employee.id },
+      data: { departmentId: other.id },
+    });
+
+    await expect(
+      prisma.department.delete({ where: { id: base.department.id } }),
+    ).rejects.toMatchObject({ code: 'P2003' });
   });
 
   // CHECK constraints. Prisma has no specific code for CHECK violations, so match the name.

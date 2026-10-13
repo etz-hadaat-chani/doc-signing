@@ -198,6 +198,7 @@ model Department {
   employees           Employee[]
   templateDepartments TemplateDepartment[]
   roundTemplates      RoundTemplate[]
+  assignments         Assignment[]
 
   @@map("departments")
 }
@@ -371,6 +372,7 @@ model Assignment {
   id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   roundId          String           @map("round_id") @db.Uuid
   employeeId       String           @map("employee_id") @db.Uuid
+  departmentId     String           @map("department_id") @db.Uuid // Employee's department when the round was created; never changes
   templateId       String?          @map("template_id") @db.Uuid // NULL for an external report (later)
   sourceFileKey    String?          @map("source_file_key") // Ready per-employee PDF, e.g. Har Gal (later)
   status           AssignmentStatus @default(pending)
@@ -391,15 +393,17 @@ model Assignment {
   createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  round     Round                @relation(fields: [roundId], references: [id], onDelete: Restrict)
-  employee  Employee             @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  template  Template?            @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  handledBy User?                @relation(fields: [handledById], references: [id], onDelete: Restrict)
-  emails    EmailMessage[]
-  responses AssignmentResponse[]
+  round      Round                @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  employee   Employee             @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  department Department           @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  template   Template?            @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  handledBy  User?                @relation(fields: [handledById], references: [id], onDelete: Restrict)
+  emails     EmailMessage[]
+  responses  AssignmentResponse[]
 
   @@unique([roundId, employeeId])
   @@index([roundId, status]) // Round counts
+  @@index([roundId, departmentId]) // Round filter and counts by department
   @@index([employeeId]) // Employee history
   @@index([status, lastReminderAt]) // Reminder job
   @@map("assignments")

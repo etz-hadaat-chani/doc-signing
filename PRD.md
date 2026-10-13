@@ -144,12 +144,12 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | ID | Requirement |
 | --- | --- |
 | FR-EMP-1 | A manager can upload the **Har Gal employee export** (`.xlsx`) as it is. Columns are found by these exact Hebrew headers, in any order; all other columns are ignored: מספר עובד, תעודת זהות, שם פרטי, שם משפחה, מחלקה, E-Mail, קידומת, טלפון, נייד פרטי - קידומת, נייד פרטי - מספר. A missing required header fails the whole file. Employee number and ID number may arrive as numbers: they are read as text, and the ID number gets its leading zeros back. The department cell is "code - name" (for example "15 - ממלאות מקום ירושלים"). Phone = mobile prefix + number if present, otherwise landline prefix + number, stored as `050-1234567` (a prefix that lost its leading 0 gets it back); reference only. An empty E-Mail means "No email". |
-| FR-EMP-2 | Before saving, the system shows a preview: new, updated, unchanged and rows with errors (with the reason per row), plus new departments and **renamed departments** (known code, different name). |
+| FR-EMP-2 | Before saving, the system shows a preview: new, updated, unchanged and rows with errors (with the reason per row), plus new departments and **renamed departments** (known code, different name). Each updated employee lists every change as **"field: old → new"**, including changes that overwrite a manual edit (FR-EMP-4). |
 | FR-EMP-3 | Checks: valid Israeli ID number (check digit), no repeated employee numbers or ID numbers in the file, valid email format when present, and a department cell in the form code - name: digits, optional spaces, "-", optional spaces, name. It is split at the **first** hyphen only, because names can contain hyphens and numbers ("45 - ממלאות מקום אלעד-45"). The code must be a whole number above 0, and the name must not be empty. A bad cell makes that row an error. |
-| FR-EMP-4 | On confirm, rows are matched by **employee number**: new numbers create employees, existing numbers update them. Employees missing from the file are left as they are, because payroll exports may be filtered by department. A manager can mark an employee inactive by hand. |
+| FR-EMP-4 | On confirm, rows are matched by **employee number**: new numbers create employees, existing numbers update them. Employees missing from the file are left as they are, because payroll exports may be filtered by department. A manager can mark an employee inactive by hand. **Har Gal is the main source:** an import overwrites the fields it carries, including manual edits (FR-EMP-7). Email status: same email as stored → status kept as it is (a bounced email stays bounced); different email → `valid`, or `invalid` if the format is wrong; empty → `missing`. An import never sends anything (FR-EMP-6). |
 | FR-EMP-5 | Departments are matched by **code**, not by name. New codes in the file are created during import, after the manager confirms them. A known code with a different name renames the department on confirm (shown as "department renamed" in the preview). |
-| FR-EMP-6 | Employees without a valid email are marked "No email" and appear in manual handling. |
-| FR-EMP-7 | A manager can add or edit a single employee (for example, fix an email). |
+| FR-EMP-6 | Employees without a valid email are marked "No email" and appear in manual handling. When an import adds an email, **nothing is sent automatically**: the employee's open assignments in status `no_email` appear in manual handling as "email added, ready to send", and the manager sends them with one click (FR-MAN-1). |
+| FR-EMP-7 | A manager can add or edit a single employee (for example, fix an email). The next import overwrites these edits with the Har Gal data (FR-EMP-4), so managers should make the same fix in Har Gal. |
 | FR-EMP-8 | Every import is recorded: who, when, file, and counts. |
 
 ### Templates
@@ -182,7 +182,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | FR-SGN-3 | The employee sees their personalized PDF (name and ID filled in) and must scroll to the end before signing. |
 | FR-SGN-4 | The employee draws a signature with the mouse (touch also works), can clear and redraw, and confirms a reading statement. |
 | FR-SGN-5 | On confirm, the system places the signature and date in the PDF, locks the file against edits, and adds a small line with the signing date, time and reference number. |
-| FR-SGN-6 | The signed PDF is saved under round / department / employee, and a copy is emailed to the employee. |
+| FR-SGN-6 | The signed PDF is saved under round / department (at send time, `assignments.department_id`) / employee, and a copy is emailed to the employee. |
 | FR-SGN-7 | After signing, the link only shows "Already signed". Expired, cancelled and locked links show a clear Hebrew message with HR contact details. |
 | FR-SGN-8 | The signing session ends after 15 minutes or when the browser closes. |
 
@@ -201,16 +201,16 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | ID | Requirement |
 | --- | --- |
 | FR-TRK-1 | The dashboard shows totals across active rounds: signed, waiting, opened, no email. |
-| FR-TRK-2 | The round screen lists every recipient with status, last update and reminders sent; filters by status and department; search by name, employee number or ID. |
+| FR-TRK-2 | The round screen lists every recipient with status, last update and reminders sent; filters by status and department (at send time); search by name, employee number or ID. |
 | FR-TRK-3 | Managers and officers can open any signed document. Each view is logged. |
-| FR-TRK-4 | Export a round's statuses to Excel, and download all signed files as a ZIP in department folders. |
+| FR-TRK-4 | Export a round's statuses to Excel, and download all signed files as a ZIP in department folders (department at send time). |
 | FR-TRK-5 | The employee card shows the employee's history across all rounds. |
 
 ### Manual handling
 
 | ID | Requirement |
 | --- | --- |
-| FR-MAN-1 | A list of everyone with no email or a bounced email, across rounds. |
+| FR-MAN-1 | A list of everyone with no email or a bounced email, across rounds. Open assignments in status `no_email` whose employee now has a valid email (for example, added by an import) are marked **"email added, ready to send"**, with a one-click send (a new invitation with a new link). |
 | FR-MAN-2 | A manager can print an employee's personalized PDF. |
 | FR-MAN-3 | A manager can upload a scan of a paper-signed document; the status becomes "Signed manually". |
 | FR-MAN-4 | **Office signing station:** a manager opens signing for an employee on an office computer. The employee still enters their ID number and signs themselves. |
@@ -598,6 +598,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | id | uuid PK |  |
 | round\_id | uuid FK → rounds |  |
 | employee\_id | uuid FK → employees |  |
+| department\_id | uuid FK → departments | The employee's department **when the round was created**; never changes. Round filters and counts, the signed file folder and the ZIP folders use it, not the employee's current department |
 | template\_id | uuid FK → templates NULL | NULL for an external report (later) |
 | source\_file\_key | text NULL | Ready per-employee PDF, e.g. Har Gal (later) |
 | status | enum `pending` / `sent` / `opened` / `signed` / `signed_manual` / `delivered` / `no_email` / `invalid_email` / `cancelled` | `delivered` is used only by delivery-only rounds (later) |
@@ -669,6 +670,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | templates | templates | 1:N (self) | Versions |
 | rounds | round\_templates | 1:N | Which PDF each department gets in the round |
 | rounds | employees | M:N via `assignments` | The core of the system |
+| departments | assignments | 1:N | The employee's department at send time (snapshot) |
 | templates | assignments | 1:N | Each assignment uses one PDF |
 | assignments | email\_messages | 1:N | Invite, reminders, copy; each with its own link |
 | assignments | assignment\_responses | 1:N | Checkbox answers (later) |
@@ -678,7 +680,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 ### Indexes and rules
 
 - `employees(employee_number)` and `employees(id_number)` UNIQUE; `departments(code)` UNIQUE.
-- `assignments(round_id, status)` for round counts; `assignments(employee_id)` for history.
+- `assignments(round_id, status)` for round counts; `assignments(round_id, department_id)` for the round's department filter and counts; `assignments(employee_id)` for history.
 - `assignments(status, last_reminder_at)` for the reminder job.
 - `email_messages(token_hash)` UNIQUE for link lookup; `email_messages(provider_message_id)` for bounces.
 - `audit_log(entity_type, entity_id)` and `audit_log(created_at)`.

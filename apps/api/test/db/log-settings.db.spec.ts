@@ -115,6 +115,7 @@ describe('settings', () => {
 describe('indexes (PRD section 12)', () => {
   it.each([
     ['assignments', 'round_id, status'],
+    ['assignments', 'round_id, department_id'],
     ['assignments', 'employee_id'],
     ['assignments', 'status, last_reminder_at'],
     ['email_messages', 'provider_message_id'],

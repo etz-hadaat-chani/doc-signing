@@ -133,6 +133,7 @@ Progress: tick `[x]` when a task is done.
   - Phone = נייד פרטי - קידומת + נייד פרטי - מספר if present, otherwise קידומת + טלפון, as `050-1234567`; a prefix that arrived as a number (`50`) gets its leading 0 back. Reference only.
   - Empty E-Mail → `email_status = missing`.
   - Tests: build a fake `.xlsx` in the test with the same headers (plus a few extra columns to ignore) and made-up data only, never the real export. Include a department name with a hyphen, an ID that lost its leading 0, a row with no email, and planted errors.
+  - Har Gal is the main source (PRD FR-EMP-2, FR-EMP-4): every updated employee lists each change as "field: old → new" (e.g. `email: a@x.com → b@x.com`), including changes that overwrite a manual edit. "Unchanged" means no field differs.
 - **Done when:** A test file with planted errors gives exact counts and reasons; employee table unchanged.
 
 ### [ ] 3.4 Excel import: confirm
@@ -141,7 +142,10 @@ Progress: tick `[x]` when a task is done.
 - **Note (PRD FR-EMP-4, FR-EMP-5):**
   - Departments are upserted by **code**: create confirmed new codes and apply "department renamed" (update the name by code). Never match a department by name.
   - Employees are upserted by `employeeNumber`; employees missing from the file are never deactivated.
-  - Empty E-Mail → `email_status = missing`; phone stored as `050-1234567` (see 3.3).
+  - Har Gal is the main source: the import overwrites every field it carries, including manual edits (PRD FR-EMP-4, FR-EMP-7). Apply exactly the changes shown in the preview.
+  - Email status (PRD FR-EMP-4): email same as stored → keep `email_status` as it is (bounced stays bounced); different → `valid`, or `invalid` if the format is wrong; empty → `missing`. Compare emails after trimming and lowercasing. Phone stored as `050-1234567` (see 3.3).
+  - Never send anything from the import (PRD FR-EMP-6). An employee whose email was added keeps their `no_email` assignments as they are; they show in manual handling as "email added, ready to send" (3.16).
+  - Test: importing an email for an employee with a `no_email` assignment queues no job and sends no email.
 - **Done when:** Running the same import twice changes nothing; missing employees untouched.
 
 ### [ ] 3.5 Templates API
@@ -170,6 +174,7 @@ Progress: tick `[x]` when a task is done.
 - **Build:** Round + round templates + one assignment per employee (`pending` or `no_email`).
 - **Depends on:** 3.8
 - **Note:** A `single_template` round has exactly one `round_templates` row with `department_id` NULL; a `by_department` round has none (one row per department instead). Enforced in the service, not the database.
+- **Note (department snapshot):** Save each assignment's `department_id` = the employee's department at the moment the round is created. It never changes afterwards, even if a later import moves the employee. Template choice in `by_department` mode uses the same value.
 - **Done when:** No duplicate employees in a round; right template per department.
 
 ### [ ] 3.10 Bulk sending
@@ -180,6 +185,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.11 Reading rounds
 - **Build:** Round details with counts, per-employee list with filters, round list with % signed, dashboard summary.
 - **Depends on:** 3.10
+- **Note:** The round's department filter, the department shown per row and the counts by department use `assignments.department_id` (department at send time, index `(round_id, department_id)`), not the employee's current department. Test: move an employee after the round is created; the round still counts them in the old department.
 - **Done when:** Counts match the data; lists are paged.
 
 ### [ ] 3.12 Round actions
@@ -191,6 +197,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.13 Public signing API
 - **Build:** `GET /sign/:token` (state only); `verify` (lock at 5, IP rate limit, 15-min session, status → opened); `document`; `submit` (build signed PDF, save to `round/department/employeeNumber_name.pdf`, status → signed, queue signed-copy email, close all links).
 - **Depends on:** 3.7, 3.10
+- **Note:** The `department` folder in the signed file path comes from `assignments.department_id` (department at send time), not the employee's current department.
 - **Done when:** Signing via an old reminder link works; 6th wrong attempt refused; link shows "Already signed" afterwards.
 
 ### [ ] 3.14 Reminder job
@@ -206,11 +213,13 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.16 Manual handling API
 - **Build:** Print endpoint, scanned signature upload (`signed_manual`), office kiosk session, manual-handling list.
 - **Depends on:** 3.13
+- **Note (PRD FR-EMP-6, FR-MAN-1):** The list marks open `no_email` assignments whose employee now has a `valid` email (for example, added by an import) as "email added, ready to send". A manager-only send action (one or several) sends a normal invitation with a new token, status → `sent`, and logs it. Nothing is sent without that action.
 - **Done when:** Tests per action; kiosk still requires the ID number.
 
 ### [ ] 3.17 Exports and file access
 - **Build:** Status export to Excel (formula-safe), ZIP of signed files streamed by department with UTF-8 names, signed-document links that log each view.
 - **Depends on:** 3.13
+- **Note:** The Excel export's department column and the ZIP's department folders use `assignments.department_id` (department at send time), matching the signed file paths from 3.13.
 - **Done when:** ZIP opens in Windows with Hebrew names; a cell starting with `=` is neutralized.
 
 ### [ ] 3.18 Settings API
@@ -270,6 +279,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 5.7 Manual handling (A10)
 - **Build:** List, print, upload scan, fix email, open office kiosk.
 - **Depends on:** 4.2, 3.16
+- **Note:** Show "email added, ready to send" on assignments that have one, with a one-click send button (and a send-all for the selected rows). Near "fix email", remind the manager to fix it in Har Gal too, since the next import overwrites it (PRD FR-EMP-7).
 - **Done when:** Each path changes the status correctly.
 
 ### [ ] 5.8 Settings and staff users (A11, A12)

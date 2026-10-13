@@ -42,7 +42,7 @@ Modular monolith, one codebase, **two processes**: `api` (HTTP) and `worker` (jo
 - **TemplateField** — templateId, fieldType (full_name|id_number|date|signature; later checkbox|text), page, x, y, width, height
 - **Round** — name, mode (single_template|by_department), status (draft|sending|active|closed|cancelled), reminderIntervalDays=3, maxReminders=NULL (no limit), linkExpiresAt (default +60d)
 - **RoundTemplate** — roundId, departmentId? (NULL = all), templateId; UNIQUE NULLS NOT DISTINCT
-- **Assignment** (core: employee × round) — status (pending|sent|opened|signed|signed_manual|no_email|invalid_email|cancelled), failedAttempts, lockedAt, reminderCount, timestamps, signMethod (digital|manual|kiosk), signedFileKey, signedFileSha256, signerIp; UNIQUE(roundId, employeeId)
+- **Assignment** (core: employee × round) — departmentId (employee's department when the round was created; never changes; used for round filters/counts, signed file folder, ZIP), status (pending|sent|opened|signed|signed_manual|no_email|invalid_email|cancelled), failedAttempts, lockedAt, reminderCount, timestamps, signMethod (digital|manual|kiosk), signedFileKey, signedFileSha256, signerIp; UNIQUE(roundId, employeeId)
 - **EmailMessage** — assignmentId, type (invite|reminder|signed_copy), tokenHash (unique), providerMessageId, status
 - **AssignmentResponse** (later) · **AuditLog** (append-only) · **Setting** (key/jsonb)
 
@@ -72,13 +72,13 @@ docker-compose.yml      # postgres, minio, mailpit
 - **"Opened" = correct ID entered**, not email open tracking.
 - **Locked / expired are flags, not statuses** — compute display status with `displayStatus()`.
 - **PDF personalization:** draw name, ID number and date at `TemplateField` positions on the department's original PDF (do NOT use AcroForm fields). Embedded Hebrew font + bidi ordering.
-- **Signed PDF:** signature + date + footer (date, time, reference), flattened, SHA-256 stored. Path: `{round}/{department}/{employeeNumber}_{name}.pdf`.
+- **Signed PDF:** signature + date + footer (date, time, reference), flattened, SHA-256 stored. Path: `{round}/{department}/{employeeNumber}_{name}.pdf`, department = `assignments.departmentId` (at send time).
 - **After signing:** status `signed`, reminders stop, signed copy emailed automatically (PDF attached).
 - **Templates:** locked after first send; edits create a new version.
 - **Rounds are flexible:** all / departments / hand-picked / single employee; by-department mode picks each department's template and warns if one is missing.
 - **Reminders:** every 3 days until signed, no max by default; stop on sign, cancel or link expiry. Job must be idempotent and single-instance.
-- **Excel import:** the Har Gal employee export as is; columns found by exact Hebrew header names, others ignored (TASKS.md 3.3); department cell "code - name" split at the first hyphen, departments matched by **code**, never by name; validate (ID check digit, duplicates, email, department); preview before commit; upsert by `employeeNumber`; **never deactivate employees missing from a file** (exports may be per department).
-- **No email / bounced:** handled manually — print personalized PDF, upload scan (`signed_manual`), or office kiosk (employee still enters ID).
+- **Excel import:** the Har Gal employee export as is; columns found by exact Hebrew header names, others ignored (TASKS.md 3.3); department cell "code - name" split at the first hyphen, departments matched by **code**, never by name; validate (ID check digit, duplicates, email, department); preview before commit; upsert by `employeeNumber`; **never deactivate employees missing from a file** (exports may be per department). Har Gal is the main source: an import overwrites manual edits (preview shows "field: old → new"). Email status: same email → keep status (bounced stays bounced); different → valid/invalid; empty → missing. **An import never sends anything.**
+- **No email / bounced:** handled manually — print personalized PDF, upload scan (`signed_manual`), or office kiosk (employee still enters ID). An email added later shows as "email added, ready to send"; the manager sends with one click.
 - **Roles:** manager = everything; officer = read-only (dashboard, statuses, signed docs, exports). Enforce on the server for every route.
 - **Every important action → AuditLog** (sends, imports, signs, document views, unlocks).
 
