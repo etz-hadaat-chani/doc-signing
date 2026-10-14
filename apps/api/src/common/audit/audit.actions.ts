@@ -1,4 +1,4 @@
-import type { UserRole } from '@doc-signing/shared';
+import type { EmailStatus, UserRole } from '@doc-signing/shared';
 
 /**
  * The only action names and entity types the activity log accepts (`audit_log.action` and
@@ -17,10 +17,12 @@ export const AUDIT_ACTIONS = [
   'user.disabled',
   'user.enabled',
   'user.password_reset',
+  'employee.created',
+  'employee.updated',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
-export const AUDIT_ENTITY_TYPES = ['user'] as const;
+export const AUDIT_ENTITY_TYPES = ['user', 'employee'] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 
 /**
@@ -46,4 +48,13 @@ export interface AuditDetailsMap {
   'user.enabled': Record<string, never>;
   /** Never the password itself. Ends the user's sessions (all but the current one for self). */
   'user.password_reset': { sessionsEnded: number };
+  // Employees (3.2): the acting manager is the actor, the employee the entity. Never the ID number.
+  'employee.created': {
+    employeeNumber: string;
+    fullName: string;
+    departmentCode: number;
+    emailStatus: EmailStatus;
+  };
+  /** One line per changed field, "field: old → new"; the ID number only as "idNumber: changed". */
+  'employee.updated': { changes: string[] };
 }

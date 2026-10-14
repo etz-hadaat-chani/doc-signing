@@ -204,6 +204,14 @@ describe('error format', () => {
     expect(logged).not.toContain('123456782');
   });
 
+  it('the log line leaves out the query string (search text, IDs typed without a leading 0)', async () => {
+    await request(httpServer(app)).get('/api/test-errors/crash?q=%D7%9E%D7%A9%D7%94&id=12345674');
+    expect(loggedErrors).toHaveLength(1);
+    const [logged = ''] = loggedErrors;
+    expect(logged).toContain('GET /api/test-errors/crash\n');
+    for (const leak of ['crash?', 'q=', '%D7', '12345674']) expect(logged).not.toContain(leak);
+  });
+
   it('4xx errors are not logged', async () => {
     await request(httpServer(app)).get('/api/test-errors/forbidden');
     expect(loggedErrors).toEqual([]);

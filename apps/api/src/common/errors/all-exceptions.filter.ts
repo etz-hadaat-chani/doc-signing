@@ -127,12 +127,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   private logServerError(referenceId: string, request: Request, exception: unknown): void {
     // Only name, message and stack: the raw object (pg `detail`, Prisma `meta`) can hold values.
+    // The path without its query string: `?q=` can hold a name or an ID number typed without
+    // its leading zero, which redactForLog would not catch.
+    const path = request.originalUrl.split('?')[0] ?? '';
     const description =
       exception instanceof Error
         ? (exception.stack ?? `${exception.name}: ${exception.message}`)
         : `Non-error thrown: ${typeof exception}`;
     this.logger.error(
-      redactForLog(`[ref ${referenceId}] ${request.method} ${request.originalUrl}\n${description}`),
+      redactForLog(`[ref ${referenceId}] ${request.method} ${path}\n${description}`),
     );
   }
 }

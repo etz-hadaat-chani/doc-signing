@@ -74,6 +74,8 @@ describe('every route declares who may call it', () => {
     expect(names).toContain('AuthController.login (POST /auth/login)');
     expect(names).toContain('AuthController.me (GET /auth/me)');
     expect(names).toContain('UsersController.update (PATCH /users/:id)');
+    expect(names).toContain('EmployeesController.update (PATCH /employees/:id)');
+    expect(names).toContain('DepartmentsController.list (GET /departments)');
   });
 
   it('has @Public or @Roles on every route', () => {

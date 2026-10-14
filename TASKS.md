@@ -132,9 +132,24 @@ Progress: tick `[x]` when a task is done.
 - **Note for later tasks:** reuse `pageQuerySchema` / `Paged<T>` (`packages/shared/src/pagination.ts`) for every list. Any user change locks the active managers (`ORDER BY id FOR UPDATE`) and then the target user, always in that order (`UsersRepository`); under the lock the actor must still be an active manager, else 403.
 - **Done when:** Create an officer, disable a user; a disabled user can't log in.
 
-### [ ] 3.2 Employees API
+### [x] 3.2 Employees API
 - **Build:** Departments list; employees list with search, filters, paging; employee card; create and edit.
 - **Depends on:** 2.3
+- **Done (rules):**
+  - Read: manager + officer. Create and edit: manager only. No delete; a manager can set `isActive: false`.
+  - `GET /api/departments` → `{ items }` (not paged), sorted by code.
+  - List filters `dept` (uuid) and `emailStatus` combine with AND.
+  - The list has no ID number; only the card shows it.
+  - Search `q`: runs of spaces become one. It matches part of the first name, last name, "first last" or "last first", and part of the employee number. The ID number matches only exactly, leading zeros put back (`normalizeIdNumber`). `%` and `_` are plain characters.
+  - Employee number: digits only (1–20), leading zeros removed (`normalizeEmployeeNumber`, shared), and it can't be changed after create.
+  - Phone stored as `050-1234567` (`normalizePhone`, shared); unreadable → 400 `INVALID_PHONE`.
+  - Email stored trimmed and lowercased.
+  - Email status: `nextEmailStatus` (shared, FR-EMP-4). A wrong format is saved as `invalid`, not refused.
+  - 409 `EMPLOYEE_NUMBER_TAKEN` / `ID_NUMBER_TAKEN`; 400 `DEPARTMENT_NOT_FOUND`.
+  - Audit `employee.created` / `employee.updated`. The changes are listed as "field: old → new" (`describeEmployeeChanges`); the ID only as "idNumber: changed".
+  - A department change never touches existing assignments.
+  - The 500 log line has the path without its query string.
+- **Note for later tasks:** reuse `normalizeEmployeeNumber`, `normalizePhone`, `nextEmailStatus` (shared) and `describeEmployeeChanges` (`modules/employees/employee-changes.ts`) in the import (3.3/3.4).
 - **Done when:** Search by name, employee number or ID; filter by department and email status.
 
 ### [ ] 3.3 Excel import: preview
@@ -203,6 +218,7 @@ Progress: tick `[x]` when a task is done.
 - **Build:** Round details with counts, per-employee list with filters, round list with % signed, dashboard summary.
 - **Depends on:** 3.10
 - **Note:** The round's department filter, the department shown per row and the counts by department use `assignments.department_id` (department at send time, index `(round_id, department_id)`), not the employee's current department. Test: move an employee after the round is created; the round still counts them in the old department.
+- **Note:** Also build `GET /api/employees/:id/assignments` (PRD §11, employee history across rounds, M + O), moved here from 3.2: round name, document, `displayStatus()`, dates, link to the signed file. Paged, newest first, index `assignments(employee_id)`.
 - **Done when:** Counts match the data; lists are paged.
 
 ### [ ] 3.12 Round actions
