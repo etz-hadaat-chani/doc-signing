@@ -367,6 +367,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 7.2 Security pass
 - **Build:** Helmet headers and CSP, CSRF protection, review of rate limits, test listing every route and confirming a role check.
 - **Depends on:** 7.1
+- **Note (dependencies):** Review the remaining `pnpm audit --prod` findings (as of 2026-10-14, after nodemailer was upgraded to 10.0.13): `mysql2` and `deepmerge-ts`, pulled in by Prisma's own tooling (`@prisma/client` → `prisma`; our app uses Postgres, never MySQL), and `uuid` inside `exceljs`. Upgrade when the parent packages ship fixed versions, or use a pnpm override if the fixed version is compatible and tests pass. Record any finding that is accepted and why.
 - **Done when:** No route without a role check except `/sign/*`, login, webhook.
 
 ### [ ] 7.3 Hebrew quality check
