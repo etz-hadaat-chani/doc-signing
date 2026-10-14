@@ -94,7 +94,7 @@ export class UsersService {
   /**
    * Renames, changes role, disables/enables or resets the password, in one transaction with
    * one log row per real change. Locks the active managers, then the user (fixed order, see
-   * UsersRepository). Disabling or a reset ends the user's sessions; a manager resetting their
+   * UsersRepository); an actor who is no longer an active manager by then gets 403. Disabling or a reset ends the user's sessions; a manager resetting their
    * own password keeps the session they are using.
    */
   async update(id: string, input: UpdateUserInput, actor: UserActor): Promise<StaffUser> {
@@ -102,6 +102,11 @@ export class UsersService {
 
     return this.prisma.$transaction(async (tx) => {
       const activeManagerIds = await this.repository.lockActiveManagers(tx);
+      // The guard checked the actor before the lock wait; a change that ran meanwhile may have
+      // disabled or demoted them. Re-check under the lock, before anything changes.
+      if (!activeManagerIds.includes(actor.userId)) {
+        throw new AppException('FORBIDDEN', HttpStatus.FORBIDDEN);
+      }
       const current = await this.repository.lockUser(id, tx);
       if (!current) throw new AppException('NOT_FOUND', HttpStatus.NOT_FOUND);
 

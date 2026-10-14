@@ -354,7 +354,7 @@ describe('PATCH /api/users/:id', () => {
     expect(await userAuditRows()).toEqual([]);
   });
 
-  it('two managers disabling each other at once: one wins, the other gets 409, never 500', async () => {
+  it('two managers disabling each other at once: one wins, the other gets 403, never 500', async () => {
     const managerCookie = await cookieFor(manager);
     const created = await createUser(
       { ...newOfficer, email: 'second.manager@example.com', role: 'manager' },
@@ -382,14 +382,54 @@ describe('PATCH /api/users/:id', () => {
     );
     const results = await both;
 
+    // The loser was disabled by the winner, so it is no longer an active manager under the lock.
     const statuses = results.map(({ status }) => status).sort();
-    expect(statuses).toEqual([200, 409]);
-    const refused = results.find(({ status }) => status === 409);
-    expect(refused && errorOf(refused).code).toBe('LAST_ACTIVE_MANAGER');
+    expect(statuses).toEqual([200, 403]);
+    const refused = results.find(({ status }) => status === 403);
+    expect(refused && errorOf(refused).code).toBe('FORBIDDEN');
     expect(await prisma.user.count({ where: { role: 'manager', isActive: true } })).toBe(1);
     expect((await userAuditRows()).filter(({ action }) => action === 'user.disabled')).toHaveLength(
       1,
     );
+  });
+
+  it('a manager disabled while their change waits on the lock gets 403; nothing changes', async () => {
+    const managerCookie = await cookieFor(manager);
+    const created = await createUser(
+      { ...newOfficer, email: 'second.manager@example.com', role: 'manager' },
+      managerCookie,
+    );
+    const secondCookie = await cookieFor('second.manager@example.com', newOfficer.password);
+    const secondId = userOf(created).id;
+    const officerId = await userId(officer);
+    const auditBefore = (await userAuditRows()).length;
+
+    // A (disable B) queues on the lock first, then B's own change; A runs first on release.
+    const { pending } = await prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`
+          SELECT id FROM users WHERE role = 'manager' AND is_active ORDER BY id FOR UPDATE`;
+        const disableB = Promise.resolve(updateUser(secondId, { isActive: false }, managerCookie));
+        await waitForLockWaiters(1);
+        const bRenames = Promise.resolve(
+          updateUser(officerId, { fullName: 'שם של B' }, secondCookie),
+        );
+        await waitForLockWaiters(2);
+        return { pending: Promise.all([disableB, bRenames]) };
+      },
+      { timeout: 10_000 },
+    );
+    const [aResult, bResult] = await pending;
+
+    expect(aResult.status).toBe(200);
+    expect(bResult.status).toBe(403);
+    expect(errorOf(bResult).code).toBe('FORBIDDEN');
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: officerId } })).toMatchObject({
+      fullName: 'ממונה צפייה',
+    });
+    expect((await userAuditRows()).slice(auditBefore).map(({ action }) => action)).toEqual([
+      'user.disabled',
+    ]);
   });
 });
 
