@@ -23,7 +23,7 @@
 //   template_id or source_file_key set, signed/signed_manual need signed_at and signed_file_key;
 //   email_messages.token_hash 64 lowercase hex, NULL exactly when type = signed_copy;
 //   audit_log.actor_type = 'user' exactly when user_id is set.
-//   sessions.token_hash 64 lowercase hex.
+//   sessions.token_hash 64 lowercase hex; users.email = lower(email).
 //   Unique index with NULLS NOT DISTINCT: round_templates (round_id, department_id).
 // - audit_log is append-only: triggers in the migration SQL reject UPDATE, DELETE and TRUNCATE.
 //   The test reset bypasses them with session_replication_role = replica (test/setup/database.ts).

@@ -77,6 +77,21 @@ export class SessionService {
     await db.session.deleteMany({ where: { id: sessionId } });
   }
 
+  /**
+   * Ends all of a user's sessions (disable, password reset), except `exceptSessionId` if given;
+   * returns how many ended.
+   */
+  async revokeAllForUser(
+    userId: string,
+    db: Db = this.prisma,
+    exceptSessionId?: string,
+  ): Promise<number> {
+    const { count } = await db.session.deleteMany({
+      where: { userId, ...(exceptSessionId !== undefined && { id: { not: exceptSessionId } }) },
+    });
+    return count;
+  }
+
   /** Ends the session a cookie token points to, if any (e.g. the old one at a new login). */
   async revokeToken(token: unknown, db: Db = this.prisma): Promise<void> {
     if (!isSessionTokenShape(token)) return;

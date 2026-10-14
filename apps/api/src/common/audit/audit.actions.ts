@@ -1,3 +1,5 @@
+import type { UserRole } from '@doc-signing/shared';
+
 /**
  * The only action names and entity types the activity log accepts (`audit_log.action` and
  * `entity_type`, varchar(50)). A fixed list, so a typo can't create a new name. Each later task
@@ -9,6 +11,12 @@ export const AUDIT_ACTIONS = [
   'auth.login_failed',
   'auth.login_blocked',
   'auth.logout',
+  'user.created',
+  'user.renamed',
+  'user.role_changed',
+  'user.disabled',
+  'user.enabled',
+  'user.password_reset',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -29,4 +37,13 @@ export interface AuditDetailsMap {
   /** Logged once, on the attempt that first goes over the email or IP limit. */
   'auth.login_blocked': { email: string; limitedBy: 'email' | 'ip' };
   'auth.logout': Record<string, never>;
+  // Staff users (3.1): the acting manager is the actor, the changed user the entity.
+  'user.created': { email: string; fullName: string; role: UserRole };
+  'user.renamed': { from: string; to: string };
+  'user.role_changed': { from: UserRole; to: UserRole };
+  /** Disabling ends all of the user's sessions at once. */
+  'user.disabled': { sessionsEnded: number };
+  'user.enabled': Record<string, never>;
+  /** Never the password itself. Ends the user's sessions (all but the current one for self). */
+  'user.password_reset': { sessionsEnded: number };
 }

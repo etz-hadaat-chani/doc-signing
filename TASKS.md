@@ -124,10 +124,12 @@ Progress: tick `[x]` when a task is done.
 
 ## Phase 3: Back-end features
 
-### [ ] 3.1 Staff users API
+### [x] 3.1 Staff users API
 - **Build:** `/api/users` list, create, update (manager only).
 - **Depends on:** 2.3
 - **Note:** Disabling a user also deletes their sessions (2.2 already refuses them on the next request). Resetting a user's password deletes all of that user's sessions, like disabling does. Store the email lowercased (login lowercases it before lookup).
+- **Done (rules):** passwords 10–128 characters, length only. A manager can't disable or demote themselves (409 `CANNOT_CHANGE_OWN_ACCESS`); at least one active manager always stays (409 `LAST_ACTIVE_MANAGER`). A manager resetting their own password keeps the current session. Email can't be changed. DB CHECK `users.email = lower(email)`.
+- **Note for later tasks:** reuse `pageQuerySchema` / `Paged<T>` (`packages/shared/src/pagination.ts`) for every list. Any user change locks the active managers (`ORDER BY id FOR UPDATE`) and then the target user, always in that order (`UsersRepository`).
 - **Done when:** Create an officer, disable a user; a disabled user can't log in.
 
 ### [ ] 3.2 Employees API

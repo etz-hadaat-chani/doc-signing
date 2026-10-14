@@ -5,4 +5,6 @@ export * from './department.js';
 export * from './enums.js';
 export * from './errors.js';
 export * from './id-number.js';
+export * from './pagination.js';
 export * from './status.js';
+export * from './users.js';
