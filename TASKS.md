@@ -152,7 +152,7 @@ Progress: tick `[x]` when a task is done.
 - **Note for later tasks:** reuse `normalizeEmployeeNumber`, `normalizePhone`, `nextEmailStatus` (shared) and `describeEmployeeChanges` (`modules/employees/employee-changes.ts`) in the import (3.3/3.4).
 - **Done when:** Search by name, employee number or ID; filter by department and email status.
 
-### [ ] 3.3 Excel import: preview
+### [x] 3.3 Excel import: preview
 - **Build:** Read the Har Gal employee export `.xlsx` (ExcelJS), validate every row, compute new / updated / unchanged / errors plus new and renamed departments, save `import_batch` as preview.
 - **Depends on:** 3.2, 1.6
 - **Note (Har Gal export, PRD FR-EMP-1, FR-EMP-3):**
@@ -161,7 +161,7 @@ Progress: tick `[x]` when a task is done.
   - מחלקה is "code - name", e.g. "15 - ממלאות מקום ירושלים", "5 - ממ חינוך מיוחד", "45 - ממלאות מקום אלעד-45". Pattern: digits, optional spaces, "-", optional spaces, name (`^(\d+)\s*-\s*(.+)$`), split at the **first** hyphen only, since names can contain hyphens and numbers. Code must be > 0; trim the name. A cell that doesn't match is an error row.
   - Departments match by code. Unknown code → "new department"; known code with a different name → "department renamed". Both are listed in the preview.
   - Phone = נייד פרטי - קידומת + נייד פרטי - מספר if present, otherwise קידומת + טלפון, as `050-1234567`; a prefix that arrived as a number (`50`) gets its leading 0 back. Reference only.
-  - Empty E-Mail → `email_status = missing`.
+  - Empty E-Mail → `email_status = missing`. A wrong email format is not an error row: the row is imported with status `invalid` and listed under "warnings" with its row number. A phone that can't be read is saved empty, also a warning.
   - Tests: build a fake `.xlsx` in the test with the same headers (plus a few extra columns to ignore) and made-up data only, never the real export. Include a department name with a hyphen, an ID that lost its leading 0, a row with no email, and planted errors.
   - Har Gal is the main source (PRD FR-EMP-2, FR-EMP-4): every updated employee lists each change as "field: old → new" (e.g. `email: a@x.com → b@x.com`), including changes that overwrite a manual edit. "Unchanged" means no field differs.
 - **Done when:** A test file with planted errors gives exact counts and reasons; employee table unchanged.
@@ -176,6 +176,9 @@ Progress: tick `[x]` when a task is done.
   - Email status (PRD FR-EMP-4): email same as stored → keep `email_status` as it is (bounced stays bounced); different → `valid`, or `invalid` if the format is wrong; empty → `missing`. Compare emails after trimming and lowercasing. Phone stored as `050-1234567` (see 3.3).
   - Never send anything from the import (PRD FR-EMP-6). An employee whose email was added keeps their `no_email` assignments as they are; they show in manual handling as "email added, ready to send" (3.16).
   - Test: importing an email for an employee with a `no_email` assignment queues no job and sends no email.
+  - **How to apply exactly the preview (decided in 3.3):** re-read the stored file (`import_batches.file_key`) and run the same check and compare code as the preview (`ImportService.check`); the checked rows are not saved in the batch (that would be a second copy of the ID numbers). In one transaction: lock the batch row (`FOR UPDATE`), require status `preview` (no double confirm), and take a transaction-level advisory lock so two confirms can't run together.
+  - **Stale check (narrow):** refuse with 409 `IMPORT_STALE` ("upload the file again") only when something this file touches changed after the batch's `created_at`: an employee matched by one of the file's employee numbers **or** ID numbers was updated or created, or a department with one of the file's codes was updated or created. Changes to employees and departments not in the file never block the confirm. No database change needed (existing `updated_at` / `created_at`).
+  - Rows with errors are skipped; rows with warnings are imported (bad email → `invalid`, unreadable phone → empty).
 - **Done when:** Running the same import twice changes nothing; missing employees untouched.
 
 ### [ ] 3.5 Templates API
@@ -389,6 +392,7 @@ Progress: tick `[x]` when a task is done.
 - **Note (pg-boss, 2.7):** pg-boss creates and upgrades its own `pgboss` schema on first start, which the non-owner app role can't do. **Recommended:** the deploy step, run as the owner together with the Prisma migrations, runs `CREATE SCHEMA IF NOT EXISTS pgboss AUTHORIZATION <app_role>` once. The app role then owns that one schema and nothing else: pg-boss can install and upgrade its tables there and rebuild its indexes during maintenance, and the app role still has no extra rights on `public` or `audit_log` (job data is IDs only). **Not recommended:** the owner installs the pg-boss tables and the app gets only read/write rights on them. pg-boss upgrades change its tables and its maintenance rebuilds indexes, and both need ownership, so this would break on the first pg-boss upgrade.
 - **Note:** Set Express "trust proxy" to match the real proxy chain (e.g. one hop) so `req.ip` is the client's IP, not the load balancer's (see 3.13). Don't trust all hops: `X-Forwarded-For` could then be spoofed.
 - **Note:** The seed refuses to run in production, so add a one-time command to create the first manager there.
+- **Note (retention, 3.3):** Stored Excel imports (`imports/{batchId}.xlsx`) contain ID numbers and are kept, even unconfirmed previews. The retention policy (PRD NFR-PRV-3) must cover them; there is no delete in the app, so expiry is a bucket lifecycle rule on `imports/` once HR agrees the period.
 - **Note (storage, 2.5):** Create the production bucket with the infrastructure (the app only checks it exists): default encryption at rest (SSE) turned on, all public access blocked. The app's storage permissions: get, put, head and list only, no delete. If the API reaches storage through an internal endpoint, download links must still point to the public one.
 - **Done when:** Test environment is up; a backup restore has been tried.
 

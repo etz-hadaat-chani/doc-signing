@@ -76,6 +76,7 @@ describe('every route declares who may call it', () => {
     expect(names).toContain('UsersController.update (PATCH /users/:id)');
     expect(names).toContain('EmployeesController.update (PATCH /employees/:id)');
     expect(names).toContain('DepartmentsController.list (GET /departments)');
+    expect(names).toContain('ImportController.preview (POST /employees/import/preview)');
   });
 
   it('has @Public or @Roles on every route', () => {

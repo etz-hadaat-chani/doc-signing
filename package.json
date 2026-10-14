@@ -20,6 +20,7 @@
     "db:reset": "pnpm --filter @doc-signing/api db:reset",
     "db:seed": "pnpm --filter @doc-signing/api db:seed",
     "email:preview": "pnpm --filter @doc-signing/api email:preview",
+    "import:sample": "pnpm --filter @doc-signing/api import:sample",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

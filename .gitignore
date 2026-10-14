@@ -14,3 +14,5 @@ coverage
 !.vscode/settings.json
 test-results
 playwright-report
+# pnpm import:sample
+/sample-har-gal.xlsx

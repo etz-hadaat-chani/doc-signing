@@ -19,10 +19,11 @@ export const AUDIT_ACTIONS = [
   'user.password_reset',
   'employee.created',
   'employee.updated',
+  'import.preview',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
-export const AUDIT_ENTITY_TYPES = ['user', 'employee'] as const;
+export const AUDIT_ENTITY_TYPES = ['user', 'employee', 'import_batch'] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 
 /**
@@ -57,4 +58,16 @@ export interface AuditDetailsMap {
   };
   /** One line per changed field, "field: old → new"; the ID number only as "idNumber: changed". */
   'employee.updated': { changes: string[] };
+  // Excel import (3.3): the manager is the actor, the batch the entity. Counts only, no ID numbers.
+  /** What the import would do; nothing is saved to employees or departments yet. */
+  'import.preview': {
+    fileName: string;
+    rowsTotal: number;
+    rowsNew: number;
+    rowsUpdated: number;
+    rowsUnchanged: number;
+    rowsFailed: number;
+    departmentsNew: number;
+    departmentsRenamed: number;
+  };
 }
