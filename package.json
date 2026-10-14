@@ -3,7 +3,7 @@
   "private": true,
   "description": "Digital Document Signing & Tracking System",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "scripts": {
     "dev": "pnpm --filter @doc-signing/shared build && pnpm --recursive --parallel dev",

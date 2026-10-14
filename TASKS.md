@@ -106,10 +106,18 @@ Progress: tick `[x]` when a task is done.
 - **Note for later tasks:** send through `EmailService` (`common/email`): `sendInvitation` / `sendReminder` (raw token, optional `expiresAt` = `round.linkExpiresAt`), `sendSignedCopy` (PDF + Hebrew file name). Each returns `providerMessageId` (store it in `email_messages`). Failures throw `EmailSendError`: `kind` `temporary` → let pg-boss retry; `permanent` → mark the send failed. Never log the link or the token. `pnpm email:preview` sends all 3 samples to Mailpit.
 - **Done when:** All 3 emails arrive in Mailpit, right to left.
 
-### [ ] 2.7 Job queue and worker
+### [x] 2.7 Job queue and worker
 - **Build:** pg-boss setup; separate worker process from the same code.
 - **Depends on:** 2.1
 - **Note:** Daily cleanup job: delete `sessions` past their absolute or idle limit and `login_attempts` older than 1 day (tables from 2.2).
+- **Note for later tasks (pg-boss 12.35.0, tables in the `pgboss` schema, which Prisma and `resetDatabase()` don't touch):**
+  - **Two processes, one queue:** `QueueService` (`common/queue`). The API (`QueueModule.forRoot({ mode: 'api' })`) only calls `send`; the worker (`src/worker/`, `pnpm dev` starts it, `start:worker` in production) calls `work` and `schedule`. The API starts and adds jobs without a worker; jobs wait until one runs.
+  - **Add a job:** (1) a `QueueDefinition` in `queue.definitions.ts` (name, `policy`, `retry`; add it to `QUEUES`); (2) a job class in `worker/jobs/` that calls `queue.work(DEF, handler)` in `onApplicationBootstrap` (see `cleanup.job.ts`), listed in `worker.module.ts` with the services it needs; (3) the API service calls `queue.send(DEF, data)`. **Job data holds IDs only** (assignment id, round id): never tokens, links, emails or ID numbers; pg-boss stores it as plain JSON. Logs: queue name, job id and counts only.
+  - **Retries:** a handler that throws is retried with backoff (default 5 retries: 30 s, ~1 min, ~2 min ... max 1 h; stuck after 15 min); then the job is `failed`. `job.attempt` and `job.isLastAttempt` tell the handler where it is. On worker stop, running jobs get 30 s to finish, then are released and retried.
+  - **EmailSendError (2.6):** `kind: 'temporary'` → rethrow (pg-boss retries); but on `isLastAttempt` mark the `email_messages` row failed first. `kind: 'permanent'` → mark it failed and return normally (no retry). Any other error → rethrow.
+  - **Safe to run twice** (a job can run again after a crash or expiry): check the current state first and skip work already done (assignment already `signed`/`cancelled`, reminder already sent today); change status with a condition in one transaction (`updateMany({ where: { id, status: 'pending' } })` and check the count); never upload twice (`StorageAlreadyExistsError`, 3.13). Use an `exclusive` queue with `singletonKey` (e.g. the assignment id) to allow only one waiting or running job per key; `send` then returns null for a duplicate. On a `standard` queue `singletonKey` does nothing.
+  - **Scheduled jobs:** `exclusive` policy + `schedule` in the job class; cron in `Asia/Jerusalem` (`SCHEDULE_TIME_ZONE`). pg-boss creates one job per occurrence however many workers run.
+  - **Option to check in 3.10:** pg-boss has a `fromPrisma` adapter to add a job inside a Prisma transaction (job and status change commit together). Not used yet.
 - **Done when:** A test job added by the API is run by the worker.
 
 ---
@@ -186,6 +194,7 @@ Progress: tick `[x]` when a task is done.
 - **Build:** `POST /rounds/:id/send` enqueues jobs; worker sends in batches, creates a token per email (hash only) in `email_messages`, status → sent; round `sending` → `active`.
 - **Depends on:** 3.9, 2.6, 2.7
 - **Note:** `EmailService.sendInvitation` (2.6) takes the raw token and the round's `linkExpiresAt`; on `EmailSendError` with `kind: 'permanent'` mark the email message `failed`, on `temporary` rethrow so the job retries.
+- **Note (pg-boss, 2.7):** Follow the 2.7 note: one job per assignment on an `exclusive` queue with `singletonKey` = assignment id, job data IDs only; create the token inside the job (hash only) and mark `email_messages` failed on the last attempt of a temporary error. Check the `fromPrisma` option there.
 - **Done when:** Sending to 50 employees puts 50 emails in Mailpit, each with a unique link.
 
 ### [ ] 3.11 Reading rounds
@@ -207,6 +216,7 @@ Progress: tick `[x]` when a task is done.
 - **Note:** If submit is retried and the signed file already exists, do not upload again. Read the existing file back and store ITS SHA-256 in signed_file_sha256, never the hash of a newly built PDF (it has a different timestamp), so the stored hash always matches the stored file.
 - **Note:** The `department` folder in the signed file path comes from `assignments.department_id` (department at send time), not the employee's current department.
 - **Note:** The signed-copy email (`EmailService.sendSignedCopy`, 2.6) attaches the stored PDF as `<document name> - <first> <last>.pdf` (Hebrew; the email layer cleans the name).
+- **Note (pg-boss, 2.7):** Queue the signed-copy email as a worker job (see the 2.7 note; data = assignment id), never send it inside the submit request.
 - **Note:** `submit` needs a higher JSON body size limit for the signature image (Express default is 100 KB); raise it for that route only.
 - **Note:** Configure Express "trust proxy" for the cloud load balancer so `req.ip` is the employee's real IP (used for `signer_ip` and the per-IP rate limit). See also 7.6.
 - **Done when:** Signing via an old reminder link works; 6th wrong attempt refused; link shows "Already signed" afterwards.
@@ -214,6 +224,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.14 Reminder job
 - **Build:** Daily job 09:00 Sun–Thu (Asia/Jerusalem); reminds everyone due; no limit unless set; idempotent, single instance.
 - **Depends on:** 3.10
+- **Note (pg-boss, 2.7):** Add it like the daily cleanup job (`worker/jobs/cleanup.job.ts`): an `exclusive` queue with a schedule, cron `0 9 * * 0-4` in `Asia/Jerusalem`; pg-boss creates one job per day however many workers run. Make each reminder safe to run twice (see the 2.7 note).
 - **Done when:** Running twice the same day sends no duplicates; signed or expired employees skipped.
 
 ### [ ] 3.15 Bounce webhook
@@ -357,6 +368,7 @@ Progress: tick `[x]` when a task is done.
 - **Build:** Docker images, migrations on deploy, secrets, backups, Israel region. Needs the AWS/Azure decision.
 - **Depends on:** 7.2, 7.5
 - **Note:** In production the app connects as a separate non-owner database role with no UPDATE, DELETE or TRUNCATE on `audit_log` (an owner could disable its triggers); migrations run as the owner.
+- **Note (pg-boss, 2.7):** pg-boss creates and upgrades its own `pgboss` schema on first start, which the non-owner app role can't do. **Recommended:** the deploy step, run as the owner together with the Prisma migrations, runs `CREATE SCHEMA IF NOT EXISTS pgboss AUTHORIZATION <app_role>` once. The app role then owns that one schema and nothing else: pg-boss can install and upgrade its tables there and rebuild its indexes during maintenance, and the app role still has no extra rights on `public` or `audit_log` (job data is IDs only). **Not recommended:** the owner installs the pg-boss tables and the app gets only read/write rights on them. pg-boss upgrades change its tables and its maintenance rebuilds indexes, and both need ownership, so this would break on the first pg-boss upgrade.
 - **Note:** Set Express "trust proxy" to match the real proxy chain (e.g. one hop) so `req.ip` is the client's IP, not the load balancer's (see 3.13). Don't trust all hops: `X-Forwarded-For` could then be spoofed.
 - **Note:** The seed refuses to run in production, so add a one-time command to create the first manager there.
 - **Note (storage, 2.5):** Create the production bucket with the infrastructure (the app only checks it exists): default encryption at rest (SSE) turned on, all public access blocked. The app's storage permissions: get, put, head and list only, no delete. If the API reaches storage through an internal endpoint, download links must still point to the public one.

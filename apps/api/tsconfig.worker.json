@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    // Dev only (pnpm dev): the worker's watcher builds here, apart from the API's dist/, so the two
+    // watchers never delete each other's output. `nest build` puts both entries in dist/.
+    "outDir": "dist-worker"
+  }
+}

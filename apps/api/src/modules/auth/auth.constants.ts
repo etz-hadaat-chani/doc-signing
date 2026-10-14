@@ -15,6 +15,8 @@ export const TOUCH_INTERVAL_MS = 60 * 1000;
 export const MAX_ATTEMPTS_PER_EMAIL = 5;
 export const MAX_ATTEMPTS_PER_IP = 20;
 export const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+/** The daily cleanup deletes login attempts older than this. */
+export const ATTEMPT_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 /** 256 random bits, base64url (43 characters). Goes only into the cookie, never the database. */
 export function newSessionToken(): string {

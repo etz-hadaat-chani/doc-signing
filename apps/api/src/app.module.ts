@@ -5,6 +5,7 @@ import { ConfigModule } from './common/config/config.module.js';
 import { EmailModule } from './common/email/email.module.js';
 import { AllExceptionsFilter } from './common/errors/all-exceptions.filter.js';
 import { PrismaModule } from './common/prisma/prisma.module.js';
+import { QueueModule } from './common/queue/queue.module.js';
 import { SettingsModule } from './common/settings/settings.module.js';
 import { StorageModule } from './common/storage/storage.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
@@ -14,6 +15,7 @@ import { HealthModule } from './modules/health/health.module.js';
   imports: [
     ConfigModule,
     PrismaModule,
+    QueueModule.forRoot({ mode: 'api' }),
     AuditModule,
     SettingsModule,
     StorageModule,
