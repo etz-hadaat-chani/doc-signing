@@ -1,5 +1,6 @@
 // Writes a made-up Har Gal employee export with one case of everything (new, updated, unchanged,
-// warnings and planted errors), to try the import preview by hand. Development only; fake people.
+// warnings and planted errors), to try the import preview and confirm by hand. Development only;
+// fake people. A confirmed import changes the dev database; `pnpm db:reset` starts over.
 // Usage: pnpm import:sample [path]   (default: sample-har-gal.xlsx in the repo root)
 //
 // The rows match the seed (pnpm db:seed). The API test also marks 1002 and 1003 as bounced and

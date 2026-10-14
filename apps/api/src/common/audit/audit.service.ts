@@ -25,21 +25,32 @@ export interface AuditEntry<A extends AuditAction> {
 export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async record<A extends AuditAction>(
-    { actor, action, entity, ip, details }: AuditEntry<A>,
+  async record<A extends AuditAction>(entry: AuditEntry<A>, db: Db = this.prisma): Promise<void> {
+    await db.auditLog.create({ data: toRow(entry) });
+  }
+
+  /**
+   * Many rows in one insert (e.g. one per employee an import changed), with the same checks as
+   * `record`. Any unsafe entry fails the whole call before anything is written.
+   */
+  async recordMany<A extends AuditAction>(
+    entries: readonly AuditEntry<A>[],
     db: Db = this.prisma,
   ): Promise<void> {
-    assertSafeDetails(details);
-    await db.auditLog.create({
-      data: {
-        actorType: actor.type,
-        userId: actor.type === 'user' ? actor.userId : null,
-        action,
-        entityType: entity.type,
-        entityId: entity.id,
-        ip,
-        details: sanitizeDetails(details),
-      },
-    });
+    if (entries.length === 0) return;
+    await db.auditLog.createMany({ data: entries.map(toRow) });
   }
+}
+
+function toRow<A extends AuditAction>({ actor, action, entity, ip, details }: AuditEntry<A>) {
+  assertSafeDetails(details);
+  return {
+    actorType: actor.type,
+    userId: actor.type === 'user' ? actor.userId : null,
+    action,
+    entityType: entity.type,
+    entityId: entity.id,
+    ip,
+    details: sanitizeDetails(details),
+  };
 }

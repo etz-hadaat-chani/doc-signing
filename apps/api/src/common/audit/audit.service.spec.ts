@@ -5,14 +5,20 @@ import { AuditService } from './audit.service.js';
 
 function fakeDb() {
   const create = vi.fn();
-  return { create, db: { auditLog: { create } } as unknown as PrismaService & Db };
+  const createMany = vi.fn();
+  return {
+    create,
+    createMany,
+    db: { auditLog: { create, createMany } } as unknown as PrismaService & Db,
+  };
 }
 
 describe('AuditService', () => {
-  it('has no way to change or remove rows: record is its only method', () => {
+  it('has no way to change or remove rows: it only adds', () => {
     expect(Object.getOwnPropertyNames(AuditService.prototype).sort()).toEqual([
       'constructor',
       'record',
+      'recordMany',
     ]);
   });
 
@@ -70,5 +76,50 @@ describe('AuditService', () => {
       }),
     ).rejects.toThrow('"details.password"');
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('writes many rows in one insert, on the given transaction', async () => {
+    const prisma = fakeDb();
+    const tx = fakeDb();
+    await new AuditService(prisma.db).recordMany(
+      ['e1', 'e2'].map((id) => ({
+        actor: { type: 'user', userId: 'u1' } as const,
+        action: 'employee.updated' as const,
+        entity: { type: 'employee', id } as const,
+        ip: null,
+        details: { changes: ['firstName: א → ב'], importBatchId: 'b1' },
+      })),
+      tx.db,
+    );
+    expect(prisma.createMany).not.toHaveBeenCalled();
+    expect(tx.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({ entityId: 'e1', action: 'employee.updated' }),
+        expect.objectContaining({ entityId: 'e2', action: 'employee.updated' }),
+      ] as object[],
+    });
+  });
+
+  it('recordMany with no entries writes nothing', async () => {
+    const { createMany, db } = fakeDb();
+    await new AuditService(db).recordMany([]);
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it('recordMany refuses the whole call when one entry has a forbidden key', async () => {
+    const { createMany, db } = fakeDb();
+    const safe = {
+      actor: { type: 'system' } as const,
+      action: 'auth.login_failed' as const,
+      entity: { type: 'user', id: null } as const,
+      ip: null,
+      details: { email: 'a@b.c', reason: 'wrong_password' } as const,
+    };
+    const unsafe = { ...safe, details: { ...safe.details, idNumber: '1' } };
+    await expect(new AuditService(db).recordMany([safe, unsafe])).rejects.toThrow(
+      '"details.idNumber"',
+    );
+    expect(createMany).not.toHaveBeenCalled();
   });
 });

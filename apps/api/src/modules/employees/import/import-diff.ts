@@ -20,6 +20,22 @@ export interface CurrentData {
 
 export type ImportDiff = Omit<ImportPreview, 'batchId' | 'fileName'>;
 
+/**
+ * What the confirm writes (3.4), built in the same loop as the report, so it applies exactly
+ * what the preview showed. Unchanged employees and failed rows are not in it.
+ */
+export interface ImportWrites {
+  /** New employees, as the import leaves them. */
+  creates: EmployeeState[];
+  /** Changed employees: the state after the import and the change lines for the log. */
+  updates: { after: EmployeeState; changes: string[] }[];
+}
+
+export interface ImportPlan {
+  diff: ImportDiff;
+  writes: ImportWrites;
+}
+
 function rowIssues(row: CheckedRow, issues: ImportIssue[]): ImportRowIssue[] {
   return issues.map((issue) => ({
     row: row.rowNumber,
@@ -75,13 +91,19 @@ function departmentChanges(imported: ImportedEmployee[], current: CurrentData) {
   return { newDepartments, renamedDepartments };
 }
 
+/** The preview's report only (see planImport). */
+export function compareWithCurrent(rows: CheckedRow[], current: CurrentData): ImportDiff {
+  return planImport(rows, current).diff;
+}
+
 /**
  * Compares the checked rows with the current data (FR-EMP-2): new = number not stored; updated =
  * at least one field differs, listed as "field: old → new" (the ID only as "idNumber: changed");
  * unchanged = no field differs. Rows with an error are failed and listed with every reason;
- * warnings are listed only for rows that will be imported. Pure: reads nothing, saves nothing.
+ * warnings are listed only for rows that will be imported. Returns the report and the writes
+ * that apply it. Pure: reads nothing, saves nothing.
  */
-export function compareWithCurrent(rows: CheckedRow[], current: CurrentData): ImportDiff {
+export function planImport(rows: CheckedRow[], current: CurrentData): ImportPlan {
   for (const row of rows) {
     if (row.employee && row.errors.length === 0) checkIdOwner(row, row.employee, current);
   }
@@ -102,6 +124,7 @@ export function compareWithCurrent(rows: CheckedRow[], current: CurrentData): Im
     errors: [],
     warnings: [],
   };
+  const writes: ImportWrites = { creates: [], updates: [] };
   const imported: ImportedEmployee[] = [];
   for (const row of rows) {
     const { employee } = row;
@@ -124,6 +147,7 @@ export function compareWithCurrent(rows: CheckedRow[], current: CurrentData): Im
         department: formatDepartment(employee.departmentCode, employee.departmentName),
         emailStatus: after.emailStatus,
       });
+      writes.creates.push(after);
       continue;
     }
     const changes = describeEmployeeChanges(stored, after);
@@ -138,11 +162,12 @@ export function compareWithCurrent(rows: CheckedRow[], current: CurrentData): Im
       fullName,
       changes,
     });
+    writes.updates.push({ after, changes });
   }
   const departments = departmentChanges(imported, current);
   diff.newDepartments = departments.newDepartments;
   diff.renamedDepartments = departments.renamedDepartments;
   diff.counts.departmentsNew = departments.newDepartments.length;
   diff.counts.departmentsRenamed = departments.renamedDepartments.length;
-  return diff;
+  return { diff, writes };
 }

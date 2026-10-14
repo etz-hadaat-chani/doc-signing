@@ -166,7 +166,7 @@ Progress: tick `[x]` when a task is done.
   - Har Gal is the main source (PRD FR-EMP-2, FR-EMP-4): every updated employee lists each change as "field: old → new" (e.g. `email: a@x.com → b@x.com`), including changes that overwrite a manual edit. "Unchanged" means no field differs.
 - **Done when:** A test file with planted errors gives exact counts and reasons; employee table unchanged.
 
-### [ ] 3.4 Excel import: confirm
+### [x] 3.4 Excel import: confirm
 - **Build:** Upsert employees by employee number, create confirmed departments, set email status, log it.
 - **Depends on:** 3.3
 - **Note (PRD FR-EMP-4, FR-EMP-5):**
@@ -179,6 +179,16 @@ Progress: tick `[x]` when a task is done.
   - **How to apply exactly the preview (decided in 3.3):** re-read the stored file (`import_batches.file_key`) and run the same check and compare code as the preview (`ImportService.check`); the checked rows are not saved in the batch (that would be a second copy of the ID numbers). In one transaction: lock the batch row (`FOR UPDATE`), require status `preview` (no double confirm), and take a transaction-level advisory lock so two confirms can't run together.
   - **Stale check (narrow):** refuse with 409 `IMPORT_STALE` ("upload the file again") only when something this file touches changed after the batch's `created_at`: an employee matched by one of the file's employee numbers **or** ID numbers was updated or created, or a department with one of the file's codes was updated or created. Changes to employees and departments not in the file never block the confirm. No database change needed (existing `updated_at` / `created_at`).
   - Rows with errors are skipped; rows with warnings are imported (bad email → `invalid`, unreadable phone → empty).
+- **Done (rules):**
+  - `POST /api/employees/import/:batchId/commit`, manager only, no body. Confirming the import confirms the new and renamed departments the preview listed. Returns `importCommitResultSchema` (shared).
+  - Download and re-check the stored file before the transaction (no locks held), then one transaction (`maxWait` 10 s, `timeout` 30 s): advisory lock → batch `FOR UPDATE` (status `preview`, else 409 `IMPORT_ALREADY_DONE`) → 24 h check → lock the file's employees (by number or ID) and departments (by code) `FOR UPDATE` → narrow stale check → compare again (`planImport`, the preview's own code) → writes in a few batched statements (`createMany`, one `UPDATE … FROM unnest`) → batch `committed` → logs.
+  - Backstop: if the re-run gives other counts or errors than the batch saved, 409 `IMPORT_STALE` (should never happen).
+  - Refused for good (stale, older than 24 h, stored file gone): batch → `failed` + `import.failed` log row, 409 `IMPORT_STALE` / `IMPORT_EXPIRED` / `IMPORT_FILE_MISSING`. A unique-index clash during the write counts as stale. Any other failure rolls everything back and leaves the batch `preview` (500; a retry is safe).
+  - `last_import_id` is set only on employees the import created or changed; unchanged and missing employees are not touched at all (not even `updated_at`). `is_active` is never written by the import.
+  - Logs: `import.commit` (counts, new and renamed departments) plus one `employee.created` / `employee.updated` per new or changed employee with its "field: old → new" lines and `importBatchId` (one `createMany`, `AuditService.recordMany`).
+  - One clock: the trigger `set_db_clock_timestamps` (employees, departments, import_batches) sets `created_at = now()` on insert (never changed after) and `updated_at = clock_timestamp()` on every write, whatever the app sends. The preview reads (share-locked) and saves its batch in one transaction, so the batch's `created_at` is before its reads. Expiry and stale check compare these columns in SQL; the app's clock is never used. Test with the app clock moved ±3 days.
+  - Measured (1,500 rows, whole request incl. re-reading the file): create 944 ms, update 552 ms.
+- **Note for later tasks:** Audit details that are exactly one uuid are no longer redacted (a uuid can hold 9 digits in a row). Any table whose `updated_at` a check compares should get the same trigger.
 - **Done when:** Running the same import twice changes nothing; missing employees untouched.
 
 ### [ ] 3.5 Templates API
@@ -256,7 +266,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 3.16 Manual handling API
 - **Build:** Print endpoint, scanned signature upload (`signed_manual`), office kiosk session, manual-handling list.
 - **Depends on:** 3.13
-- **Note (PRD FR-EMP-6, FR-MAN-1):** The list marks open `no_email` assignments whose employee now has a `valid` email (for example, added by an import) as "email added, ready to send". A manager-only send action (one or several) sends a normal invitation with a new token, status → `sent`, and logs it. Nothing is sent without that action.
+- **Note (PRD FR-EMP-6, FR-MAN-1):** The list marks open `no_email` assignments whose employee now has a `valid` email (for example, added by an import) as "email added, ready to send". Likewise, open `invalid_email` assignments whose employee now has a different, valid email (for example, fixed by an import) show as "email fixed, ready to send". A manager-only send action (one or several) sends a normal invitation with a new token, status → `sent`, and logs it. Nothing is sent without that action.
 - **Done when:** Tests per action; kiosk still requires the ID number.
 
 ### [ ] 3.17 Exports and file access
@@ -303,6 +313,7 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 5.3 Import wizard (A8)
 - **Build:** Upload, error report, preview, confirm.
 - **Depends on:** 5.2, 3.4
+- **Note (3.4):** A preview can be confirmed for 24 hours (`IMPORT_PREVIEW_MAX_AGE_HOURS`); show that, and on 409 `IMPORT_STALE` / `IMPORT_EXPIRED` / `IMPORT_FILE_MISSING` / `IMPORT_ALREADY_DONE` ask the manager to upload the file again. The confirm has no body: confirming the import confirms the new and renamed departments the preview listed.
 - **Done when:** Full import from the UI with the test file.
 
 ### [ ] 5.4 Templates (A9)

@@ -1,7 +1,7 @@
 import { importIssue } from '@doc-signing/shared';
 import { describe, expect, it } from 'vitest';
 import type { EmployeeState } from '../employee-changes.js';
-import { compareWithCurrent, type CurrentData } from './import-diff.js';
+import { compareWithCurrent, type CurrentData, planImport } from './import-diff.js';
 import type { CheckedRow, ImportedEmployee } from './import-row.js';
 
 const stored: EmployeeState = {
@@ -163,5 +163,58 @@ describe('compareWithCurrent', () => {
     );
     const diff = compareWithCurrent([bad], current);
     expect(diff.newDepartments).toEqual([]);
+  });
+});
+
+describe('planImport: the writes the confirm applies', () => {
+  const fresh: ImportedEmployee = {
+    ...same,
+    employeeNumber: '2001',
+    idNumber: '023456783',
+    email: 'bad@@x',
+    phone: null,
+  };
+
+  it('writes new and changed employees only; unchanged and failed rows are left out', () => {
+    const changed = { ...same, firstName: 'דינה' };
+    const failed = row(
+      5,
+      { ...fresh, employeeNumber: '2002' },
+      {
+        errors: [importIssue('FIRST_NAME_MISSING')],
+      },
+    );
+    const plan = planImport([row(2, changed), row(3, fresh), failed], current);
+    expect(plan.writes.creates.map((e) => e.employeeNumber)).toEqual(['2001']);
+    expect(plan.writes.updates).toEqual([
+      {
+        after: { ...stored, firstName: 'דינה' },
+        changes: ['firstName: דנה → דינה'],
+      },
+    ]);
+    expect(planImport([row(2, same)], current).writes).toEqual({ creates: [], updates: [] });
+  });
+
+  it('imports a row with warnings: bad email → invalid, unreadable phone → empty', () => {
+    const warned = row(3, fresh, {
+      warnings: [importIssue('EMAIL_INVALID'), importIssue('PHONE_INVALID')],
+    });
+    const [created] = planImport([warned], current).writes.creates;
+    expect(created).toMatchObject({ email: 'bad@@x', emailStatus: 'invalid', phone: null });
+  });
+
+  it('keeps isActive as stored (an inactive employee stays inactive); a new one is active', () => {
+    const plan = planImport([row(2, { ...same, lastName: 'לוי' }), row(3, fresh)], current);
+    expect(plan.writes.updates[0]?.after.isActive).toBe(false);
+    expect(plan.writes.creates[0]?.isActive).toBe(true);
+  });
+
+  it('report and writes come from the same loop: counts match the writes', () => {
+    const plan = planImport([row(2, { ...same, lastName: 'לוי' }), row(3, fresh)], current);
+    expect(plan.diff.counts.rowsNew).toBe(plan.writes.creates.length);
+    expect(plan.diff.counts.rowsUpdated).toBe(plan.writes.updates.length);
+    expect(plan.diff.updatedEmployees.map((e) => e.changes)).toEqual(
+      plan.writes.updates.map((u) => u.changes),
+    );
   });
 });

@@ -50,6 +50,14 @@ describe('sanitizeDetails', () => {
     });
   });
 
+  it('keeps a value that is exactly one uuid, even with 9 digits in a row', () => {
+    const id = 'd310b239-251d-4ba8-b6ad-591669898d2d';
+    expect(sanitizeDetails({ importBatchId: id, note: `batch ${id}` })).toEqual({
+      importBatchId: id,
+      note: 'batch d310b239-251d-4ba8-b6ad-[redacted]d2d',
+    });
+  });
+
   it('leaves ordinary values as they are', () => {
     const details = { email: 'a@b.c', userAgent: null, count: 3, ok: true, name: 'ישראל ישראלי' };
     expect(sanitizeDetails(details)).toEqual(details);

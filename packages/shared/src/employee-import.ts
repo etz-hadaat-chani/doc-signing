@@ -23,6 +23,12 @@ export type HarGalColumn = keyof typeof HAR_GAL_HEADERS;
 export const IMPORT_MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const IMPORT_MAX_ROWS = 5000;
 
+/**
+ * A preview can be confirmed for this long after it was made (measured by the database clock);
+ * after that the manager uploads the file again (IMPORT_EXPIRED).
+ */
+export const IMPORT_PREVIEW_MAX_AGE_HOURS = 24;
+
 function rowList(rows: readonly number[]): string {
   return rows.join(', ');
 }
@@ -129,3 +135,15 @@ export const importPreviewSchema = z.object({
   warnings: z.array(importRowIssueSchema),
 });
 export type ImportPreview = z.infer<typeof importPreviewSchema>;
+
+/**
+ * `POST /api/employees/import/:batchId/commit`: the import was applied exactly as its preview
+ * showed. The counts are the preview's, now final.
+ */
+export const importCommitResultSchema = z.object({
+  batchId: z.uuid(),
+  status: z.literal('committed'),
+  counts: importPreviewSchema.shape.counts,
+  committedAt: z.iso.datetime(),
+});
+export type ImportCommitResult = z.infer<typeof importCommitResultSchema>;

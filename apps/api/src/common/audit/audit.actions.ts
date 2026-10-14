@@ -20,6 +20,8 @@ export const AUDIT_ACTIONS = [
   'employee.created',
   'employee.updated',
   'import.preview',
+  'import.commit',
+  'import.failed',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -50,14 +52,19 @@ export interface AuditDetailsMap {
   /** Never the password itself. Ends the user's sessions (all but the current one for self). */
   'user.password_reset': { sessionsEnded: number };
   // Employees (3.2): the acting manager is the actor, the employee the entity. Never the ID number.
+  /** `importBatchId` when the Excel import created the employee (3.4), not a manager's form. */
   'employee.created': {
     employeeNumber: string;
     fullName: string;
     departmentCode: number;
     emailStatus: EmailStatus;
+    importBatchId?: string;
   };
-  /** One line per changed field, "field: old → new"; the ID number only as "idNumber: changed". */
-  'employee.updated': { changes: string[] };
+  /**
+   * One line per changed field, "field: old → new"; the ID number only as "idNumber: changed".
+   * `importBatchId` when the Excel import made the change (3.4).
+   */
+  'employee.updated': { changes: string[]; importBatchId?: string };
   // Excel import (3.3): the manager is the actor, the batch the entity. Counts only, no ID numbers.
   /** What the import would do; nothing is saved to employees or departments yet. */
   'import.preview': {
@@ -70,4 +77,19 @@ export interface AuditDetailsMap {
     departmentsNew: number;
     departmentsRenamed: number;
   };
+  /** The import was applied (3.4): final counts and the departments created or renamed by code. */
+  'import.commit': {
+    fileName: string;
+    rowsTotal: number;
+    rowsNew: number;
+    rowsUpdated: number;
+    rowsUnchanged: number;
+    rowsFailed: number;
+    departmentsNew: number;
+    departmentsRenamed: number;
+    newDepartments: { code: number; name: string }[];
+    renamedDepartments: { code: number; from: string; to: string }[];
+  };
+  /** A confirm refused for good (the batch is now `failed`); nothing was written. */
+  'import.failed': { fileName: string; reason: 'stale' | 'expired' | 'file_missing' };
 }

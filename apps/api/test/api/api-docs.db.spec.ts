@@ -61,6 +61,7 @@ describe('Swagger page outside production', () => {
         'POST /api/auth/login',
         'POST /api/auth/logout',
         'POST /api/employees',
+        'POST /api/employees/import/{batchId}/commit',
         'POST /api/employees/import/preview',
         'POST /api/users',
       ].sort(),
