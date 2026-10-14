@@ -10,6 +10,11 @@ export const pageQuerySchema = z.object({
 });
 export type PageQuery = z.infer<typeof pageQuerySchema>;
 
+/** An empty query value (`?dept=`) counts as not sent. */
+export function optionalQuery<T extends z.ZodType>(schema: T) {
+  return z.preprocess((value) => (value === '' ? undefined : value), schema.optional());
+}
+
 /** The body of every list response. */
 export interface Paged<T> {
   items: T[];

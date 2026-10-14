@@ -55,14 +55,19 @@ describe('Swagger page outside production', () => {
         'GET /api/employees',
         'GET /api/employees/{id}',
         'GET /api/health',
+        'GET /api/templates',
+        'GET /api/templates/{id}',
         'GET /api/users',
         'PATCH /api/employees/{id}',
+        'PATCH /api/templates/{id}',
         'PATCH /api/users/{id}',
         'POST /api/auth/login',
         'POST /api/auth/logout',
         'POST /api/employees',
         'POST /api/employees/import/{batchId}/commit',
         'POST /api/employees/import/preview',
+        'POST /api/templates',
+        'POST /api/templates/{id}/archive',
         'POST /api/users',
       ].sort(),
     );
@@ -86,6 +91,13 @@ describe('Swagger page outside production', () => {
     const body = document.paths['/api/employees/import/preview']?.post?.requestBody;
     const schema = body?.content['multipart/form-data']?.schema;
     expect(schema?.required).toEqual(['file']);
+    expect(schema?.properties?.file).toMatchObject({ type: 'string', format: 'binary' });
+  });
+
+  it('shows a file picker with name and departments for the template upload', () => {
+    const body = document.paths['/api/templates']?.post?.requestBody;
+    const schema = body?.content['multipart/form-data']?.schema;
+    expect(schema?.required).toEqual(['file', 'name', 'departmentIds']);
     expect(schema?.properties?.file).toMatchObject({ type: 'string', format: 'binary' });
   });
 });

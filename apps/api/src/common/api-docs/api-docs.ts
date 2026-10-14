@@ -72,15 +72,25 @@ export function ApiZodQuery(schema: z.ZodType): MethodDecorator {
   );
 }
 
-/** A multipart upload of one file in form field `field`: the page shows a file picker. */
-export function ApiFileUpload(field: string, description: string): MethodDecorator {
+/**
+ * A multipart upload of one file in form field `field`: the page shows a file picker, plus a box
+ * for each required text field in `textFields` (e.g. a name next to the file).
+ */
+export function ApiFileUpload(
+  field: string,
+  description: string,
+  textFields: Record<string, SchemaObject> = {},
+): MethodDecorator {
   return applyDecorators(
     ApiConsumes('multipart/form-data'),
     ApiBody({
       schema: {
         type: 'object',
-        required: [field],
-        properties: { [field]: { type: 'string', format: 'binary', description } },
+        required: [field, ...Object.keys(textFields)],
+        properties: {
+          [field]: { type: 'string', format: 'binary', description },
+          ...textFields,
+        },
       },
     }),
   );

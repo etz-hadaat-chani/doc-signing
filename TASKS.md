@@ -191,10 +191,23 @@ Progress: tick `[x]` when a task is done.
 - **Note for later tasks:** Audit details that are exactly one uuid are no longer redacted (a uuid can hold 9 digits in a row). Any table whose `updated_at` a check compares should get the same trigger.
 - **Done when:** Running the same import twice changes nothing; missing employees untouched.
 
-### [ ] 3.5 Templates API
+### [x] 3.5 Templates API
 - **Build:** Upload PDF (check type and size), link departments, save field positions, archive. Lock after send; edits create a new version.
 - **Depends on:** 2.5, 2.3
 - **Note:** A department may be linked to more than one active template (not archived, no newer version). Don't block it; the manager picks one per department when creating a round (3.8).
+- **Done (rules):**
+  - Routes (manager only): `GET /api/templates?dept=&includeArchived=`, `GET /api/templates/:id`, `POST /api/templates` (multipart `file`, `name`, `departmentIds` repeated or comma-separated), `PATCH /api/templates/:id` (JSON `name`, `departmentIds`, `fields` = the whole list), `POST /api/templates/:id/archive`. Schemas in `packages/shared/src/templates.ts`. Default list = active only; `includeArchived=true` adds archived and old versions (`isLatest`).
+  - Upload check (`readPdfContent`, `common/upload/pdf-content.ts`): 10 MB, `%PDF-` in the first 1 KB, strict pdf-lib load and save, 1–50 pages. Refused with a Hebrew 400 that says "save again with Print to PDF": broken (`INVALID_PDF_FILE`), encrypted (`PDF_ENCRYPTED`), JavaScript / auto-actions / launch / attachments / XFA (`PDF_ACTIVE_CONTENT`), fillable form fields (`PDF_FORM_FIELDS`), rotated pages (`PDF_ROTATED_PAGES`). Stored at `templates/<uuid>.pdf`, file first, then the row.
+  - Positions: only `full_name`, `id_number`, `date`, `signature` (`checkbox`/`text` → `TEMPLATE_FIELD_TYPE_NOT_SUPPORTED`); rounded to 2 decimals; page must exist and the box fit the page's CropBox, measured from its bottom-left (`TEMPLATE_FIELD_OUTSIDE_PAGE`, details list index/page/reason). Any number per type, at most 40; `missingFieldTypes` shows which of the four have none.
+  - Locked template: a new name or new positions → next version (same `file_key`, `parent_template_id` = old, unlocked), old version untouched; departments alone → changed in place (`template.updated` "departments: 15 → 15, 19"). No change → nothing written. Old version or archived → 409 `TEMPLATE_HAS_NEWER_VERSION` / `TEMPLATE_ARCHIVED`.
+  - Two edits at once: the edit locks the row `FOR UPDATE` and checks for a newer version; the unique `parent_template_id` is the backstop (also 409).
+  - Logs: `template.created`, `template.updated`, `template.version_created` (on the new version, with `fromTemplateId`/`fromVersion`), `template.archived`; all with the version, department codes not ids.
+- **Note for later tasks:**
+  - 3.6: draw at `x`/`y` measured from the CropBox's bottom-left (add the CropBox's own x/y). Pages are never rotated (refused at upload).
+  - 3.8/3.9: offer only active templates; refuse a template whose `missingFieldTypes` isn't empty.
+  - 3.10: call `TemplatesService.lockTemplate(templateId, tx)` inside the send transaction (exported by `TemplatesModule`; already locked = no change).
+  - 3.16: reuse `readPdfContent` for the scan upload.
+  - Inside a transaction, load relations with separate queries: Prisma's nested selects send them at once on one connection and pg warns (removed in pg 9). See `TemplatesRepository.withRelations`.
 - **Done when:** Editing a locked template creates version 2.
 
 ### [ ] 3.6 Personalized PDF

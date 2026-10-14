@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { type EmailStatus, emailStatusSchema } from './enums.js';
 import { idNumberSchema } from './id-number.js';
-import { pageQuerySchema } from './pagination.js';
+import { optionalQuery, pageQuerySchema } from './pagination.js';
 
 export const EMPLOYEE_NUMBER_MAX_LENGTH = 20;
 export const EMPLOYEE_NAME_MAX_LENGTH = 50;
@@ -144,11 +144,6 @@ export const updateEmployeeSchema = z
   })
   .refine((value) => Object.values(value).some((item) => item !== undefined));
 export type UpdateEmployeeInput = z.output<typeof updateEmployeeSchema>;
-
-/** An empty query value (`?dept=`) counts as not sent. */
-function optionalQuery<T extends z.ZodType>(schema: T) {
-  return z.preprocess((value) => (value === '' ? undefined : value), schema.optional());
-}
 
 /** `GET /api/employees?q=&dept=&emailStatus=&page=&pageSize=`. Filters combine with AND. */
 export const employeeListQuerySchema = pageQuerySchema.extend({

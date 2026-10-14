@@ -22,10 +22,14 @@ export const AUDIT_ACTIONS = [
   'import.preview',
   'import.commit',
   'import.failed',
+  'template.created',
+  'template.updated',
+  'template.version_created',
+  'template.archived',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
-export const AUDIT_ENTITY_TYPES = ['user', 'employee', 'import_batch'] as const;
+export const AUDIT_ENTITY_TYPES = ['user', 'employee', 'import_batch', 'template'] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 
 /**
@@ -92,4 +96,25 @@ export interface AuditDetailsMap {
   };
   /** A confirm refused for good (the batch is now `failed`); nothing was written. */
   'import.failed': { fileName: string; reason: 'stale' | 'expired' | 'file_missing' };
+  // Templates (3.5): the manager is the actor, the template version the entity.
+  /** A PDF uploaded as version 1. Department codes, not ids. */
+  'template.created': {
+    name: string;
+    version: number;
+    pageCount: number;
+    departmentCodes: number[];
+  };
+  /**
+   * Changed in place: any change while unlocked, or only the department links while locked.
+   * One line per change, "field: old → new" (positions as a count).
+   */
+  'template.updated': { version: number; changes: string[] };
+  /** A locked template edited: logged on the new version, with what changed from the old one. */
+  'template.version_created': {
+    version: number;
+    fromTemplateId: string;
+    fromVersion: number;
+    changes: string[];
+  };
+  'template.archived': { name: string; version: number };
 }

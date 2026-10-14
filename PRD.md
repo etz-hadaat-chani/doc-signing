@@ -159,7 +159,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | FR-TPL-1 | A manager can upload a PDF, name it and link it to one or more departments. |
 | FR-TPL-2 | Each template stores positions (page, X, Y, size) for full name, ID number, date and signature. In the MVP the developer sets these once per PDF. |
 | FR-TPL-3 | A manager can preview a template filled with a sample employee, to check the Hebrew text. |
-| FR-TPL-4 | Once a template has been sent, it is locked. Changes create a new version; documents already sent don't change. |
+| FR-TPL-4 | Once a template has been sent, it is locked. A change to its name or field positions creates a new version (same PDF); documents already sent don't change. Linking or unlinking departments changes the locked template in place, since it only decides which template future rounds offer. |
 
 ### Send rounds
 
@@ -405,9 +405,10 @@ All management endpoints need a staff session; the role column says who may call
 
 | Method | Path | Purpose | Role |
 | --- | --- | --- | --- |
-| GET | `/api/templates` | List templates | M |
+| GET | `/api/templates?dept=&includeArchived=&page=` | List templates (default: active only, i.e. not archived and no newer version) | M |
+| GET | `/api/templates/:id` | One template version with its departments and field positions | M |
 | POST | `/api/templates` | Upload a PDF with name and departments | M |
-| PATCH | `/api/templates/:id` | Update name, departments or field positions; a locked template gets a new version | M |
+| PATCH | `/api/templates/:id` | Update name, departments or field positions; a locked template gets a new version for a new name or positions | M |
 | GET | `/api/templates/:id/preview?employeeId=` | PDF filled with a sample employee | M |
 | POST | `/api/templates/:id/archive` | Archive a template | M |
 
@@ -565,7 +566,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | template\_id | uuid FK → templates |  |
 | field\_type | enum `full_name` / `id_number` / `date` / `signature` / `checkbox` / `text` | Last two are for later |
 | page | int | From 1 |
-| x, y, width, height | numeric(7,2) | PDF points |
+| x, y, width, height | numeric(7,2) | PDF points, from the bottom-left corner of the page's visible area (CropBox) |
 | font\_size | int NULL |  |
 | label | varchar(255) NULL | Checkbox text (later) |
 | is\_required | boolean |  |

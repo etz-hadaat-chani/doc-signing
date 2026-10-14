@@ -11,6 +11,7 @@ import { StorageModule } from './common/storage/storage.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { EmployeesModule } from './modules/employees/employees.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { TemplatesModule } from './modules/templates/templates.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
 @Module({
@@ -26,6 +27,7 @@ import { UsersModule } from './modules/users/users.module.js';
     AuthModule,
     UsersModule,
     EmployeesModule,
+    TemplatesModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })
