@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 import { configureApp } from './app.setup.js';
+import { setupApiDocs } from './common/api-docs/api-docs.js';
 import { AppConfig, loadConfig } from './common/config/config.schema.js';
 
 // Local dev reads the repo-root .env (shared with docker compose); elsewhere, real env vars.
@@ -20,7 +21,10 @@ async function bootstrap(): Promise<void> {
   // abortOnError: false → other startup errors (e.g. no database) reach the catch below.
   const app = await NestFactory.create(AppModule, { abortOnError: false });
   configureApp(app);
-  await app.listen(app.get(AppConfig).port);
+  const config = app.get(AppConfig);
+  // The Swagger page at /api/docs, outside production only.
+  setupApiDocs(app, config);
+  await app.listen(config.port);
 }
 
 bootstrap().catch((error: unknown) => {

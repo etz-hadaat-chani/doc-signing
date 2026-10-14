@@ -10,7 +10,9 @@ import {
   updateEmployeeSchema,
 } from '@doc-signing/shared';
 import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
+import { ApiZodBody, ApiZodQuery } from '../../common/api-docs/api-docs.js';
 import { ZodValidationPipe } from '../../common/validation/zod-validation.pipe.js';
 import { Roles } from '../auth/access.decorators.js';
 import type { AuthRequest } from '../auth/auth-request.js';
@@ -23,10 +25,13 @@ function actorOf(request: AuthRequest): EmployeeActor {
 }
 
 /** Employees: managers and officers read; only managers add or edit (PRD §9). No delete. */
+@ApiTags('employees')
 @Controller('employees')
 export class EmployeesController {
   constructor(private readonly employees: EmployeesService) {}
 
+  @ApiOperation({ summary: 'List employees (search, filters, paging)' })
+  @ApiZodQuery(employeeListQuerySchema)
   @Roles('manager', 'officer')
   @Get()
   list(
@@ -35,12 +40,15 @@ export class EmployeesController {
     return this.employees.list(query);
   }
 
+  @ApiOperation({ summary: 'Employee card' })
   @Roles('manager', 'officer')
   @Get(':id')
   card(@Param('id', new ZodValidationPipe(z.uuid())) id: string): Promise<EmployeeCard> {
     return this.employees.card(id);
   }
 
+  @ApiOperation({ summary: 'Add one employee' })
+  @ApiZodBody(createEmployeeSchema)
   @Roles('manager')
   @Post()
   create(
@@ -50,6 +58,8 @@ export class EmployeesController {
     return this.employees.create(body, actorOf(request));
   }
 
+  @ApiOperation({ summary: 'Edit an employee' })
+  @ApiZodBody(updateEmployeeSchema)
   @Roles('manager')
   @Patch(':id')
   update(

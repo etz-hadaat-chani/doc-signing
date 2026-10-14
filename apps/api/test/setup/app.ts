@@ -6,14 +6,21 @@ import { configureApp } from '../../src/app.setup.js';
 
 /**
  * The real AppModule (config, Prisma on the test database, error filter), set up like main.ts.
- * `controllers` adds test-only routes. Call `app.close()` in afterAll.
+ * `controllers` adds test-only routes; `beforeInit` runs after configureApp, before `app.init()`
+ * (e.g. setupApiDocs, whose routes must come before Nest's 404 handler). Call `app.close()` in
+ * afterAll.
  */
 export async function createTestApp({
   controllers = [],
-}: { controllers?: Type[] } = {}): Promise<INestApplication> {
+  beforeInit,
+}: {
+  controllers?: Type[];
+  beforeInit?: (app: INestApplication) => void;
+} = {}): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule], controllers }).compile();
   const app = moduleRef.createNestApplication({ logger: false });
   configureApp(app);
+  beforeInit?.(app);
   await app.init();
   return app;
 }
