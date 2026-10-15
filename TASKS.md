@@ -151,6 +151,7 @@ Progress: tick `[x]` when a task is done.
   - The 500 log line has the path without its query string.
 - **Note for later tasks:** reuse `normalizeEmployeeNumber`, `normalizePhone`, `nextEmailStatus` (shared) and `describeEmployeeChanges` (`modules/employees/employee-changes.ts`) in the import (3.3/3.4).
 - **Done when:** Search by name, employee number or ID; filter by department and email status.
+- **Follow-up: 3.19.** Two phone fields (`landline`, `mobile`) replace `phone`; create, edit and the card also take the extra fields (address, city, birth date, role, employment status, job %, work days, work hours, pension funds א / ב, study fund); `describeEmployeeChanges` covers them (birth date only as "changed").
 
 ### [x] 3.3 Excel import: preview
 - **Build:** Read the Har Gal employee export `.xlsx` (ExcelJS), validate every row, compute new / updated / unchanged / errors plus new and renamed departments, save `import_batch` as preview.
@@ -165,6 +166,7 @@ Progress: tick `[x]` when a task is done.
   - Tests: build a fake `.xlsx` in the test with the same headers (plus a few extra columns to ignore) and made-up data only, never the real export. Include a department name with a hyphen, an ID that lost its leading 0, a row with no email, and planted errors.
   - Har Gal is the main source (PRD FR-EMP-2, FR-EMP-4): every updated employee lists each change as "field: old → new" (e.g. `email: a@x.com → b@x.com`), including changes that overwrite a manual edit. "Unchanged" means no field differs.
 - **Done when:** A test file with planted errors gives exact counts and reasons; employee table unchanged.
+- **Follow-up: 3.19.** Read the 11 optional columns (a missing one doesn't fail the file) and the two phones separately; תאריך לידה is the only column whose cell may be a date; unreadable extra cells are warnings; the preview shows their changes as "field: old → new".
 
 ### [x] 3.4 Excel import: confirm
 - **Build:** Upsert employees by employee number, create confirmed departments, set email status, log it.
@@ -190,6 +192,7 @@ Progress: tick `[x]` when a task is done.
   - Measured (1,500 rows, whole request incl. re-reading the file): create 944 ms, update 552 ms.
 - **Note for later tasks:** Audit details that are exactly one uuid are no longer redacted (a uuid can hold 9 digits in a row). Any table whose `updated_at` a check compares should get the same trigger.
 - **Done when:** Running the same import twice changes nothing; missing employees untouched.
+- **Follow-up: 3.19.** Write the new columns in the batched `UPDATE … FROM unnest`; for the extra columns an empty cell or a missing column keeps the stored value (the compare in `planImport` follows the same rule, so preview and confirm still match).
 
 ### [x] 3.5 Templates API
 - **Build:** Upload PDF (check type and size), link departments, save field positions, archive. Lock after send; edits create a new version.
@@ -204,47 +207,80 @@ Progress: tick `[x]` when a task is done.
   - Logs: `template.created`, `template.updated`, `template.version_created` (on the new version, with `fromTemplateId`/`fromVersion`), `template.archived`; all with the version, department codes not ids.
 - **Note for later tasks:**
   - 3.6: draw at `x`/`y` measured from the CropBox's bottom-left (add the CropBox's own x/y). Pages are never rotated (refused at upload).
-  - 3.8/3.9: offer only active templates; refuse a template whose `missingFieldTypes` isn't empty.
+  - 3.8/3.9: offer only active templates; refuse a template that isn't "ready" (3.20 replaces `missingFieldTypes` with that check).
   - 3.10: call `TemplatesService.lockTemplate(templateId, tx)` inside the send transaction (exported by `TemplatesModule`; already locked = no change).
   - 3.16: reuse `readPdfContent` for the scan upload.
   - Inside a transaction, load relations with separate queries: Prisma's nested selects send them at once on one connection and pg warns (removed in pg 9). See `TemplatesRepository.withRelations`.
 - **Done when:** Editing a locked template creates version 2.
+- **Follow-up: 3.20.** New field types (PRD FR-TPL-2), `show_when`, the pension option, the required flag, `employer_signature_mode`; a "template ready" check (FR-TPL-8) replaces `missingFieldTypes`.
+
+Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 3.6. They are numbered after 3.18 so existing task references don't change; the text is here, in the order they are done.
+
+### [ ] 3.19 Extra employee data (follow-up to 3.2–3.4)
+- **Build:** Migration: `employees.phone` → `landline` + `mobile` (an existing `05…` value moves to `mobile`, anything else to `landline`), plus `address`, `city`, `birth_date` (date), `job_title`, `employment_status`, `job_percent`, `work_days`, `work_hours`, `pension_fund_a`, `pension_fund_b`, `study_fund`, all NULL (PRD §12). Shared zod schemas; employees API create / edit / card; import preview and confirm.
+- **Depends on:** 3.4
+- **Note (PRD FR-EMP-1, FR-EMP-3, FR-EMP-4, FR-EMP-9):**
+  - Optional headers, exact names: כתובת, יישוב, תאריך לידה, תאור תפקיד, מעמד, אחוז משרה, ימי עבודה, שעות עבודה, קוד קופ"ג א, קוד קופ"ג ב, קוד קרן השתלמות. A missing one never fails the file. Every other column (salary, balances…) stays ignored.
+  - The cell reader accepts a date only for תאריך לידה (Excel date cell → `date`, no time zone shift). אחוז משרה and שעות עבודה are numbers; ימי עבודה is text. The fund columns hold the fund's name: store the trimmed text.
+  - Unreadable extra cell (not a date, birth date in the future, not a number, too long) → warning with its row number; that value isn't written, the row is imported.
+  - Extra columns: an empty cell or a missing column never erases a stored value; only a filled cell overwrites. The 10 required columns keep today's rules (an empty phone cell still clears that phone).
+  - Phones: landline = קידומת + טלפון, mobile = נייד פרטי - קידומת + נייד פרטי - מספר, each with `normalizePhone`; each unreadable phone is its own warning.
+  - Every change shows as "field: old → new" in the preview; audit lines the same, except the birth date ("birthDate: changed", PRD NFR-PRV-6). The extra fields are never in the employees list.
+- **Done when:** Tests: a file without any extra column changes no extra field; an empty extra cell keeps the stored value; a birth date as an Excel date cell is stored as the same day; a bad birth date is a warning; two phones stored separately; preview and confirm still give the same counts.
+
+### [ ] 3.20 Template field types (follow-up to 3.5)
+- **Build:** Migration and shared schemas: extend `template_field_type` (PRD §12 `template_fields`), add `template_fields.show_when` (`always` / `no_email_chosen`), `template_fields.options` jsonb (pension source `a_then_b` / `b_only`), use `is_required`, add `templates.employer_signature_mode` (`pre_signed` / `after_employee` / `none`, default `none`). `PATCH` accepts them.
+- **Depends on:** 3.5
+- **Note (PRD FR-TPL-2, FR-TPL-4 to FR-TPL-8):**
+  - Drop `TEMPLATE_FIELD_TYPE_NOT_SUPPORTED` for the new types. `show_when` is allowed only on `signature`; the pension option only on the pension fields; `is_required` only matters for system values (`pension_*` and inputs are never "missing").
+  - Replace `missingFieldTypes` with a "template ready" check returned on the template (a list of reasons): at least one `signature` with `show_when = always`; `email_input` and `no_email_checkbox` both or neither; `pension_has_fund` and `pension_no_fund` both or neither; `employer_signature_mode` ≠ `none` needs at least one `employer_signature` position.
+  - On a locked template, a change to any position field (including `show_when`, `options`, `is_required`) or to `employer_signature_mode` creates a new version, like positions today; departments alone still change in place.
+  - Existing rows keep working: `full_name`, `id_number`, `date`, `signature` keep their meaning (`date` = date drawn up and signed).
+- **Done when:** A substitute-contract layout (PRD §14) saves and reports ready; each missing pair is reported; changing `employer_signature_mode` on a locked template creates version 2.
 
 ### [ ] 3.6 Personalized PDF
-- **Build:** pdf-lib + fontkit + Hebrew font + bidi-js: draw name, ID, date at stored positions. Preview endpoint.
-- **Depends on:** 3.5
-- **Done when:** Snapshot tests with names like "כהן-לוי 2" read correctly right to left.
+- **Build:** pdf-lib + fontkit + Hebrew font + bidi-js: draw every field type at stored positions (text, checkbox ticks, the employer signature when `pre_signed`). Preview endpoint.
+- **Depends on:** 3.5, 3.19, 3.20, 3.18 (employer signature image)
+- **Note (PRD FR-TPL-2, FR-TPL-5, FR-RND-8):** Build one shared "values" step: employee + send date → `{ values, missing }`. It is used by the template preview, the recipient preview (3.8) and the snapshot at send (3.10). Age = whole years from `birth_date` to the send date (Asia/Jerusalem). Address = "כתובת, יישוב" (whichever parts exist). Pension: by the field's source option (`a_then_b`: א, else ב; `b_only`: ב); a name → tick "has an active fund" and write the name, empty → tick "has no active fund"; never "missing". `date` is drawn at view time as today and in the signed PDF as the signing date (DD/MM/YYYY, Asia/Jerusalem). A required value that is empty goes to `missing`; an optional one is drawn blank.
+- **Note:** The document drawn for the employee and for print uses the saved `assignments.field_values` (3.10), never the current employee row. The email section is drawn empty here (the employee fills it in on the screen).
+- **Note (privacy, PRD NFR-PRV-7):** Values are never logged; the preview endpoint's audit row has the template and employee ids only.
+- **Done when:** Snapshot tests with names like "כהן-לוי 2", an address with a house number, phones, and an email read correctly right to left; the pension rule gives the right tick for א only, ב only, both and neither, in both options; the preview lists missing values.
 
 ### [ ] 3.7 Signed PDF
 - **Build:** Draw signature image, date, footer; flatten; return file + SHA-256. Validate signature image (PNG, size, not empty).
 - **Depends on:** 3.6
-- **Done when:** Output has no form fields; hash matches; empty signature refused.
+- **Note (PRD FR-SGN-5, FR-SGN-9, FR-SGN-10, FR-TPL-7):** One drawn signature is placed at every `signature` position: `always` ones always, `no_email_chosen` ones only when the answer is "office". Draw the answers: the email at `email_input` (only when the choice is "email"), a tick at `no_email_checkbox` (only when "office"). Employer signature: `pre_signed` → as in 3.6; `after_employee` → drawn only here; `none` → never. The image is the one whose key is saved in `field_values`, not the current setting.
+- **Done when:** Output has no form fields; hash matches; empty signature refused; conditional signatures appear only with the "office" answer.
 
 ### [ ] 3.8 Recipient preview
-- **Build:** Resolve recipient choice (all / departments / chosen / one) and template per department. Return counts: will send, no email, already signed, departments missing a template.
-- **Depends on:** 3.4, 3.5
+- **Build:** Resolve recipient choice (all / departments / chosen / one) and template per department. Return counts: will send, no email, already signed, missing data, departments missing a template.
+- **Depends on:** 3.4, 3.5, 3.6
 - **Note:** In by-department mode a department may have more than one active template. The manager picks one; the choice is saved in `round_templates` (1.4). Warn when a department has none, and ask for a choice when it has several.
-- **Done when:** Tests for every choice type, including combinations.
+- **Note (PRD FR-RND-4):** Per recipient, run the 3.6 values step against their template and list who is missing what (field names in Hebrew, never the values themselves). Offer only templates that pass the 3.20 "ready" check.
+- **Done when:** Tests for every choice type, including combinations; an employee without an address is counted as missing data; an empty landline on an optional position isn't.
 
 ### [ ] 3.9 Create a round
-- **Build:** Round + round templates + one assignment per employee (`pending` or `no_email`).
+- **Build:** Round + round templates + one assignment per employee (`pending`, `no_email` or `missing_data`; missing data wins over no email).
 - **Depends on:** 3.8
 - **Note:** A `single_template` round has exactly one `round_templates` row with `department_id` NULL; a `by_department` round has none (one row per department instead). Enforced in the service, not the database.
 - **Note (department snapshot):** Save each assignment's `department_id` = the employee's department at the moment the round is created. It never changes afterwards, even if a later import moves the employee. Template choice in `by_department` mode uses the same value.
-- **Done when:** No duplicate employees in a round; right template per department.
+- **Note:** Migration: add `missing_data` to `assignment_status`, `assignments.field_values` jsonb NULL, and the `assignment_responses` changes (`key`, `template_field_id` NULL, UNIQUE (assignment_id, key); PRD §12). Update `displayStatus()` and the Hebrew status labels (חסרים פרטים).
+- **Done when:** No duplicate employees in a round; right template per department; an employee with missing data gets `missing_data`.
 
 ### [ ] 3.10 Bulk sending
 - **Build:** `POST /rounds/:id/send` enqueues jobs; worker sends in batches, creates a token per email (hash only) in `email_messages`, status → sent; round `sending` → `active`.
 - **Depends on:** 3.9, 2.6, 2.7
 - **Note:** `EmailService.sendInvitation` (2.6) takes the raw token and the round's `linkExpiresAt`; on `EmailSendError` with `kind: 'permanent'` mark the email message `failed`, on `temporary` rethrow so the job retries.
 - **Note (pg-boss, 2.7):** Follow the 2.7 note: one job per assignment on an `exclusive` queue with `singletonKey` = assignment id, job data IDs only; create the token inside the job (hash only) and mark `email_messages` failed on the last attempt of a temporary error. Check the `fromPrisma` option there.
-- **Done when:** Sending to 50 employees puts 50 emails in Mailpit, each with a unique link.
+- **Note (values saved at send, PRD FR-RND-8, NFR-PRV-7):** In the send step, for every assignment (also `no_email`, so print works): run the 3.6 values step with today's date, then save `field_values` (with the employer-signature image key) in the same transaction as the status change. Anything required missing at that moment → `missing_data`, nothing sent. Already saved values are never rebuilt (a retried job keeps them). The audit row says only "values saved", never the values.
+- **Done when:** Sending to 50 employees puts 50 emails in Mailpit, each with a unique link; an import after sending doesn't change a sent document; an employee whose address was emptied before the send gets `missing_data`.
 
 ### [ ] 3.11 Reading rounds
 - **Build:** Round details with counts, per-employee list with filters, round list with % signed, dashboard summary.
 - **Depends on:** 3.10
 - **Note:** The round's department filter, the department shown per row and the counts by department use `assignments.department_id` (department at send time, index `(round_id, department_id)`), not the employee's current department. Test: move an employee after the round is created; the round still counts them in the old department.
 - **Note:** Also build `GET /api/employees/:id/assignments` (PRD §11, employee history across rounds, M + O), moved here from 3.2: round name, document, `displayStatus()`, dates, link to the signed file. Paged, newest first, index `assignments(employee_id)`.
+- **Note (PRD FR-TRK-2):** The per-employee list shows the email-section answer for signed rows: choice ("email" / "at the office"), the email given, and whether it differs from the employee's stored email. `missing_data` is its own count.
 - **Done when:** Counts match the data; lists are paged.
 
 ### [ ] 3.12 Round actions
@@ -263,12 +299,14 @@ Progress: tick `[x]` when a task is done.
 - **Note (pg-boss, 2.7):** Queue the signed-copy email as a worker job (see the 2.7 note; data = assignment id), never send it inside the submit request.
 - **Note:** `submit` needs a higher JSON body size limit for the signature image (Express default is 100 KB); raise it for that route only.
 - **Note:** Configure Express "trust proxy" for the cloud load balancer so `req.ip` is the employee's real IP (used for `signer_ip` and the per-IP rate limit). See also 7.6.
-- **Done when:** Signing via an old reminder link works; 6th wrong attempt refused; link shows "Already signed" afterwards.
+- **Note (email section, PRD FR-SGN-9, NFR-SIG-4):** Submit body `{ signatureImage, acknowledged: true, emailChoice: "email" | "office", email? }`, one zod schema in `packages/shared` (reused by 6.4): exactly one choice; `email` required for `"email"`, trimmed, lowercased, valid format, at most 254 characters; ignored for `"office"`. `document` (or a small `form` endpoint) returns the pre-fill email after the ID check only. Save the answers in `assignment_responses` in the same transaction as the status change; never write the answer to `employees.email`. The signing audit row has the choice, not the address. The signed copy goes to the address the link was sent to (`email_messages.to_email`).
+- **Done when:** Signing via an old reminder link works; 6th wrong attempt refused; link shows "Already signed" afterwards; submit without a choice, or with a bad email, is a 400; the answer is in the PDF and in `assignment_responses`.
 
 ### [ ] 3.14 Reminder job
 - **Build:** Daily job 09:00 Sun–Thu (Asia/Jerusalem); reminds everyone due; no limit unless set; idempotent, single instance.
 - **Depends on:** 3.10
 - **Note (pg-boss, 2.7):** Add it like the daily cleanup job (`worker/jobs/cleanup.job.ts`): an `exclusive` queue with a schedule, cron `0 9 * * 0-4` in `Asia/Jerusalem`; pg-boss creates one job per day however many workers run. Make each reminder safe to run twice (see the 2.7 note).
+- **Note:** `missing_data` assignments get no reminders (only `sent` / `opened` are reminded); no extra rule needed.
 - **Done when:** Running twice the same day sends no duplicates; signed or expired employees skipped.
 
 ### [ ] 3.15 Bounce webhook
@@ -280,20 +318,25 @@ Progress: tick `[x]` when a task is done.
 - **Build:** Print endpoint, scanned signature upload (`signed_manual`), office kiosk session, manual-handling list.
 - **Depends on:** 3.13
 - **Note (PRD FR-EMP-6, FR-MAN-1):** The list marks open `no_email` assignments whose employee now has a `valid` email (for example, added by an import) as "email added, ready to send". Likewise, open `invalid_email` assignments whose employee now has a different, valid email (for example, fixed by an import) show as "email fixed, ready to send". A manager-only send action (one or several) sends a normal invitation with a new token, status → `sent`, and logs it. Nothing is sent without that action.
-- **Done when:** Tests per action; kiosk still requires the ID number.
+- **Note (missing data, PRD FR-MAN-1, FR-RND-8):** The list shows open `missing_data` assignments with what is missing (field names only). When the 3.6 values step finds nothing missing any more, mark it "details completed, ready to send". The send action checks again, saves `field_values` and sends (`sent`), or sets `no_email` if there's no valid email; still missing → 409.
+- **Note (corrected email, PRD FR-SGN-9):** List signed assignments whose `email_choice` is `email` and whose given email differs from the employee's current stored email: "the employee corrected her email: old → new". Worked out by query; it disappears once the stored email matches. Nothing is changed automatically.
+- **Note:** Print uses the saved `field_values`. The kiosk shows the email section (pre-filled with the stored email, if any). A manual scan stores no answers.
+- **Done when:** Tests per action; kiosk still requires the ID number; filling in the missing address makes the row "ready to send".
 
 ### [ ] 3.17 Exports and file access
 - **Build:** Status export to Excel (formula-safe), ZIP of signed files streamed by department with UTF-8 names, signed-document links that log each view.
 - **Depends on:** 3.13
 - **Note:** The Excel export's department column and the ZIP's department folders use `assignments.department_id` (department at send time), matching the signed file paths from 3.13.
 - **Note:** Storage keys hold no names (2.5), so Hebrew names are built at export time: ZIP entries like `15 - <department name>/<employeeNumber>_<first> <last>.pdf` (UTF-8), streamed with `downloadStream`. Signed-document links come from `createDownloadLink` (at most 5 minutes, Hebrew `fileName`) after the role check; log each one as `document.view`.
+- **Note (PRD FR-TRK-4, NFR-PRV-6):** Excel columns for the email-section answer: choice ("מייל" / "במשרד"), the email given, and "differs from the system email". No address, birth date or other extra details in the export.
 - **Done when:** ZIP opens in Windows with Hebrew names; a cell starting with `=` is neutralized.
 
 ### [ ] 3.18 Settings API
-- **Build:** Read/update default reminder interval, link expiry, sender name.
-- **Depends on:** 2.3
+- **Build:** Read/update default reminder interval, link expiry, sender name. Upload and view the employer signature and stamp image.
+- **Depends on:** 2.3, 2.5
 - **Note:** The seed doesn't run in production, so the settings code has built-in defaults used when a key is missing: `reminder_interval_days` 3, `max_reminders` null (no limit), `link_expiry_days` 60, `sender_name` "מערכת חתימות".
-- **Done when:** New rounds pick up the defaults.
+- **Note (employer signature, PRD FR-ADM-2, FR-TPL-7):** `POST /api/settings/employer-signature` (manager only, multipart): PNG magic bytes, size limit (e.g. 1 MB), readable by pdf-lib (`embedPng`), sensible dimensions. Stored at an ASCII key like `settings/employer-signature/<uuid>.png` (a new key every time, never overwrite), then the `employer_signature` setting `{ fileKey, uploadedAt }`. `GET` returns a short-lived link (manager only). Log `settings.employer_signature_uploaded` and each view. Do this before 3.6 (it draws the image).
+- **Done when:** New rounds pick up the defaults; a JPG renamed `.png` is refused; replacing the image keeps the old file.
 
 ---
 
@@ -320,7 +363,8 @@ Progress: tick `[x]` when a task is done.
 
 ### [ ] 5.2 Employees (A6, A7)
 - **Build:** List, employee card with history, add/edit (manager only).
-- **Depends on:** 4.2, 3.2
+- **Depends on:** 4.2, 3.2, 3.19
+- **Note (PRD FR-EMP-7, A7):** The card shows and edits landline, mobile, address, city, birth date (DD/MM/YYYY) with the age, role, employment status, job %, work days, work hours, pension funds א / ב, study fund. Remind the manager that the next import overwrites a filled value, so fix it in Har Gal too. None of these in the list.
 - **Done when:** Search and filters work; officer can't edit.
 
 ### [ ] 5.3 Import wizard (A8)
@@ -331,7 +375,8 @@ Progress: tick `[x]` when a task is done.
 
 ### [ ] 5.4 Templates (A9)
 - **Build:** List, upload, department picker, number fields for positions, live PDF preview.
-- **Depends on:** 4.2, 3.6
+- **Depends on:** 4.2, 3.6, 3.20
+- **Note (PRD A9, FR-TPL-2 to FR-TPL-8):** Per position: field type (Hebrew names), required / may stay empty, `show_when` for signatures ("always" / "only if no email"), pension source ("א, then ב" / "ב only"). Per template: employer-signature setting. Show the "ready" reasons and the preview's missing values.
 - **Done when:** Changing a position updates the preview.
 
 ### [ ] 5.5 New round wizard (A5)
@@ -342,16 +387,17 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 5.6 Rounds (A3, A4)
 - **Build:** Round list; round details with filters, search, export, ZIP, actions.
 - **Depends on:** 5.5, 3.11, 3.12, 3.17
+- **Note:** Round details show the email-section answer column and the "missing data" status filter.
 - **Done when:** Every action works and status refreshes.
 
 ### [ ] 5.7 Manual handling (A10)
 - **Build:** List, print, upload scan, fix email, open office kiosk.
 - **Depends on:** 4.2, 3.16
-- **Note:** Show "email added, ready to send" on assignments that have one, with a one-click send button (and a send-all for the selected rows). Near "fix email", remind the manager to fix it in Har Gal too, since the next import overwrites it (PRD FR-EMP-7).
+- **Note:** Show "email added, ready to send" on assignments that have one, with a one-click send button (and a send-all for the selected rows). Near "fix email", remind the manager to fix it in Har Gal too, since the next import overwrites it (PRD FR-EMP-7). Also show "missing data" rows (what is missing, a link to the employee card, and "details completed, ready to send" with a send button) and "the employee corrected her email: old → new" rows (fix it in Har Gal).
 - **Done when:** Each path changes the status correctly.
 
 ### [ ] 5.8 Settings and staff users (A11, A12)
-- **Build:** Forms for settings and staff users.
+- **Build:** Forms for settings and staff users. Upload of the employer signature and stamp image, with a preview of the current one (manager only).
 - **Depends on:** 4.2, 3.1, 3.18
 - **Done when:** Changes are saved and logged.
 
@@ -372,12 +418,14 @@ Progress: tick `[x]` when a task is done.
 ### [ ] 6.3 Document view (B2)
 - **Build:** PDF shown with pdf.js; Sign button active only after scrolling to the end.
 - **Depends on:** 6.2
+- **Note:** The document shows the saved values and, for `pre_signed` templates, the employer signature; the email section on it is still empty (filled in on B3).
 - **Done when:** Tested on Chrome, Edge, Firefox on Windows.
 
 ### [ ] 6.4 Signature and done (B3, B4)
-- **Build:** signature_pad ≥ 500×200 with smoothing, Clear, reading statement, submit, done screen; office kiosk variant.
+- **Build:** Email section, signature_pad ≥ 500×200 with smoothing, Clear, reading statement, submit, done screen; office kiosk variant.
 - **Depends on:** 6.3
-- **Done when:** A mouse signature appears in the stored PDF.
+- **Note (PRD FR-SGN-9, B3):** Above the pad: two clear choices, exactly one: (a) the email box, pre-filled with the stored email (she can keep or correct it), or (b) "I have no email and want my payslip and notices at the institution's office in my city". Submit stays disabled until one is chosen. Validate with the shared zod schema (3.13); Hebrew errors from `he.ts`. The email box is left to right inside the right-to-left page. Explain in one line that one signature is placed everywhere the document needs it.
+- **Done when:** A mouse signature appears in the stored PDF, in every matching position; can't submit without a choice; a bad email shows a Hebrew error.
 
 ---
 
