@@ -25,6 +25,7 @@ export const ERROR_MESSAGES = {
   EMPLOYEE_NUMBER_TAKEN: 'מספר העובד כבר קיים במערכת',
   ID_NUMBER_TAKEN: 'מספר תעודת הזהות כבר רשום לעובד אחר',
   DEPARTMENT_NOT_FOUND: 'המחלקה לא נמצאה',
+  EMPLOYEE_NOT_FOUND: 'העובד לא נמצא',
   RELATED_RECORD_CONFLICT: 'לא ניתן לבצע את הפעולה בגלל נתונים קשורים',
   FILE_REQUIRED: 'יש לצרף קובץ אחד',
   FILE_TOO_LARGE: 'הקובץ גדול מדי',
@@ -58,6 +59,8 @@ export const ERROR_MESSAGES = {
   TEMPLATE_ARCHIVED: 'התבנית הועברה לארכיון ולא ניתן לשנות אותה',
   TEMPLATE_HAS_NEWER_VERSION:
     'קיימת גרסה חדשה יותר של התבנית. יש לרענן את הדף ולערוך את הגרסה האחרונה',
+  EMPLOYER_SIGNATURE_IMAGE_MISMATCH:
+    'תמונת חתימת המעסיק השמורה במסמך אינה תואמת לקובץ באחסון. המסמך לא נוצר; יש לפנות לתמיכה',
   INVALID_EMAIL: 'כתובת האימייל אינה תקינה',
   EMAIL_CHOICE_REQUIRED: 'יש לבחור אחת משתי האפשרויות: כתובת אימייל, או "אין לי אימייל"',
   ANSWER_REQUIRED: 'יש למלא שדה זה',

@@ -11,6 +11,7 @@ interface OpenApiOperation {
   tags?: string[];
   parameters?: { name: string; in: string; required?: boolean }[];
   requestBody?: { content: Record<string, { schema: JsonSchema }> };
+  responses: Record<string, { content?: Record<string, { schema: JsonSchema }> }>;
 }
 interface JsonSchema {
   type?: string;
@@ -59,6 +60,8 @@ describe('Swagger page outside production', () => {
         'GET /api/settings/employer-signature',
         'GET /api/templates',
         'GET /api/templates/{id}',
+        'GET /api/templates/{id}/preview',
+        'GET /api/templates/{id}/preview/check',
         'GET /api/users',
         'PATCH /api/employees/{id}',
         'PATCH /api/settings',
@@ -96,6 +99,13 @@ describe('Swagger page outside production', () => {
     const schema = body?.content['multipart/form-data']?.schema;
     expect(schema?.required).toEqual(['file']);
     expect(schema?.properties?.file).toMatchObject({ type: 'string', format: 'binary' });
+  });
+
+  it('offers the template preview as a PDF file to download', () => {
+    const ok = document.paths['/api/templates/{id}/preview']?.get?.responses['200'];
+    expect(ok).toMatchObject({
+      content: { 'application/pdf': { schema: { type: 'string', format: 'binary' } } },
+    });
   });
 
   it('shows a file picker with name and departments for the template upload', () => {

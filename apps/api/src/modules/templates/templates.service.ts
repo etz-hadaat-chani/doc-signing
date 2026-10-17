@@ -2,13 +2,11 @@ import { randomUUID } from 'node:crypto';
 import {
   formatDepartment,
   type Paged,
-  showWhenSchema,
   TEMPLATE_MAX_PAGES,
   type TemplateCreateInput,
   type TemplateFieldInput,
   type TemplateItem,
   type TemplateListQuery,
-  templateFieldOptionsSchema,
   templateReadiness,
   type TemplateUpdateInput,
 } from '@doc-signing/shared';
@@ -24,10 +22,10 @@ import { Prisma } from '../../generated/prisma/client.js';
 import {
   describeTemplateChanges,
   documentChanged,
-  type FieldPosition,
   sameFields,
   type TemplateState,
 } from './template-changes.js';
+import { toPosition } from './stored-position.js';
 import { positionProblems } from './template-positions.js';
 import { type TemplateRow, TemplatesRepository } from './templates.repository.js';
 
@@ -38,25 +36,6 @@ export interface TemplateActor {
 }
 
 const PDF_CONTENT_TYPE = 'application/pdf';
-
-/** A stored position with its settings; the JSON columns are read with the shared schemas. */
-function toPosition(field: TemplateRow['fields'][number]): FieldPosition {
-  return {
-    fieldType: field.fieldType,
-    key: field.key,
-    fillMode: field.fillMode,
-    showWhen: showWhenSchema.nullable().parse(field.showWhen),
-    options: templateFieldOptionsSchema.nullable().parse(field.options),
-    isRequired: field.isRequired,
-    label: field.label,
-    needsApproval: field.needsApproval,
-    page: field.page,
-    x: field.x.toNumber(),
-    y: field.y.toNumber(),
-    width: field.width.toNumber(),
-    height: field.height.toNumber(),
-  };
-}
 
 /** `employerSignatureImageUploaded`: whether the employer signature image exists (3.18). */
 function toItem(row: TemplateRow, employerSignatureImageUploaded: boolean): TemplateItem {

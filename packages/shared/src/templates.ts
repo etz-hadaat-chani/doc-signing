@@ -190,3 +190,48 @@ export const templateItemSchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 export type TemplateItem = z.infer<typeof templateItemSchema>;
+
+/**
+ * `GET /api/templates/:id/preview` and `…/preview/check` (FR-TPL-3). No `employeeId` = the made-up
+ * sample employee.
+ */
+export const templatePreviewQuerySchema = z.strictObject({
+  employeeId: optionalQuery(z.uuid()),
+});
+export type TemplatePreviewQuery = z.output<typeof templatePreviewQuerySchema>;
+
+/**
+ * Why a preview may not look like the real document. The preview is still built: it is a setup
+ * tool. `TEXT_TOO_LONG` and `CHARACTERS_NOT_SUPPORTED` depend on the employee's data.
+ */
+export const TEMPLATE_PREVIEW_WARNINGS = {
+  TEMPLATE_NOT_READY: 'התבנית עדיין אינה מוכנה לשליחה',
+  TEMPLATE_ARCHIVED: 'התבנית נמצאת בארכיון',
+  TEMPLATE_OLD_VERSION: 'זו גרסה ישנה של התבנית; קיימת גרסה חדשה יותר',
+  EMPLOYER_SIGNATURE_IMAGE_MISSING: 'לא הועלתה תמונת חתימת המעסיק, ולכן החתימה לא מוצגת',
+  EMPLOYEE_INACTIVE: 'העובד אינו פעיל',
+  TEXT_TOO_LONG: 'הטקסט ארוך מדי לתיבה גם בגופן הקטן ביותר, ולכן הוא חורג מגבולות התיבה',
+  CHARACTERS_NOT_SUPPORTED: 'יש תווים שהגופן אינו תומך בהם (למשל סמלים או ערבית); הם מוצגים כסימן ?',
+} as const;
+export type TemplatePreviewWarningCode = keyof typeof TEMPLATE_PREVIEW_WARNINGS;
+
+const namedKeySchema = z.object({ key: z.string(), name: z.string() });
+
+/**
+ * What the preview found: the values the employee is missing and the boxes left for her (Hebrew
+ * field names only, never the values), plus warnings with the box keys involved.
+ */
+export const templatePreviewReportSchema = z.object({
+  /** True when the made-up sample employee was used. */
+  sample: z.boolean(),
+  missing: z.array(namedKeySchema),
+  leftForEmployee: z.array(namedKeySchema),
+  warnings: z.array(
+    z.object({
+      code: z.enum(Object.keys(TEMPLATE_PREVIEW_WARNINGS) as [TemplatePreviewWarningCode]),
+      message: z.string(),
+      keys: z.array(z.string()),
+    }),
+  ),
+});
+export type TemplatePreviewReport = z.infer<typeof templatePreviewReportSchema>;

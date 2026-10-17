@@ -16,3 +16,5 @@ test-results
 playwright-report
 # pnpm import:sample
 /sample-har-gal.xlsx
+# pnpm pdf:sample (apps/api)
+/apps/api/tmp

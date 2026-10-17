@@ -440,7 +440,8 @@ All management endpoints need a staff session; the role column says who may call
 | GET | `/api/templates/:id` | One template version with its departments and field positions | M |
 | POST | `/api/templates` | Upload a PDF with name and departments | M |
 | PATCH | `/api/templates/:id` | Update name, departments, field positions or box settings (FR-TPL-10); a locked template gets a new version for a new name, positions or settings | M |
-| GET | `/api/templates/:id/preview?employeeId=` | PDF filled with a sample employee; the missing values are listed | M |
+| GET | `/api/templates/:id/preview?employeeId=` | PDF filled with the chosen employee, or a made-up sample employee when `employeeId` is left out (FR-TPL-3); not cached | M |
+| GET | `/api/templates/:id/preview/check?employeeId=` | What the same preview found: the missing values and the boxes left for the employee (Hebrew field names only, never the values), plus warnings (template not ready, archived or old, employer signature image missing, employee inactive, text too long for its box, characters the font lacks) | M |
 | POST | `/api/templates/:id/archive` | Archive a template | M |
 
 ### Send rounds

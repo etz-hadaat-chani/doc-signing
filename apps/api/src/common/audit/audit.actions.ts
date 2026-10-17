@@ -26,6 +26,8 @@ export const AUDIT_ACTIONS = [
   'template.updated',
   'template.version_created',
   'template.archived',
+  'template.previewed',
+  'template.preview_checked',
   'settings.updated',
   'settings.employer_signature_uploaded',
   'settings.employer_signature_viewed',
@@ -130,6 +132,13 @@ export interface AuditDetailsMap {
     changes: string[];
   };
   'template.archived': { name: string; version: number };
+  /**
+   * The preview PDF was viewed (FR-TPL-3). `employeeId` null = the made-up sample employee. Ids
+   * only: never the values drawn (NFR-PRV-7).
+   */
+  'template.previewed': { employeeId: string | null };
+  /** What a real employee is missing on this template was checked (field names only shown). */
+  'template.preview_checked': { employeeId: string };
   // Settings (3.18): the manager is the actor; the entity is `settings` with no id (text keys).
   /** One line per changed value, "field: old → new" (`null` = no limit). */
   'settings.updated': { changes: string[] };

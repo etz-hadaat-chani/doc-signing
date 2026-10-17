@@ -5,6 +5,12 @@
   "entryFile": "worker/main",
   "compilerOptions": {
     "deleteOutDir": true,
-    "tsConfigPath": "tsconfig.worker.json"
+    "tsConfigPath": "tsconfig.worker.json",
+    "assets": [
+      {
+        "include": "assets/**/*",
+        "watchAssets": true
+      }
+    ]
   }
 }
