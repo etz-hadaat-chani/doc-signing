@@ -15,7 +15,7 @@
 //   (@default(now()) on updatedAt gives the column a database default, for rows inserted by raw SQL.)
 // - Every relation sets onDelete: Restrict. Rows are archived (isActive / isArchived), never deleted.
 // - Constraints Prisma can't express (e.g. UNIQUE NULLS NOT DISTINCT, CHECK) go in the migration SQL.
-//   Current CHECKs: employees.id_number ~ '^[0-9]{9}$';
+//   Current CHECKs: employees.id_number ~ '^[0-9]{9}$', job_percent 0–100, hours_base_code >= 0;
 //   templates.version >= 1, templates.page_count >= 1;
 //   template_fields.page >= 1, x >= 0, y >= 0, width > 0, height > 0, font_size > 0 (NULL allowed);
 //   rounds.reminder_interval_days > 0, max_reminders > 0 (NULL allowed);
@@ -208,19 +208,32 @@ model Department {
 }
 
 model Employee {
-  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employeeNumber String      @unique @map("employee_number") @db.VarChar(20) // Import match key
-  idNumber       String      @unique @map("id_number") @db.Char(9) // Israeli ID, padded with leading zeros
-  firstName      String      @map("first_name") @db.VarChar(50)
-  lastName       String      @map("last_name") @db.VarChar(50)
-  departmentId   String      @map("department_id") @db.Uuid
-  email          String?     @db.VarChar(255)
-  emailStatus    EmailStatus @map("email_status")
-  phone          String?     @db.VarChar(20) // Reference only; nothing is sent to it
-  isActive       Boolean     @default(true) @map("is_active")
-  lastImportId   String?     @map("last_import_id") @db.Uuid
-  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeNumber   String      @unique @map("employee_number") @db.VarChar(20) // Import match key
+  idNumber         String      @unique @map("id_number") @db.Char(9) // Israeli ID, padded with leading zeros
+  firstName        String      @map("first_name") @db.VarChar(50)
+  lastName         String      @map("last_name") @db.VarChar(50)
+  departmentId     String      @map("department_id") @db.Uuid
+  email            String?     @db.VarChar(255)
+  emailStatus      EmailStatus @map("email_status")
+  landline         String?     @db.VarChar(20) // קידומת + טלפון, as 050-1234567; nothing is sent to it
+  mobile           String?     @db.VarChar(20) // נייד פרטי, as 050-1234567; nothing is sent to it
+  // Extra details (FR-EMP-1): an empty import cell never erases them. Never in lists (NFR-PRV-6).
+  address          String?     @db.VarChar(150)
+  city             String?     @db.VarChar(60)
+  birthDate        DateTime?   @map("birth_date") @db.Date // A calendar day; the age is worked out
+  jobTitle         String?     @map("job_title") @db.VarChar(100)
+  employmentStatus String?     @map("employment_status") @db.VarChar(50)
+  jobPercent       Decimal?    @map("job_percent") @db.Decimal(5, 2)
+  workDays         String?     @map("work_days") @db.VarChar(50)
+  hoursBaseCode    Int?        @map("hours_base_code") @db.SmallInt // שעות עבודה: full-time base code
+  pensionFundA     String?     @map("pension_fund_a") @db.VarChar(100)
+  pensionFundB     String?     @map("pension_fund_b") @db.VarChar(100)
+  studyFund        String?     @map("study_fund") @db.VarChar(100)
+  isActive         Boolean     @default(true) @map("is_active")
+  lastImportId     String?     @map("last_import_id") @db.Uuid
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   department  Department   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   lastImport  ImportBatch? @relation(fields: [lastImportId], references: [id], onDelete: Restrict)

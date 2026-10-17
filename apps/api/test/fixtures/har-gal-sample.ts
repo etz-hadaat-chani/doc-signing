@@ -4,7 +4,7 @@ import type { FixtureRow } from './har-gal-workbook.js';
  * A made-up Har Gal export with one case of everything, against the seed (prisma/seed-data.ts).
  * Used by the import API test and `pnpm import:sample`. Excel row numbers in the comments (row 1
  * is the header). Before the preview, the test (and the sample script's instructions) set:
- * 1002 and 1003 → email status bounced; 1004 → phone 050-7654321 (a manual edit).
+ * 1002 and 1003 → email status bounced; 1004 → mobile 050-7654321 (a manual edit).
  */
 export const SAMPLE_ROWS: (FixtureRow | null)[] = [
   // 2: new. Number and ID sent as numbers, the ID lost its leading 0 (055500003). Last name in
@@ -30,8 +30,8 @@ export const SAMPLE_ROWS: (FixtureRow | null)[] = [
       formula: '"15 - "&"ממלאות מקום ירושלים"',
       result: '15 - ממלאות מקום ירושלים',
     },
-    phonePrefix: '02',
-    phone: 6234567,
+    landlinePrefix: '02',
+    landline: 6234567,
   },
   // 4: unchanged (seed 1001 as stored).
   {
@@ -60,7 +60,7 @@ export const SAMPLE_ROWS: (FixtureRow | null)[] = [
     department: '15 - ממלאות מקום ירושלים',
     email: ' E1003@Example.com ',
   },
-  // 7: updated: 1004 moves to 19 (renamed in the file) and loses the phone a manager added.
+  // 7: updated: 1004 moves to 19 (renamed in the file) and loses the mobile a manager added.
   {
     employeeNumber: 1004,
     idNumber: 45678919,
@@ -71,7 +71,7 @@ export const SAMPLE_ROWS: (FixtureRow | null)[] = [
   },
   // 8: empty, skipped.
   null,
-  // 9: new with two warnings: bad email (saved as invalid) and an unreadable phone (saved empty).
+  // 9: new with two warnings: bad email (saved as invalid) and an unreadable mobile (saved empty).
   {
     employeeNumber: 2003,
     idNumber: 88800008,

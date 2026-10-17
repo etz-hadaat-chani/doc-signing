@@ -1,6 +1,7 @@
 import { importIssue } from '@doc-signing/shared';
 import { describe, expect, it } from 'vitest';
 import type { EmployeeState } from '../employee-changes.js';
+import { NO_DETAILS } from '../employees.repository.js';
 import { compareWithCurrent, type CurrentData, planImport } from './import-diff.js';
 import type { CheckedRow, ImportedEmployee } from './import-row.js';
 
@@ -12,7 +13,10 @@ const stored: EmployeeState = {
   departmentCode: 15,
   email: 'dana@example.com',
   emailStatus: 'bounced',
-  phone: '050-1234567',
+  ...NO_DETAILS,
+  mobile: '050-1234567',
+  address: 'הרצל 1',
+  jobPercent: 50,
   isActive: false,
 };
 
@@ -24,7 +28,9 @@ const same: ImportedEmployee = {
   departmentCode: 15,
   departmentName: 'ירושלים',
   email: 'dana@example.com',
-  phone: '050-1234567',
+  landline: null,
+  mobile: '050-1234567',
+  extras: {},
 };
 
 function row(rowNumber: number, employee: ImportedEmployee, extra: Partial<CheckedRow> = {}) {
@@ -63,7 +69,7 @@ describe('compareWithCurrent', () => {
       departmentCode: 19,
       departmentName: 'חינוך מיוחד',
       email: 'dana.cohen@example.com',
-      phone: null,
+      mobile: null,
     };
     const diff = compareWithCurrent([row(2, changed)], current);
     expect(diff.updatedEmployees).toEqual([
@@ -76,7 +82,7 @@ describe('compareWithCurrent', () => {
           'departmentCode: 15 → 19',
           'email: dana@example.com → dana.cohen@example.com',
           'emailStatus: bounced → valid',
-          'phone: 050-1234567 → (none)',
+          'mobile: 050-1234567 → (none)',
         ],
       },
     ]);
@@ -138,7 +144,7 @@ describe('compareWithCurrent', () => {
     const bad = row(5, same, {
       employee: null,
       errors: [importIssue('DEPARTMENT_INVALID')],
-      warnings: [importIssue('PHONE_INVALID')],
+      warnings: [importIssue('MOBILE_INVALID')],
     });
     const warned = row(
       6,
@@ -172,7 +178,7 @@ describe('planImport: the writes the confirm applies', () => {
     employeeNumber: '2001',
     idNumber: '023456783',
     email: 'bad@@x',
-    phone: null,
+    mobile: null,
   };
 
   it('writes new and changed employees only; unchanged and failed rows are left out', () => {
@@ -197,10 +203,30 @@ describe('planImport: the writes the confirm applies', () => {
 
   it('imports a row with warnings: bad email → invalid, unreadable phone → empty', () => {
     const warned = row(3, fresh, {
-      warnings: [importIssue('EMAIL_INVALID'), importIssue('PHONE_INVALID')],
+      warnings: [importIssue('EMAIL_INVALID'), importIssue('MOBILE_INVALID')],
     });
     const [created] = planImport([warned], current).writes.creates;
-    expect(created).toMatchObject({ email: 'bad@@x', emailStatus: 'invalid', phone: null });
+    expect(created).toMatchObject({ email: 'bad@@x', emailStatus: 'invalid', mobile: null });
+  });
+
+  it('extras: an empty cell or missing column keeps the stored value; a filled cell overwrites', () => {
+    expect(compareWithCurrent([row(2, same)], current).counts.rowsUnchanged).toBe(1);
+    const filled = {
+      ...same,
+      extras: { address: 'יפו 5', city: 'ירושלים', birthDate: '1980-05-03' },
+    };
+    const plan = planImport([row(2, filled)], current);
+    expect(plan.writes.updates[0]?.changes).toEqual([
+      'address: הרצל 1 → יפו 5',
+      'city: (none) → ירושלים',
+      'birthDate: changed',
+    ]);
+    expect(plan.writes.updates[0]?.after).toMatchObject({ address: 'יפו 5', jobPercent: 50 });
+  });
+
+  it('a new employee without extra cells gets no extra details', () => {
+    const [created] = planImport([row(3, fresh)], current).writes.creates;
+    expect(created).toMatchObject({ address: null, birthDate: null, jobPercent: null });
   });
 
   it('keeps isActive as stored (an inactive employee stays inactive); a new one is active', () => {

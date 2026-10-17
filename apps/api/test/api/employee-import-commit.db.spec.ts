@@ -17,7 +17,12 @@ import { StorageNotFoundError } from '../../src/common/storage/storage.errors.js
 import { Prisma } from '../../src/generated/prisma/client.js';
 import { ImportRepository } from '../../src/modules/employees/import/import.repository.js';
 import { SAMPLE_ROWS } from '../fixtures/har-gal-sample.js';
-import { type FixtureRow, harGalXlsx } from '../fixtures/har-gal-workbook.js';
+import {
+  FIXTURE_EXTRA_HEADERS,
+  FIXTURE_HEADERS,
+  type FixtureRow,
+  harGalXlsx,
+} from '../fixtures/har-gal-workbook.js';
 import { createTestApp, httpServer } from '../setup/app.js';
 import { resetDatabase } from '../setup/database.js';
 import { clearQueueJobs } from '../setup/worker.js';
@@ -46,14 +51,14 @@ beforeEach(async () => {
   await runSeed(prisma, { password: seedPassword });
   managerCookie = await cookieFor(manager);
   officerCookie = await cookieFor(officer);
-  // The state the sample expects (as in the preview test): two bounced emails, one manual phone.
+  // The state the sample expects (as in the preview test): two bounced emails, one manual mobile.
   await prisma.employee.updateMany({
     where: { employeeNumber: { in: ['1002', '1003'] } },
     data: { emailStatus: 'bounced' },
   });
   await prisma.employee.update({
     where: { employeeNumber: '1004' },
-    data: { phone: '050-7654321' },
+    data: { mobile: '050-7654321' },
   });
 });
 
@@ -158,7 +163,7 @@ describe('POST /api/employees/import/:batchId/commit: the planted file', () => {
     expect(result).toMatchObject({ batchId: shown.batchId, status: 'committed' });
     expect(result.counts).toEqual(shown.counts);
 
-    // New employees, as listed; warnings imported (bad email → invalid, bad phone → empty).
+    // New employees, as listed; warnings imported (bad email → invalid, bad mobile → empty).
     expect(await employee('2001')).toMatchObject({
       idNumber: '055500003',
       firstName: 'נועה',
@@ -166,24 +171,26 @@ describe('POST /api/employees/import/:batchId/commit: the planted file', () => {
       department: { code: 45, name: 'ממלאות מקום אלעד-45' },
       email: 'noa.levi@example.com',
       emailStatus: 'valid',
-      phone: '050-1234567',
+      landline: null,
+      mobile: '050-1234567',
       isActive: true,
       lastImportId: shown.batchId,
     });
     expect(await employee('2002')).toMatchObject({
       email: null,
       emailStatus: 'missing',
-      phone: '02-6234567',
+      landline: '02-6234567',
+      mobile: null,
       department: { code: 15 },
     });
     expect(await employee('2003')).toMatchObject({
       email: 'esther@@example',
       emailStatus: 'invalid',
-      phone: null,
+      mobile: null,
       department: { code: 61 },
     });
 
-    // Updated: a new email clears bounced; Har Gal overwrites the manual phone; renamed department.
+    // Updated: a new email clears bounced; Har Gal overwrites the manual mobile; renamed department.
     expect(await employee('1002')).toMatchObject({
       email: 'sarah.new@example.com',
       emailStatus: 'valid',
@@ -191,7 +198,7 @@ describe('POST /api/employees/import/:batchId/commit: the planted file', () => {
     });
     expect(await employee('1004')).toMatchObject({
       department: { code: 19, name: 'ממ חינוך מיוחד חדש' },
-      phone: null,
+      mobile: null,
       lastImportId: shown.batchId,
     });
 
@@ -358,7 +365,7 @@ describe('stale previews: 409 IMPORT_STALE, nothing written, batch failed', () =
     const edit = await request(httpServer(app))
       .patch(`/api/employees/${target.id}`)
       .set('Cookie', managerCookie)
-      .send({ phone: '050-1112223' });
+      .send({ mobile: '050-1112223' });
     expect(edit.status).toBe(200);
     await expectStale(shown.batchId, await snapshot());
   });
@@ -649,4 +656,102 @@ describe('speed: 1,500 rows', () => {
     );
     expect(await prisma.auditLog.count({ where: { action: 'employee.updated' } })).toBe(COUNT);
   }, 120_000);
+});
+
+describe('extra columns (3.19)', () => {
+  const stored = {
+    address: 'הרצל 1',
+    city: 'ירושלים',
+    birthDate: new Date('1975-01-02T00:00:00Z'),
+    jobPercent: 50,
+    hoursBaseCode: 3,
+    studyFund: 'הראל',
+  };
+  const row1001: FixtureRow = {
+    employeeNumber: 1001,
+    idNumber: 12345674,
+    firstName: 'משה',
+    lastName: 'כהן',
+    department: '15 - ממלאות מקום ירושלים',
+    email: 'e1001@example.com',
+  };
+  const extraHeaders = [...FIXTURE_HEADERS, ...FIXTURE_EXTRA_HEADERS];
+
+  beforeEach(async () => {
+    await prisma.employee.update({ where: { employeeNumber: '1001' }, data: stored });
+  });
+
+  it('a file without any extra column changes no extra field', async () => {
+    const before = await employee('1001');
+    const shown = await preview();
+    expect(shown.updatedEmployees.map((e) => e.employeeNumber)).not.toContain('1001');
+    expect((await commit(shown.batchId)).status).toBe(201);
+    expect(await employee('1001')).toEqual(before);
+  });
+
+  it('only filled cells overwrite; a date cell is the same day; bad cells are warnings', async () => {
+    const bytes = await harGalXlsx(
+      [
+        {
+          ...row1001,
+          birthDate: new Date('1980-05-03T00:00:00Z'),
+          city: null, // empty: keeps ירושלים
+          jobPercent: 100,
+          hoursBaseCode: 1,
+          pensionFundA: ' מגדל ',
+        },
+        {
+          employeeNumber: 2001,
+          idNumber: 55500003,
+          firstName: 'נועה',
+          lastName: 'לוי',
+          department: '15 - ממלאות מקום ירושלים',
+          landlinePrefix: '02',
+          landline: 6234567,
+          mobilePrefix: 50,
+          mobile: 1234567,
+          birthDate: 'לא תאריך',
+          jobPercent: 'מלא',
+          address: 'יפו 5',
+        },
+      ],
+      { headers: extraHeaders },
+    );
+    const shown = await preview(bytes);
+    expect(shown.counts).toMatchObject({ rowsNew: 1, rowsUpdated: 1, rowsFailed: 0 });
+    expect(shown.updatedEmployees[0]?.changes).toEqual([
+      'birthDate: changed',
+      'jobPercent: 50 → 100',
+      'hoursBaseCode: 3 → 1',
+      'pensionFundA: (none) → מגדל',
+    ]);
+    expect(shown.warnings.map(({ row, code, message }) => [row, code, message])).toEqual([
+      [3, 'EXTRA_VALUE_INVALID', expect.stringContaining('תאריך לידה')],
+      [3, 'EXTRA_VALUE_INVALID', expect.stringContaining('אחוז משרה')],
+    ]);
+    expect(JSON.stringify(shown)).not.toContain('1980');
+
+    const response = await commit(shown.batchId);
+    expect(response.status).toBe(201);
+    expect(importCommitResultSchema.parse(response.body).counts).toEqual(shown.counts);
+    const updated = await employee('1001');
+    expect(updated).toMatchObject({
+      address: 'הרצל 1',
+      city: 'ירושלים',
+      hoursBaseCode: 1,
+      pensionFundA: 'מגדל',
+      studyFund: 'הראל',
+    });
+    expect(updated.birthDate?.toISOString()).toBe('1980-05-03T00:00:00.000Z');
+    expect(updated.jobPercent?.toNumber()).toBe(100);
+    expect(await employee('2001')).toMatchObject({
+      landline: '02-6234567',
+      mobile: '050-1234567',
+      address: 'יפו 5',
+      birthDate: null,
+      jobPercent: null,
+    });
+    const logs = await prisma.auditLog.findMany({ where: { action: 'employee.updated' } });
+    expect(JSON.stringify(logs.map((log) => log.details))).not.toContain('1980');
+  });
 });

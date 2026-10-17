@@ -1,4 +1,6 @@
 import {
+  EMPLOYEE_EXTRA_FIELDS,
+  type EmployeeExtras,
   formatDepartment,
   type ImportPreview,
   type ImportRowIssue,
@@ -48,7 +50,9 @@ function rowIssues(row: CheckedRow, issues: ImportIssue[]): ImportRowIssue[] {
  * The employee as the import would leave them. Har Gal is the main source (FR-EMP-4): every field
  * the export carries is taken from the file. `isActive` is not in the export, so it stays as
  * stored (a new employee is active). Email status follows nextEmailStatus: same email → status
- * kept (bounced stays bounced), different → valid or invalid, empty → missing.
+ * kept (bounced stays bounced), different → valid or invalid, empty → missing. The extra details
+ * are the exception: only a filled cell overwrites; an empty cell or a missing column keeps the
+ * stored value (empty for a new employee).
  */
 export function importedState(
   employee: ImportedEmployee,
@@ -62,9 +66,19 @@ export function importedState(
     departmentCode: employee.departmentCode,
     email: employee.email,
     emailStatus: nextEmailStatus(stored ?? null, employee.email),
-    phone: employee.phone,
+    landline: employee.landline,
+    mobile: employee.mobile,
+    ...storedExtras(stored),
+    ...employee.extras,
     isActive: stored?.isActive ?? true,
   };
+}
+
+/** The stored extra details; all empty for a new employee. */
+function storedExtras(stored: EmployeeState | undefined): EmployeeExtras {
+  return Object.fromEntries(
+    EMPLOYEE_EXTRA_FIELDS.map((field) => [field, stored?.[field] ?? null]),
+  ) as unknown as EmployeeExtras;
 }
 
 /** The ID belongs to another stored employee: saving it would break the unique ID rule. */

@@ -151,7 +151,7 @@ Progress: tick `[x]` when a task is done.
   - The 500 log line has the path without its query string.
 - **Note for later tasks:** reuse `normalizeEmployeeNumber`, `normalizePhone`, `nextEmailStatus` (shared) and `describeEmployeeChanges` (`modules/employees/employee-changes.ts`) in the import (3.3/3.4).
 - **Done when:** Search by name, employee number or ID; filter by department and email status.
-- **Follow-up: 3.19.** Two phone fields (`landline`, `mobile`) replace `phone`; create, edit and the card also take the extra fields (address, city, birth date, role, employment status, job %, work days, work hours, pension funds א / ב, study fund); `describeEmployeeChanges` covers them (birth date only as "changed").
+- **Follow-up: 3.19.** Two phone fields (`landline`, `mobile`) replace `phone`; create, edit and the card also take the extra fields (address, city, birth date, role, employment status, job %, work days, hours base code, pension funds א / ב, study fund); `describeEmployeeChanges` covers them (birth date only as "changed").
 
 ### [x] 3.3 Excel import: preview
 - **Build:** Read the Har Gal employee export `.xlsx` (ExcelJS), validate every row, compute new / updated / unchanged / errors plus new and renamed departments, save `import_batch` as preview.
@@ -216,17 +216,30 @@ Progress: tick `[x]` when a task is done.
 
 Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 3.6. They are numbered after 3.18 so existing task references don't change; the text is here, in the order they are done.
 
-### [ ] 3.19 Extra employee data (follow-up to 3.2–3.4)
-- **Build:** Migration: `employees.phone` → `landline` + `mobile` (an existing `05…` value moves to `mobile`, anything else to `landline`), plus `address`, `city`, `birth_date` (date), `job_title`, `employment_status`, `job_percent`, `work_days`, `work_hours`, `pension_fund_a`, `pension_fund_b`, `study_fund`, all NULL (PRD §12). Shared zod schemas; employees API create / edit / card; import preview and confirm.
+### [x] 3.19 Extra employee data (follow-up to 3.2–3.4)
+- **Build:** Migration: `employees.phone` → `landline` + `mobile` (an existing `05…` value moves to `mobile`, anything else to `landline`), plus `address`, `city`, `birth_date` (date), `job_title`, `employment_status`, `job_percent`, `work_days`, `hours_base_code` (smallint, see the note below), `pension_fund_a`, `pension_fund_b`, `study_fund`, all NULL (PRD §12). Shared zod schemas; employees API create / edit / card; import preview and confirm.
 - **Depends on:** 3.4
 - **Note (PRD FR-EMP-1, FR-EMP-3, FR-EMP-4, FR-EMP-9):**
   - Optional headers, exact names: כתובת, יישוב, תאריך לידה, תאור תפקיד, מעמד, אחוז משרה, ימי עבודה, שעות עבודה, קוד קופ"ג א, קוד קופ"ג ב, קוד קרן השתלמות. A missing one never fails the file. Every other column (salary, balances…) stays ignored.
-  - The cell reader accepts a date only for תאריך לידה (Excel date cell → `date`, no time zone shift). אחוז משרה and שעות עבודה are numbers; ימי עבודה is text. The fund columns hold the fund's name: store the trimmed text.
+  - The cell reader accepts a date only for תאריך לידה (Excel date cell → `date`, no time zone shift). אחוז משרה and שעות עבודה are numbers; ימי עבודה is text.
+  - **שעות עבודה is a full-time base code, not hours** (PRD §12, §14): 1 = 42 hours a week, 3 = 30, 4 = 40; 0 and other codes are unknown, stored as they are and shown as the code. Stored as `hours_base_code` (smallint ≥ 0); the card adds `hoursBaseLabel` ("42 שעות", or the code). No template uses it until HR confirms codes 0 and 2 and the data's accuracy. The fund columns hold the fund's name: store the trimmed text.
   - Unreadable extra cell (not a date, birth date in the future, not a number, too long) → warning with its row number; that value isn't written, the row is imported.
   - Extra columns: an empty cell or a missing column never erases a stored value; only a filled cell overwrites. The 10 required columns keep today's rules (an empty phone cell still clears that phone).
   - Phones: landline = קידומת + טלפון, mobile = נייד פרטי - קידומת + נייד פרטי - מספר, each with `normalizePhone`; each unreadable phone is its own warning.
   - Every change shows as "field: old → new" in the preview; audit lines the same, except the birth date ("birthDate: changed", PRD NFR-PRV-6). The extra fields are never in the employees list.
 - **Done when:** Tests: a file without any extra column changes no extra field; an empty extra cell keeps the stored value; a birth date as an Excel date cell is stored as the same day; a bad birth date is a warning; two phones stored separately; preview and confirm still give the same counts.
+- **Done (rules):**
+  - Migration `20261015121222_employee_extra_fields`: `phone` moved to `mobile` (`05…`) or `landline` (anything else), then dropped; CHECKs `job_percent` 0–100, `hours_base_code` ≥ 0. Import previews still open were failed (`import.failed`, reason `format_changed`): they were checked by the old reader.
+  - Shared: `EMPLOYEE_EXTRA_FIELDS`, `EmployeeExtras`, `employeeExtraValueSchemas` (one rule per value, used by the API and the import), `HAR_GAL_EXTRA_HEADERS`, `ageOn`, `todayInIsrael`, `hoursBaseLabel`. Birth date 1900-01-01 up to today in Israel, else 400 `INVALID_BIRTH_DATE`.
+  - API: create and edit take `landline`, `mobile` and the 11 extras; `null` (or `""` for text) clears one. The card adds them plus `age` and `hoursBaseLabel` (both computed, never stored). The list has none of them.
+  - Import: the extra columns are optional (a missing one is fine; any known header twice → 400 `IMPORT_DUPLICATE_COLUMN`). A birth date may be an Excel date cell or text `DD/MM/YYYY`; job % and the hours code may be numbers or number text. An unusable cell → warning `EXTRA_VALUE_INVALID` naming its column, value not written. Each phone has its own warning (`LANDLINE_INVALID`, `MOBILE_INVALID`).
+  - The compare (`planImport`) keeps the stored extra value when the cell is empty or the column is missing, so preview and confirm match; the confirm writes every column in the one `UPDATE … FROM unnest`.
+  - Change lines and audit: "field: old → new" for every field; the birth date only as `birthDate: changed`.
+  - Code: card and change-list state are built in `modules/employees/employee-details.ts` (`buildCard`, `readState`); the import's extra cells in `import/import-extras.ts`.
+- **Note for later tasks:**
+  - 3.6: age = `ageOn(birthDate, send day)`; the stored birth date is a `date` read as `YYYY-MM-DD` (`detailsFromRow`). Never draw the hours base code.
+  - 3.20: no `work_hours` field type until HR confirms the codes (PRD §14).
+  - The real Har Gal export must never be committed; tests build fake files (`FIXTURE_EXTRA_HEADERS` adds the 11 extra columns).
 
 ### [ ] 3.20 Template field types (follow-up to 3.5)
 - **Build:** Migration and shared schemas: extend `template_field_type` (PRD §12 `template_fields`), add `template_fields.show_when` (`always` / `no_email_chosen`), `template_fields.options` jsonb (pension source `a_then_b` / `b_only`), use `is_required`, add `templates.employer_signature_mode` (`pre_signed` / `after_employee` / `none`, default `none`). `PATCH` accepts them.
@@ -236,6 +249,7 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
   - Replace `missingFieldTypes` with a "template ready" check returned on the template (a list of reasons): at least one `signature` with `show_when = always`; `email_input` and `no_email_checkbox` both or neither; `pension_has_fund` and `pension_no_fund` both or neither; `employer_signature_mode` ≠ `none` needs at least one `employer_signature` position.
   - On a locked template, a change to any position field (including `show_when`, `options`, `is_required`) or to `employer_signature_mode` creates a new version, like positions today; departments alone still change in place.
   - Existing rows keep working: `full_name`, `id_number`, `date`, `signature` keep their meaning (`date` = date drawn up and signed).
+  - No `work_hours` type: שעות עבודה is a full-time base code (3.19), and no template uses it until HR confirms codes 0 and 2 and the data's accuracy (PRD §14).
 - **Done when:** A substitute-contract layout (PRD §14) saves and reports ready; each missing pair is reported; changing `employer_signature_mode` on a locked template creates version 2.
 
 ### [ ] 3.6 Personalized PDF
@@ -364,7 +378,7 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
 ### [ ] 5.2 Employees (A6, A7)
 - **Build:** List, employee card with history, add/edit (manager only).
 - **Depends on:** 4.2, 3.2, 3.19
-- **Note (PRD FR-EMP-7, A7):** The card shows and edits landline, mobile, address, city, birth date (DD/MM/YYYY) with the age, role, employment status, job %, work days, work hours, pension funds א / ב, study fund. Remind the manager that the next import overwrites a filled value, so fix it in Har Gal too. None of these in the list.
+- **Note (PRD FR-EMP-7, A7):** The card shows and edits landline, mobile, address, city, birth date (DD/MM/YYYY) with the age, role, employment status, job %, work days, hours base (`hoursBaseLabel`: "42 שעות", or the code when unknown), pension funds א / ב, study fund. Remind the manager that the next import overwrites a filled value, so fix it in Har Gal too. None of these in the list.
 - **Done when:** Search and filters work; officer can't edit.
 
 ### [ ] 5.3 Import wizard (A8)

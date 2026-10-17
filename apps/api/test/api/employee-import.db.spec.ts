@@ -38,14 +38,14 @@ beforeEach(async () => {
   await runSeed(prisma, { password: seedPassword });
   managerCookie = await cookieFor(manager);
   officerCookie = await cookieFor(officer);
-  // The state the sample expects: two bounced emails and one manual phone edit.
+  // The state the sample expects: two bounced emails and one manual mobile edit.
   await prisma.employee.updateMany({
     where: { employeeNumber: { in: ['1002', '1003'] } },
     data: { emailStatus: 'bounced' },
   });
   await prisma.employee.update({
     where: { employeeNumber: '1004' },
-    data: { phone: '050-7654321' },
+    data: { mobile: '050-7654321' },
   });
 });
 
@@ -136,7 +136,7 @@ describe('POST /api/employees/import/preview: the planted file', () => {
         row: 7,
         employeeNumber: '1004',
         fullName: 'רבקה בן-דוד 3',
-        changes: ['departmentCode: 15 → 19', 'phone: 050-7654321 → (none)'],
+        changes: ['departmentCode: 15 → 19', 'mobile: 050-7654321 → (none)'],
       },
     ]);
     expect(preview.newDepartments).toEqual([{ code: 45, name: 'ממלאות מקום אלעד-45' }]);
@@ -207,7 +207,7 @@ describe('POST /api/employees/import/preview: the planted file', () => {
     ]);
     expect(preview.warnings).toEqual([
       { row: 9, employeeNumber: '2003', code: 'EMAIL_INVALID', message: M.EMAIL_INVALID() },
-      { row: 9, employeeNumber: '2003', code: 'PHONE_INVALID', message: M.PHONE_INVALID() },
+      { row: 9, employeeNumber: '2003', code: 'MOBILE_INVALID', message: M.MOBILE_INVALID() },
     ]);
 
     expect(await snapshot()).toEqual(before);

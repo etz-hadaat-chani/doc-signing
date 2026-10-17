@@ -1,6 +1,7 @@
 import {
   EMAIL_MAX_LENGTH,
   EMPLOYEE_NAME_MAX_LENGTH,
+  type EmployeeExtras,
   type ImportIssueCode,
   importIssue,
   isEmailFormat,
@@ -13,6 +14,7 @@ import {
 } from '@doc-signing/shared';
 import { type CellData, digitsText, plainText } from './excel-cell.js';
 import type { SheetRow } from './har-gal-sheet.js';
+import { checkExtras } from './import-extras.js';
 
 export interface ImportIssue {
   code: ImportIssueCode;
@@ -28,7 +30,10 @@ export interface ImportedEmployee {
   departmentCode: number;
   departmentName: string;
   email: string | null;
-  phone: string | null;
+  landline: string | null;
+  mobile: string | null;
+  /** Only the filled, usable extra cells; a field left out keeps the stored value. */
+  extras: Partial<EmployeeExtras>;
 }
 
 /**
@@ -121,28 +126,28 @@ function checkEmail(
 }
 
 /**
- * Mobile prefix + number when the mobile number is there, else landline prefix + number, as
- * `050-1234567` (normalizePhone puts back the 0 of a prefix sent as the number 50). Reference
- * only, so a phone that can't be read is a warning and is saved empty.
+ * One phone: prefix + number, as `050-1234567` (normalizePhone puts back the 0 of a prefix sent
+ * as the number 50). An empty number cell → no phone (it clears the stored one). A phone that
+ * can't be read is a warning of its own and is saved empty.
  */
-function checkPhone(cells: SheetRow['cells'], warnings: ImportIssue[]): string | null {
-  const [prefix, number] =
-    cells.mobile !== null
-      ? [cells.mobilePrefix, cells.mobile]
-      : cells.phone !== null
-        ? [cells.phonePrefix, cells.phone]
-        : [null, null];
+function checkPhone(
+  prefix: CellData,
+  number: CellData,
+  invalid: 'LANDLINE_INVALID' | 'MOBILE_INVALID',
+  warnings: ImportIssue[],
+): string | null {
   if (number === null) return null;
   const prefixText = prefix === null ? '' : digitsText(prefix);
   const numberText = digitsText(number);
   const phone =
     prefixText === null || numberText === null ? null : normalizePhone(prefixText + numberText);
-  if (phone === null) warnings.push(importIssue('PHONE_INVALID'));
+  if (phone === null) warnings.push(importIssue(invalid));
   return phone;
 }
 
 /** Checks every field of one row (FR-EMP-1, FR-EMP-3); all reasons are listed, not just the first. */
-export function checkRow({ rowNumber, cells }: SheetRow): CheckedRow {
+export function checkRow(row: SheetRow): CheckedRow {
+  const { rowNumber, cells } = row;
   const errors: ImportIssue[] = [];
   const warnings: ImportIssue[] = [];
   const employeeNumber = checkEmployeeNumber(cells.employeeNumber, errors);
@@ -151,7 +156,9 @@ export function checkRow({ rowNumber, cells }: SheetRow): CheckedRow {
   const lastName = checkName(cells.lastName, 'LAST_NAME_MISSING', 'LAST_NAME_TOO_LONG', errors);
   const department = checkDepartment(cells.department, errors);
   const email = checkEmail(cells.email, errors, warnings);
-  const phone = checkPhone(cells, warnings);
+  const landline = checkPhone(cells.landlinePrefix, cells.landline, 'LANDLINE_INVALID', warnings);
+  const mobile = checkPhone(cells.mobilePrefix, cells.mobile, 'MOBILE_INVALID', warnings);
+  const extras = checkExtras(row.extras, warnings);
   const employee =
     errors.length === 0 &&
     employeeNumber !== null &&
@@ -168,7 +175,9 @@ export function checkRow({ rowNumber, cells }: SheetRow): CheckedRow {
           departmentCode: department.code,
           departmentName: department.name,
           email,
-          phone,
+          landline,
+          mobile,
+          extras,
         }
       : null;
   return { rowNumber, employeeNumber, idNumber, department, employee, errors, warnings };

@@ -1,7 +1,7 @@
-import type { EmailStatus } from '@doc-signing/shared';
+import type { EmailStatus, EmployeeExtras } from '@doc-signing/shared';
 
 /** The employee fields a change list compares (the manager's edit here, the import in 3.3). */
-export interface EmployeeState {
+export interface EmployeeState extends EmployeeExtras {
   employeeNumber: string;
   idNumber: string;
   firstName: string;
@@ -9,7 +9,8 @@ export interface EmployeeState {
   departmentCode: number;
   email: string | null;
   emailStatus: EmailStatus;
-  phone: string | null;
+  landline: string | null;
+  mobile: string | null;
   isActive: boolean;
 }
 
@@ -22,12 +23,26 @@ const FIELDS = [
   'departmentCode',
   'email',
   'emailStatus',
-  'phone',
+  'landline',
+  'mobile',
+  'address',
+  'city',
+  'birthDate',
+  'jobTitle',
+  'employmentStatus',
+  'jobPercent',
+  'workDays',
+  'hoursBaseCode',
+  'pensionFundA',
+  'pensionFundB',
+  'studyFund',
   'isActive',
 ] as const satisfies readonly (keyof EmployeeState)[];
 
-/** Fields whose values never go into a change line (privacy): only that they changed. */
-const HIDDEN_VALUE: ReadonlySet<keyof EmployeeState> = new Set(['idNumber']);
+/**
+ * Fields whose values never go into a change line (privacy, NFR-PRV-6): only that they changed.
+ */
+const HIDDEN_VALUE: ReadonlySet<keyof EmployeeState> = new Set(['idNumber', 'birthDate']);
 
 function show(value: string | number | boolean | null): string {
   return value === null ? '(none)' : String(value);
@@ -35,8 +50,8 @@ function show(value: string | number | boolean | null): string {
 
 /**
  * One line per field that differs, as "field: old → new" (PRD FR-EMP-2), e.g.
- * `email: a@x.com → b@x.com`. The ID number shows only as `idNumber: changed`, never its value.
- * Empty list = nothing changed.
+ * `email: a@x.com → b@x.com`. The ID number and birth date show only as `idNumber: changed` /
+ * `birthDate: changed`, never their values. Empty list = nothing changed.
  */
 export function describeEmployeeChanges(before: EmployeeState, after: EmployeeState): string[] {
   return FIELDS.flatMap((field) => {

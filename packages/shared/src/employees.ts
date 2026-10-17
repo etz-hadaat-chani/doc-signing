@@ -115,6 +115,154 @@ const phoneInputSchema = z
     return phone;
   });
 
+/**
+ * The extra employee details (PRD FR-EMP-1, FR-EMP-7, §12). Optional everywhere; an import cell
+ * that is empty never erases them (FR-EMP-4). Never in the list, URLs or emails (NFR-PRV-6).
+ */
+export const EMPLOYEE_EXTRA_FIELDS = [
+  'address',
+  'city',
+  'birthDate',
+  'jobTitle',
+  'employmentStatus',
+  'jobPercent',
+  'workDays',
+  'hoursBaseCode',
+  'pensionFundA',
+  'pensionFundB',
+  'studyFund',
+] as const;
+export type EmployeeExtraField = (typeof EMPLOYEE_EXTRA_FIELDS)[number];
+
+/** Text extras and their column length (PRD §12). */
+export const EMPLOYEE_TEXT_MAX_LENGTH = {
+  address: 150,
+  city: 60,
+  jobTitle: 100,
+  employmentStatus: 50,
+  workDays: 50,
+  pensionFundA: 100,
+  pensionFundB: 100,
+  studyFund: 100,
+} as const satisfies Partial<Record<EmployeeExtraField, number>>;
+export type EmployeeTextField = keyof typeof EMPLOYEE_TEXT_MAX_LENGTH;
+
+/** The extras as stored: dates as `YYYY-MM-DD` (a calendar day, no time zone), numbers as numbers. */
+export interface EmployeeExtras {
+  address: string | null;
+  city: string | null;
+  birthDate: string | null;
+  jobTitle: string | null;
+  employmentStatus: string | null;
+  jobPercent: number | null;
+  workDays: string | null;
+  hoursBaseCode: number | null;
+  pensionFundA: string | null;
+  pensionFundB: string | null;
+  studyFund: string | null;
+}
+
+/** The earliest birth date accepted: anything before is a typo. */
+export const BIRTH_DATE_MIN = '1900-01-01';
+/** `hours_base_code` is a smallint. */
+export const HOURS_BASE_CODE_MAX = 32767;
+
+/** Today's calendar day in Israel as `YYYY-MM-DD`, whatever the server's time zone. */
+export function todayInIsrael(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+/** A real `YYYY-MM-DD` birth date (already checked as a date) from 1900 up to `today`. */
+export function isBirthDateAllowed(date: string, today: string): boolean {
+  return date >= BIRTH_DATE_MIN && date <= today;
+}
+
+/**
+ * Whole years from `birthDate` to `today` (both `YYYY-MM-DD`). Someone born on 29 February is a
+ * year older on 1 March in a year with no 29 February.
+ */
+export function ageOn(birthDate: string, today: string): number {
+  const [birthYear = 0, birthMonth = 0, birthDay = 0] = birthDate.split('-').map(Number);
+  const [year = 0, month = 0, day = 0] = today.split('-').map(Number);
+  const hadBirthday = month > birthMonth || (month === birthMonth && day >= birthDay);
+  return year - birthYear - (hadBirthday ? 0 : 1);
+}
+
+/**
+ * שעות עבודה in the Har Gal export is a code for the full-time base, not a number of hours.
+ * Known codes → weekly hours of the base. Other codes (0 = not known yet, 2, …) are kept as they
+ * are and shown as the code (PRD §14 open question).
+ */
+export const HOURS_BASE_CODES: Readonly<Record<number, number>> = { 1: 42, 3: 30, 4: 40 };
+
+/** "42 שעות" for a known code, the code itself for an unknown one; null when there is none. */
+export function hoursBaseLabel(code: number | null): string | null {
+  if (code === null) return null;
+  const hours = HOURS_BASE_CODES[code];
+  return hours === undefined ? String(code) : `${hours} שעות`;
+}
+
+function roundTo2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * The rule for each extra value, without "empty": used by the API (below) and by the import for
+ * every filled cell, so both apply the same rule.
+ */
+export const employeeExtraValueSchemas = {
+  address: z.string().trim().min(1).max(EMPLOYEE_TEXT_MAX_LENGTH.address),
+  city: z.string().trim().min(1).max(EMPLOYEE_TEXT_MAX_LENGTH.city),
+  birthDate: z.iso
+    .date({ message: 'INVALID_BIRTH_DATE' })
+    .refine((date) => isBirthDateAllowed(date, todayInIsrael()), {
+      message: 'INVALID_BIRTH_DATE',
+    }),
+  jobTitle: z.string().trim().min(1).max(EMPLOYEE_TEXT_MAX_LENGTH.jobTitle),
+  employmentStatus: z.string().trim().min(1).max(EMPLOYEE_TEXT_MAX_LENGTH.employmentStatus),
+  jobPercent: z.number().min(0).max(100).transform(roundTo2),
+  workDays: z.string().trim().min(1).max(EMPLOYEE_TEXT_MAX_LENGTH.workDays),
+  hoursBaseCode: z.number().int().min(0).max(HOURS_BASE_CODE_MAX),
+  pensionFundA: z.string().trim().min(1).max(EMPLOYEE_TEXT_MAX_LENGTH.pensionFundA),
+  pensionFundB: z.string().trim().min(1).max(EMPLOYEE_TEXT_MAX_LENGTH.pensionFundB),
+  studyFund: z.string().trim().min(1).max(EMPLOYEE_TEXT_MAX_LENGTH.studyFund),
+} as const satisfies Record<EmployeeExtraField, z.ZodType>;
+
+/** API text extra: trimmed; empty or null → none (clears it on an edit). */
+function textInput(field: EmployeeTextField) {
+  return z
+    .string()
+    .trim()
+    .max(EMPLOYEE_TEXT_MAX_LENGTH[field])
+    .nullable()
+    .transform((value) => (value === null || value === '' ? null : value));
+}
+
+/**
+ * Every extra field, optional: what create and edit accept besides the core fields. A date or
+ * number extra takes its value rule, or null (clears it on an edit).
+ */
+const extraInputShape = {
+  landline: phoneInputSchema.optional(),
+  mobile: phoneInputSchema.optional(),
+  address: textInput('address').optional(),
+  city: textInput('city').optional(),
+  birthDate: employeeExtraValueSchemas.birthDate.nullable().optional(),
+  jobTitle: textInput('jobTitle').optional(),
+  employmentStatus: textInput('employmentStatus').optional(),
+  jobPercent: employeeExtraValueSchemas.jobPercent.nullable().optional(),
+  workDays: textInput('workDays').optional(),
+  hoursBaseCode: employeeExtraValueSchemas.hoursBaseCode.nullable().optional(),
+  pensionFundA: textInput('pensionFundA').optional(),
+  pensionFundB: textInput('pensionFundB').optional(),
+  studyFund: textInput('studyFund').optional(),
+};
+
 /** `POST /api/employees` (manager). Unknown fields are refused. */
 export const createEmployeeSchema = z.strictObject({
   employeeNumber: employeeNumberSchema,
@@ -123,14 +271,15 @@ export const createEmployeeSchema = z.strictObject({
   lastName: nameSchema,
   departmentId: z.uuid(),
   email: emailInputSchema.optional(),
-  phone: phoneInputSchema.optional(),
+  ...extraInputShape,
 });
 export type CreateEmployeeInput = z.output<typeof createEmployeeSchema>;
 
 /**
  * `PATCH /api/employees/:id` (manager); at least one field. The employee number can't be changed
  * (it is the import key and part of the signed-file path): unknown fields, `employeeNumber`
- * included, are refused. `email: null` or `""` removes the email; `phone` likewise.
+ * included, are refused. `email: null` or `""` removes the email; the phones and the text extras
+ * likewise; `null` removes a date or number extra.
  */
 export const updateEmployeeSchema = z
   .strictObject({
@@ -139,8 +288,8 @@ export const updateEmployeeSchema = z
     lastName: nameSchema.optional(),
     departmentId: z.uuid().optional(),
     email: emailInputSchema.optional(),
-    phone: phoneInputSchema.optional(),
     isActive: z.boolean().optional(),
+    ...extraInputShape,
   })
   .refine((value) => Object.values(value).some((item) => item !== undefined));
 export type UpdateEmployeeInput = z.output<typeof updateEmployeeSchema>;
@@ -181,10 +330,27 @@ export const employeeListItemSchema = z.object({
 });
 export type EmployeeListItem = z.infer<typeof employeeListItemSchema>;
 
-/** The employee card: the list row plus ID number, phone and dates. */
+/**
+ * The employee card: the list row plus ID number, phones, the extra details and dates. `age` is
+ * worked out from `birthDate` (today in Israel), never stored; `hoursBaseLabel` from the code.
+ */
 export const employeeCardSchema = employeeListItemSchema.extend({
   idNumber: z.string(),
-  phone: z.string().nullable(),
+  landline: z.string().nullable(),
+  mobile: z.string().nullable(),
+  address: z.string().nullable(),
+  city: z.string().nullable(),
+  birthDate: z.iso.date().nullable(),
+  age: z.number().int().nullable(),
+  jobTitle: z.string().nullable(),
+  employmentStatus: z.string().nullable(),
+  jobPercent: z.number().nullable(),
+  workDays: z.string().nullable(),
+  hoursBaseCode: z.number().int().nullable(),
+  hoursBaseLabel: z.string().nullable(),
+  pensionFundA: z.string().nullable(),
+  pensionFundB: z.string().nullable(),
+  studyFund: z.string().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });

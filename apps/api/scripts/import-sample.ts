@@ -4,7 +4,7 @@
 // Usage: pnpm import:sample [path]   (default: sample-har-gal.xlsx in the repo root)
 //
 // The rows match the seed (pnpm db:seed). The API test also marks 1002 and 1003 as bounced and
-// gives 1004 a phone first; without that, 1002 shows only its email change and 1004 only its
+// gives 1004 a mobile first; without that, 1002 shows only its email change and 1004 only its
 // department change.
 
 import { writeFileSync } from 'node:fs';

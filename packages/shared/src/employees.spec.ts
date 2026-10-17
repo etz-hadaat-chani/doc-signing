@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ageOn,
   createEmployeeSchema,
+  hoursBaseLabel,
   employeeListQuerySchema,
   isEmailFormat,
   nextEmailStatus,
@@ -8,6 +10,7 @@ import {
   normalizeEmployeeNumber,
   normalizePhone,
   normalizeSearchText,
+  todayInIsrael,
   updateEmployeeSchema,
 } from './employees.js';
 
@@ -124,7 +127,8 @@ describe('createEmployeeSchema', () => {
     lastName: 'כהן',
     departmentId,
     email: ' Moshe@Example.com ',
-    phone: '50-1234567',
+    landline: '2-6234567',
+    mobile: '50-1234567',
   };
 
   it('normalizes every field', () => {
@@ -135,16 +139,35 @@ describe('createEmployeeSchema', () => {
       lastName: 'כהן',
       departmentId,
       email: 'moshe@example.com',
-      phone: '050-1234567',
+      landline: '02-6234567',
+      mobile: '050-1234567',
     });
   });
 
-  it('email and phone are optional; empty means none', () => {
-    const required = { ...valid, email: undefined, phone: undefined };
+  it('email and phones are optional; empty means none', () => {
+    const required = { ...valid, email: undefined, landline: undefined, mobile: undefined };
     expect(createEmployeeSchema.parse(required).email).toBeUndefined();
-    expect(createEmployeeSchema.parse({ ...valid, email: '', phone: ' ' })).toMatchObject({
-      email: null,
-      phone: null,
+    expect(
+      createEmployeeSchema.parse({ ...valid, email: '', landline: ' ', mobile: '' }),
+    ).toMatchObject({ email: null, landline: null, mobile: null });
+  });
+
+  it('takes the extra details: text trimmed, empty text → none, numbers rounded to 2', () => {
+    const extras = {
+      address: ' הרצל 1 ',
+      city: '',
+      birthDate: '1980-05-03',
+      jobPercent: 62.555,
+      hoursBaseCode: 1,
+      pensionFundA: ' מגדל ',
+    };
+    expect(createEmployeeSchema.parse({ ...valid, ...extras })).toMatchObject({
+      address: 'הרצל 1',
+      city: null,
+      birthDate: '1980-05-03',
+      jobPercent: 62.56,
+      hoursBaseCode: 1,
+      pensionFundA: 'מגדל',
     });
   });
 
@@ -157,7 +180,11 @@ describe('createEmployeeSchema', () => {
   it.each([
     ['employeeNumber', { employeeNumber: '12a' }, 'INVALID_EMPLOYEE_NUMBER'],
     ['idNumber', { idNumber: '123456789' }, 'INVALID_ID_NUMBER'],
-    ['phone', { phone: '12' }, 'INVALID_PHONE'],
+    ['landline', { landline: '12' }, 'INVALID_PHONE'],
+    ['mobile', { mobile: '12' }, 'INVALID_PHONE'],
+    ['birthDate', { birthDate: '2999-01-01' }, 'INVALID_BIRTH_DATE'],
+    ['birthDate', { birthDate: '1899-12-31' }, 'INVALID_BIRTH_DATE'],
+    ['birthDate', { birthDate: '1980-02-30' }, 'INVALID_BIRTH_DATE'],
   ])('refuses a bad %s with its own code', (field, change, code) => {
     const result = createEmployeeSchema.safeParse({ ...valid, ...change });
     expect(result.success).toBe(false);
@@ -177,6 +204,20 @@ describe('updateEmployeeSchema', () => {
   it('accepts a single field', () => {
     expect(updateEmployeeSchema.parse({ isActive: false })).toEqual({ isActive: false });
     expect(updateEmployeeSchema.parse({ email: null })).toEqual({ email: null });
+  });
+
+  it('null clears a date, number or text extra', () => {
+    expect(updateEmployeeSchema.parse({ birthDate: null, jobPercent: null, city: '' })).toEqual({
+      birthDate: null,
+      jobPercent: null,
+      city: null,
+    });
+  });
+
+  it('refuses a job percent above 100 and a negative hours code', () => {
+    expect(updateEmployeeSchema.safeParse({ jobPercent: 101 }).success).toBe(false);
+    expect(updateEmployeeSchema.safeParse({ hoursBaseCode: -1 }).success).toBe(false);
+    expect(updateEmployeeSchema.safeParse({ hoursBaseCode: 1.5 }).success).toBe(false);
   });
 
   it('refuses an empty body', () => {
@@ -207,5 +248,34 @@ describe('employeeListQuerySchema', () => {
     expect(employeeListQuerySchema.safeParse({ dept: '15' }).success).toBe(false);
     expect(employeeListQuerySchema.safeParse({ emailStatus: 'nope' }).success).toBe(false);
     expect(employeeListQuerySchema.safeParse({ q: 'x'.repeat(101) }).success).toBe(false);
+  });
+});
+
+describe('ageOn', () => {
+  it('counts whole years up to the day', () => {
+    expect(ageOn('1980-05-03', '2026-05-02')).toBe(45);
+    expect(ageOn('1980-05-03', '2026-05-03')).toBe(46);
+  });
+
+  it('someone born on 29 February is a year older on 1 March in a common year', () => {
+    expect(ageOn('2000-02-29', '2026-02-28')).toBe(25);
+    expect(ageOn('2000-02-29', '2026-03-01')).toBe(26);
+  });
+});
+
+describe('todayInIsrael', () => {
+  it('is the day in Jerusalem, not in UTC', () => {
+    expect(todayInIsrael(new Date('2026-10-16T22:30:00Z'))).toBe('2026-10-17');
+  });
+});
+
+describe('hoursBaseLabel (שעות עבודה is a base code, not hours)', () => {
+  it('known codes → weekly hours; other codes shown as the code; none → null', () => {
+    expect(hoursBaseLabel(1)).toBe('42 שעות');
+    expect(hoursBaseLabel(3)).toBe('30 שעות');
+    expect(hoursBaseLabel(4)).toBe('40 שעות');
+    expect(hoursBaseLabel(0)).toBe('0');
+    expect(hoursBaseLabel(2)).toBe('2');
+    expect(hoursBaseLabel(null)).toBeNull();
   });
 });

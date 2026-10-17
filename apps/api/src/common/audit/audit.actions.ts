@@ -95,7 +95,11 @@ export interface AuditDetailsMap {
     renamedDepartments: { code: number; from: string; to: string }[];
   };
   /** A confirm refused for good (the batch is now `failed`); nothing was written. */
-  'import.failed': { fileName: string; reason: 'stale' | 'expired' | 'file_missing' };
+  'import.failed': {
+    fileName: string;
+    /** `format_changed`: failed by the 3.19 migration (the import reader changed). */
+    reason: 'stale' | 'expired' | 'file_missing' | 'format_changed';
+  };
   // Templates (3.5): the manager is the actor, the template version the entity.
   /** A PDF uploaded as version 1. Department codes, not ids. */
   'template.created': {

@@ -4,6 +4,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { Db } from '../../../common/prisma/prisma.types.js';
 import { Prisma } from '../../../generated/prisma/client.js';
 import type { EmployeeState } from '../employee-changes.js';
+import { detailsFromRow, detailsToData, employeeDetailsSelect } from '../employees.repository.js';
 import type { CurrentData, ImportDiff } from './import-diff.js';
 
 const employeeStateSelect = {
@@ -13,7 +14,7 @@ const employeeStateSelect = {
   lastName: true,
   email: true,
   emailStatus: true,
-  phone: true,
+  ...employeeDetailsSelect,
   isActive: true,
   department: { select: { code: true } },
 } as const;
@@ -77,7 +78,8 @@ export class ImportRepository {
     const byNumber = new Map<string, EmployeeState>();
     const idOwners = new Map<string, string>();
     for (const { department, ...employee } of employees) {
-      byNumber.set(employee.employeeNumber, { ...employee, departmentCode: department.code });
+      const state = { ...employee, ...detailsFromRow(employee), departmentCode: department.code };
+      byNumber.set(employee.employeeNumber, state);
       idOwners.set(employee.idNumber, employee.employeeNumber);
     }
     return {
@@ -194,7 +196,7 @@ export class ImportRepository {
         departmentId: employee.departmentId,
         email: employee.email,
         emailStatus: employee.emailStatus,
-        phone: employee.phone,
+        ...detailsToData(employee),
         isActive: employee.isActive,
         lastImportId: batchId,
       })),
@@ -205,8 +207,9 @@ export class ImportRepository {
 
   /**
    * Updates the changed employees in one statement, matched by employee number: every field the
-   * Har Gal export carries, the email status and `last_import_id`. Never `is_active`. Returns
-   * their ids by employee number.
+   * Har Gal export carries, the email status and `last_import_id`. Never `is_active`. The extra
+   * details are written as planned (an empty cell already kept the stored value). Returns their
+   * ids by employee number.
    */
   async updateEmployees(
     employees: EmployeeWrite[],
@@ -223,7 +226,19 @@ export class ImportRepository {
         department_id = v.department_id,
         email = v.email,
         email_status = v.email_status::email_status,
-        phone = v.phone,
+        landline = v.landline,
+        mobile = v.mobile,
+        address = v.address,
+        city = v.city,
+        birth_date = v.birth_date,
+        job_title = v.job_title,
+        employment_status = v.employment_status,
+        job_percent = v.job_percent,
+        work_days = v.work_days,
+        hours_base_code = v.hours_base_code,
+        pension_fund_a = v.pension_fund_a,
+        pension_fund_b = v.pension_fund_b,
+        study_fund = v.study_fund,
         last_import_id = ${batchId}::uuid
       FROM unnest(
         ${column((e) => e.employeeNumber)}::text[],
@@ -233,9 +248,23 @@ export class ImportRepository {
         ${column((e) => e.departmentId)}::uuid[],
         ${column((e) => e.email)}::text[],
         ${column((e) => e.emailStatus)}::text[],
-        ${column((e) => e.phone)}::text[]
+        ${column((e) => e.landline)}::text[],
+        ${column((e) => e.mobile)}::text[],
+        ${column((e) => e.address)}::text[],
+        ${column((e) => e.city)}::text[],
+        ${column((e) => e.birthDate)}::date[],
+        ${column((e) => e.jobTitle)}::text[],
+        ${column((e) => e.employmentStatus)}::text[],
+        ${column((e) => e.jobPercent)}::numeric[],
+        ${column((e) => e.workDays)}::text[],
+        ${column((e) => e.hoursBaseCode)}::smallint[],
+        ${column((e) => e.pensionFundA)}::text[],
+        ${column((e) => e.pensionFundB)}::text[],
+        ${column((e) => e.studyFund)}::text[]
       ) AS v(employee_number, id_number, first_name, last_name, department_id, email,
-             email_status, phone)
+             email_status, landline, mobile, address, city, birth_date, job_title,
+             employment_status, job_percent, work_days, hours_base_code, pension_fund_a,
+             pension_fund_b, study_fund)
       WHERE e.employee_number = v.employee_number
       RETURNING e.id, e.employee_number AS "employeeNumber"`;
     return new Map(rows.map(({ employeeNumber, id }) => [employeeNumber, id]));

@@ -1,10 +1,12 @@
-import type {
-  ApiError,
-  Department,
-  EmployeeCard,
-  EmployeeListItem,
-  FieldError,
-  Paged,
+import {
+  ageOn,
+  type ApiError,
+  type Department,
+  type EmployeeCard,
+  type EmployeeListItem,
+  type FieldError,
+  type Paged,
+  todayInIsrael,
 } from '@doc-signing/shared';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -96,7 +98,7 @@ async function newEmployee() {
     lastName: 'אלמוג',
     departmentId: await departmentId(19),
     email: ' Yonatan@Example.COM ',
-    phone: '52 123 4567',
+    mobile: '52 123 4567',
   };
 }
 
@@ -291,7 +293,8 @@ describe('POST /api/employees', () => {
       department: { code: 19 },
       email: 'yonatan@example.com',
       emailStatus: 'valid',
-      phone: '052-1234567',
+      landline: null,
+      mobile: '052-1234567',
       isActive: true,
     });
 
@@ -340,7 +343,9 @@ describe('POST /api/employees', () => {
     const base = await newEmployee();
     const cases = [
       [{ idNumber: '055500004' }, 'idNumber', 'INVALID_ID_NUMBER'],
-      [{ phone: '12' }, 'phone', 'INVALID_PHONE'],
+      [{ mobile: '12' }, 'mobile', 'INVALID_PHONE'],
+      [{ landline: 'abc' }, 'landline', 'INVALID_PHONE'],
+      [{ birthDate: '2999-01-01' }, 'birthDate', 'INVALID_BIRTH_DATE'],
       [{ employeeNumber: '12-3' }, 'employeeNumber', 'INVALID_EMPLOYEE_NUMBER'],
     ] as const;
     for (const [change, field, code] of cases) {
@@ -359,13 +364,64 @@ describe('POST /api/employees', () => {
 });
 
 describe('PATCH /api/employees/:id', () => {
+  it('edits the extra details; the card adds age and hours label; never in the list', async () => {
+    const id = await employeeId('1001');
+    const response = await update(id, {
+      mobile: '0521234567',
+      address: ' הרצל 1 ',
+      city: 'ירושלים',
+      birthDate: '1980-05-03',
+      jobTitle: 'גננת',
+      employmentStatus: 'קבוע',
+      jobPercent: 62.5,
+      workDays: 'א-ה',
+      hoursBaseCode: 1,
+      pensionFundA: 'מגדל',
+      studyFund: 'הראל',
+    });
+    expect(response.status).toBe(200);
+    expect(cardOf(response)).toMatchObject({
+      landline: null,
+      mobile: '052-1234567',
+      address: 'הרצל 1',
+      birthDate: '1980-05-03',
+      age: ageOn('1980-05-03', todayInIsrael()),
+      jobPercent: 62.5,
+      hoursBaseCode: 1,
+      hoursBaseLabel: '42 שעות',
+      pensionFundB: null,
+    });
+    const stored = await prisma.employee.findUniqueOrThrow({ where: { id } });
+    expect(stored.birthDate?.toISOString()).toBe('1980-05-03T00:00:00.000Z');
+
+    const [row] = await employeeAuditRows();
+    const changes = (row?.details as { changes: string[] }).changes;
+    expect(changes).toContain('birthDate: changed');
+    expect(changes).toContain('jobPercent: (none) → 62.5');
+    expect(JSON.stringify(changes)).not.toContain('1980');
+
+    const listed = pageOf(await list({ q: '1001' })).items[0] ?? {};
+    for (const key of ['mobile', 'address', 'birthDate', 'jobPercent', 'studyFund']) {
+      expect(listed).not.toHaveProperty(key);
+    }
+
+    const cleared = await update(id, { birthDate: null, address: '', hoursBaseCode: 0 });
+    expect(cardOf(cleared)).toMatchObject({
+      birthDate: null,
+      age: null,
+      address: null,
+      hoursBaseLabel: '0',
+      city: 'ירושלים',
+    });
+  });
+
   it('edits fields and logs each change as "field: old → new", never the ID value', async () => {
     const id = await employeeId('1001');
     const response = await update(id, {
       idNumber: '55500003',
       firstName: 'משה חיים',
       departmentId: await departmentId(61),
-      phone: '02-1234567',
+      landline: '02-1234567',
       isActive: false,
     });
     expect(response.status).toBe(200);
@@ -373,7 +429,7 @@ describe('PATCH /api/employees/:id', () => {
       idNumber: '055500003',
       firstName: 'משה חיים',
       department: { code: 61 },
-      phone: '02-1234567',
+      landline: '02-1234567',
       isActive: false,
     });
 
@@ -385,7 +441,7 @@ describe('PATCH /api/employees/:id', () => {
         'idNumber: changed',
         'firstName: משה → משה חיים',
         'departmentCode: 15 → 61',
-        'phone: (none) → 02-1234567',
+        'landline: (none) → 02-1234567',
         'isActive: true → false',
       ],
     });

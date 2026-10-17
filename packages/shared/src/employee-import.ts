@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { EmployeeExtraField } from './employees.js';
 import { emailStatusSchema } from './enums.js';
 
 /**
@@ -12,12 +13,31 @@ export const HAR_GAL_HEADERS = {
   lastName: 'שם משפחה',
   department: 'מחלקה',
   email: 'E-Mail',
-  phonePrefix: 'קידומת',
-  phone: 'טלפון',
+  landlinePrefix: 'קידומת',
+  landline: 'טלפון',
   mobilePrefix: 'נייד פרטי - קידומת',
   mobile: 'נייד פרטי - מספר',
 } as const;
 export type HarGalColumn = keyof typeof HAR_GAL_HEADERS;
+
+/**
+ * Optional extra columns (PRD FR-EMP-1), read by these exact headers when present. A missing one
+ * never fails the file; an empty cell or a missing column never erases a stored value (FR-EMP-4).
+ * תאריך לידה is the only column whose cell may be a date. שעות עבודה is the full-time base code.
+ */
+export const HAR_GAL_EXTRA_HEADERS = {
+  address: 'כתובת',
+  city: 'יישוב',
+  birthDate: 'תאריך לידה',
+  jobTitle: 'תאור תפקיד',
+  employmentStatus: 'מעמד',
+  jobPercent: 'אחוז משרה',
+  workDays: 'ימי עבודה',
+  hoursBaseCode: 'שעות עבודה',
+  pensionFundA: 'קוד קופ"ג א',
+  pensionFundB: 'קוד קופ"ג ב',
+  studyFund: 'קוד קרן השתלמות',
+} as const satisfies Record<EmployeeExtraField, string>;
 
 /** Upload limits (NFR-SEC-9). ~1,500 employees fit in well under 1 MB. */
 export const IMPORT_MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -61,7 +81,10 @@ export const IMPORT_ISSUE_MESSAGES = {
     `מספר תעודת הזהות כבר רשום לעובד אחר (מספר עובד ${ownerEmployeeNumber})`,
   // Warnings: the row is imported anyway.
   EMAIL_INVALID: () => 'כתובת האימייל אינה תקינה. העובד יישמר עם סטטוס "אימייל לא תקין"',
-  PHONE_INVALID: () => 'מספר הטלפון אינו תקין. הטלפון יישמר ריק',
+  LANDLINE_INVALID: () => 'מספר הטלפון הקווי אינו תקין. הטלפון הקווי יישמר ריק',
+  MOBILE_INVALID: () => 'מספר הנייד אינו תקין. הנייד יישמר ריק',
+  EXTRA_VALUE_INVALID: (header: string) =>
+    `הערך בעמודה "${header}" אינו תקין ולא יישמר. הערך הקיים במערכת נשאר`,
 } as const;
 
 export type ImportIssueCode = keyof typeof IMPORT_ISSUE_MESSAGES;

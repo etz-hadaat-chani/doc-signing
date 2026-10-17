@@ -1,19 +1,25 @@
-import { HAR_GAL_HEADERS, type HarGalColumn } from '@doc-signing/shared';
+import {
+  type EmployeeExtraField,
+  HAR_GAL_EXTRA_HEADERS,
+  HAR_GAL_HEADERS,
+  type HarGalColumn,
+} from '@doc-signing/shared';
 import ExcelJS, { type CellValue } from 'exceljs';
 
 /**
  * Builds a fake Har Gal employee export (.xlsx) in memory, for tests and the sample script.
  * Made-up data only; never the real export. The 10 columns the import reads are in a shuffled
- * order, mixed with columns it must ignore.
+ * order, mixed with columns it must ignore (salary and balances, FR-EMP-1). The 11 optional extra
+ * columns are not in it: add FIXTURE_EXTRA_HEADERS to `headers` to test them.
  */
 export const FIXTURE_HEADERS: readonly string[] = [
   'שם משפחה',
-  'תאריך לידה', // ignored
+  'שכר בסיס', // ignored
   'מספר עובד',
   'מחלקה',
   'שם פרטי',
   'E-Mail',
-  'מעמד', // ignored
+  'יתרת חופשה', // ignored
   'תעודת זהות',
   'נייד פרטי - קידומת',
   'נייד פרטי - מספר',
@@ -22,17 +28,24 @@ export const FIXTURE_HEADERS: readonly string[] = [
   'הערות', // ignored
 ];
 
-/** One employee row: a value per column the import reads; anything left out stays empty. */
-export type FixtureRow = Partial<Record<HarGalColumn, CellValue>>;
+/** The optional extra headers (FR-EMP-1), to append to FIXTURE_HEADERS. */
+export const FIXTURE_EXTRA_HEADERS: readonly string[] = Object.values(HAR_GAL_EXTRA_HEADERS);
 
-const COLUMN_BY_HEADER = new Map<string, HarGalColumn>(
-  (Object.entries(HAR_GAL_HEADERS) as [HarGalColumn, string][]).map(([key, text]) => [text, key]),
+type FixtureColumn = HarGalColumn | EmployeeExtraField;
+
+/** One employee row: a value per column the import reads; anything left out stays empty. */
+export type FixtureRow = Partial<Record<FixtureColumn, CellValue>>;
+
+const COLUMN_BY_HEADER = new Map<string, FixtureColumn>(
+  (
+    Object.entries({ ...HAR_GAL_HEADERS, ...HAR_GAL_EXTRA_HEADERS }) as [FixtureColumn, string][]
+  ).map(([key, text]) => [text, key]),
 );
 
 /** Values for the ignored columns, so they are not empty (and would fail checks if read). */
 const IGNORED_VALUES: Record<string, CellValue> = {
-  'תאריך לידה': new Date('1990-05-01T00:00:00Z'),
-  מעמד: 'פעיל',
+  'שכר בסיס': 12345.67,
+  'יתרת חופשה': new Date('1990-05-01T00:00:00Z'),
   הערות: '=1+1 not a real formula, just text',
 };
 

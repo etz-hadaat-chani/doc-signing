@@ -1,4 +1,9 @@
-import type { HarGalColumn } from '@doc-signing/shared';
+import {
+  EMPLOYEE_EXTRA_FIELDS,
+  type EmployeeExtraField,
+  type HarGalColumn,
+  importIssue,
+} from '@doc-signing/shared';
 import { describe, expect, it } from 'vitest';
 import type { CellData } from './excel-cell.js';
 import type { SheetRow } from './har-gal-sheet.js';
@@ -6,10 +11,20 @@ import { checkRow } from './import-row.js';
 
 const num = (value: number): CellData => ({ kind: 'number', value });
 const txt = (value: string): CellData => ({ kind: 'text', value });
+const day = (value: string): CellData => ({ kind: 'date', value });
 
-function sheetRow(cells: Partial<Record<HarGalColumn, CellData>>): SheetRow {
+const noExtras = Object.fromEntries(EMPLOYEE_EXTRA_FIELDS.map((field) => [field, null])) as Record<
+  EmployeeExtraField,
+  CellData
+>;
+
+function sheetRow(
+  cells: Partial<Record<HarGalColumn, CellData>>,
+  extras: Partial<Record<EmployeeExtraField, CellData>> = {},
+): SheetRow {
   return {
     rowNumber: 5,
+    extras: { ...noExtras, ...extras },
     cells: {
       employeeNumber: num(2001),
       idNumber: num(12345674), // 012345674 without its leading 0
@@ -17,8 +32,8 @@ function sheetRow(cells: Partial<Record<HarGalColumn, CellData>>): SheetRow {
       lastName: txt('כהן'),
       department: txt('45 - ממלאות מקום אלעד-45'),
       email: txt('Dana@Example.com'),
-      phonePrefix: null,
-      phone: null,
+      landlinePrefix: null,
+      landline: null,
       mobilePrefix: null,
       mobile: null,
       ...cells,
@@ -41,7 +56,9 @@ describe('checkRow', () => {
       departmentCode: 45,
       departmentName: 'ממלאות מקום אלעד-45',
       email: 'dana@example.com',
-      phone: null,
+      landline: null,
+      mobile: null,
+      extras: {},
     });
   });
 
@@ -70,31 +87,93 @@ describe('checkRow', () => {
     expect(checked.employee).toBeNull();
   });
 
-  describe('phone', () => {
-    it('takes the mobile and puts back the 0 of a prefix sent as a number', () => {
+  describe('phones', () => {
+    it('stores landline and mobile separately, putting back the 0 of a prefix sent as a number', () => {
       const checked = checkRow(
         sheetRow({
           mobilePrefix: num(50),
           mobile: num(1234567),
-          phonePrefix: num(2),
-          phone: num(6234567),
+          landlinePrefix: num(2),
+          landline: num(6234567),
         }),
       );
-      expect(checked.employee?.phone).toBe('050-1234567');
+      expect(checked.employee).toMatchObject({ landline: '02-6234567', mobile: '050-1234567' });
     });
 
-    it('falls back to the landline', () => {
+    it('an empty number cell means no phone', () => {
+      const checked = checkRow(sheetRow({ mobilePrefix: num(50), landline: txt('02-6234567') }));
+      expect(checked.employee).toMatchObject({ landline: '02-6234567', mobile: null });
+    });
+
+    it('each unreadable phone is saved empty with its own warning', () => {
       const checked = checkRow(
-        sheetRow({ mobilePrefix: num(50), phonePrefix: txt('02'), phone: txt('6234567') }),
+        sheetRow({ mobilePrefix: num(50), mobile: txt('12'), landline: txt('3') }),
       );
-      expect(checked.employee?.phone).toBe('02-6234567');
+      expect(checked.employee).toMatchObject({ landline: null, mobile: null });
+      expect(codes(checked.warnings)).toEqual(['LANDLINE_INVALID', 'MOBILE_INVALID']);
+      expect(checked.errors).toEqual([]);
+    });
+  });
+
+  describe('extra columns', () => {
+    it('takes filled cells: a date cell, numbers, trimmed text', () => {
+      const checked = checkRow(
+        sheetRow(
+          {},
+          {
+            birthDate: day('1980-05-03'),
+            jobPercent: num(62.5),
+            hoursBaseCode: num(1),
+            workDays: num(5),
+            pensionFundA: txt('מגדל'),
+          },
+        ),
+      );
+      expect(checked.warnings).toEqual([]);
+      expect(checked.employee?.extras).toEqual({
+        birthDate: '1980-05-03',
+        jobPercent: 62.5,
+        hoursBaseCode: 1,
+        workDays: '5',
+        pensionFundA: 'מגדל',
+      });
     });
 
-    it('saves an unreadable phone as empty, with a warning', () => {
-      const checked = checkRow(sheetRow({ mobilePrefix: num(50), mobile: txt('12') }));
-      expect(checked.employee?.phone).toBeNull();
-      expect(codes(checked.warnings)).toEqual(['PHONE_INVALID']);
+    it('reads a birth date typed as DD/MM/YYYY and numbers typed as text', () => {
+      const checked = checkRow(
+        sheetRow({}, { birthDate: txt('3/5/1980'), jobPercent: txt('100') }),
+      );
+      expect(checked.employee?.extras).toEqual({ birthDate: '1980-05-03', jobPercent: 100 });
+    });
+
+    it('leaves out an unusable cell with a warning naming its column; the row is imported', () => {
+      const checked = checkRow(
+        sheetRow(
+          {},
+          {
+            birthDate: txt('לא ידוע'),
+            jobPercent: num(150),
+            hoursBaseCode: txt('מלא'),
+            city: txt('א'.repeat(61)),
+          },
+        ),
+      );
       expect(checked.errors).toEqual([]);
+      expect(checked.employee?.extras).toEqual({});
+      expect(checked.warnings).toEqual([
+        importIssue('EXTRA_VALUE_INVALID', 'יישוב'),
+        importIssue('EXTRA_VALUE_INVALID', 'תאריך לידה'),
+        importIssue('EXTRA_VALUE_INVALID', 'אחוז משרה'),
+        importIssue('EXTRA_VALUE_INVALID', 'שעות עבודה'),
+      ]);
+    });
+
+    it('refuses a birth date in the future or before 1900, and a day that does not exist', () => {
+      for (const cell of [day('2999-01-01'), day('1899-12-31'), txt('31/02/1980')]) {
+        const checked = checkRow(sheetRow({}, { birthDate: cell }));
+        expect(codes(checked.warnings)).toEqual(['EXTRA_VALUE_INVALID']);
+        expect(checked.employee?.extras).toEqual({});
+      }
     });
   });
 

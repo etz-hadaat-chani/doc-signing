@@ -48,6 +48,16 @@ describe('readCell', () => {
     expect(readCell(new Date('2026-01-02T00:00:00Z'))?.kind).toBe('text');
     expect(readCell(true)).toEqual({ kind: 'text', value: 'TRUE' });
   });
+
+  it('with dates (תאריך לידה only): a date cell is its day, no time zone shift', () => {
+    const cell = readCell(new Date('1980-05-03T00:00:00Z'), { dates: true });
+    expect(cell).toEqual({ kind: 'date', value: '1980-05-03' });
+    expect(
+      readCell({ formula: 'X', result: new Date('1980-05-03T00:00:00Z') }, { dates: true }),
+    ).toEqual({ kind: 'date', value: '1980-05-03' });
+    expect(digitsText(cell)).toBeNull();
+    expect(plainText(cell)).toBe('1980-05-03');
+  });
 });
 
 describe('digitsText', () => {

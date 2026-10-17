@@ -12,6 +12,7 @@ export const ERROR_MESSAGES = {
   INVALID_ID_NUMBER: 'מספר תעודת הזהות אינו תקין',
   INVALID_EMPLOYEE_NUMBER: 'מספר העובד חייב להכיל ספרות בלבד (עד 20 ספרות)',
   INVALID_PHONE: 'מספר הטלפון אינו תקין',
+  INVALID_BIRTH_DATE: 'תאריך הלידה אינו תקין (תאריך עתידי או לפני 1900)',
   BAD_REQUEST: 'הבקשה אינה תקינה',
   INVALID_CREDENTIALS: 'האימייל או הסיסמה שגויים',
   UNAUTHORIZED: 'יש להתחבר למערכת',

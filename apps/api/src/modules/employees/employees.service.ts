@@ -15,11 +15,14 @@ import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { Db } from '../../common/prisma/prisma.types.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { describeEmployeeChanges, type EmployeeState } from './employee-changes.js';
+import { buildCard, newDetails, readState } from './employee-details.js';
 import {
+  detailsToData,
   employeeCardSelect,
   type EmployeeCardRow,
   type EmployeeListRow,
   EmployeesRepository,
+  sentDetails,
 } from './employees.repository.js';
 
 /** The manager making a change: who, from where. */
@@ -37,37 +40,6 @@ function toListItem(row: EmployeeListRow): EmployeeListItem {
     department: { id: row.departmentId, code: row.departmentCode, name: row.departmentName },
     email: row.email,
     emailStatus: row.emailStatus,
-    isActive: row.isActive,
-  };
-}
-
-function toCard(row: EmployeeCardRow): EmployeeCard {
-  return {
-    id: row.id,
-    employeeNumber: row.employeeNumber,
-    idNumber: row.idNumber,
-    firstName: row.firstName,
-    lastName: row.lastName,
-    department: row.department,
-    email: row.email,
-    emailStatus: row.emailStatus,
-    phone: row.phone,
-    isActive: row.isActive,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-
-function toState(row: EmployeeCardRow): EmployeeState {
-  return {
-    employeeNumber: row.employeeNumber,
-    idNumber: row.idNumber,
-    firstName: row.firstName,
-    lastName: row.lastName,
-    departmentCode: row.department.code,
-    email: row.email,
-    emailStatus: row.emailStatus,
-    phone: row.phone,
     isActive: row.isActive,
   };
 }
@@ -107,7 +79,7 @@ export class EmployeesService {
       select: employeeCardSelect,
     });
     if (!row) throw new AppException('NOT_FOUND', HttpStatus.NOT_FOUND);
-    return toCard(row);
+    return buildCard(row);
   }
 
   /** Adds one employee (active) and logs it, together. */
@@ -127,7 +99,7 @@ export class EmployeesService {
             departmentId: department.id,
             email,
             emailStatus,
-            phone: input.phone ?? null,
+            ...detailsToData(newDetails(input)),
           },
           select: employeeCardSelect,
         });
@@ -146,7 +118,7 @@ export class EmployeesService {
           },
           tx,
         );
-        return toCard(employee);
+        return buildCard(employee);
       });
     } catch (error) {
       // The same number or ID saved at the same moment by another request: say which one.
@@ -186,11 +158,11 @@ export class EmployeesService {
     const department = await this.departmentFor(input, stored, db);
     await this.checkNewIdNumber(input, stored, db);
     const wanted = this.editedState(input, stored, department.code);
-    const lines = describeEmployeeChanges(toState(stored), wanted);
-    if (lines.length === 0) return toCard(stored);
+    const lines = describeEmployeeChanges(readState(stored), wanted);
+    if (lines.length === 0) return buildCard(stored);
     const row = await this.saveEdit(id, wanted, department.id, db);
     await this.logEdit(id, lines, actor, db);
-    return toCard(row);
+    return buildCard(row);
   }
 
   /** The department after the edit: the stored one, or the new one (which must exist). */
@@ -221,7 +193,7 @@ export class EmployeesService {
     stored: EmployeeCardRow,
     departmentCode: number,
   ): EmployeeState {
-    const before = toState(stored);
+    const before = readState(stored);
     const email = input.email === undefined ? before.email : input.email;
     const emailStatus =
       input.email === undefined ? before.emailStatus : nextEmailStatus(before, email);
@@ -233,7 +205,7 @@ export class EmployeesService {
       departmentCode,
       email,
       emailStatus,
-      phone: input.phone === undefined ? before.phone : input.phone,
+      ...sentDetails(input),
       isActive: input.isActive ?? before.isActive,
     };
   }
@@ -254,7 +226,7 @@ export class EmployeesService {
         departmentId,
         email: wanted.email,
         emailStatus: wanted.emailStatus,
-        phone: wanted.phone,
+        ...detailsToData(wanted),
         isActive: wanted.isActive,
       },
       select: employeeCardSelect,

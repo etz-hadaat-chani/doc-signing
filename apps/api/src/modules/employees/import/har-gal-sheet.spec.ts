@@ -1,6 +1,7 @@
 import { IMPORT_MAX_ROWS } from '@doc-signing/shared';
 import { describe, expect, it } from 'vitest';
 import {
+  FIXTURE_EXTRA_HEADERS,
   FIXTURE_HEADERS,
   type FixtureRow,
   harGalXlsx,
@@ -41,11 +42,43 @@ describe('readHarGalSheet', () => {
       lastName: { kind: 'text', value: 'כהן' },
       department: { kind: 'text', value: '15 - ממלאות מקום ירושלים' },
       email: null,
-      phonePrefix: null,
-      phone: null,
+      landlinePrefix: null,
+      landline: null,
       mobilePrefix: null,
       mobile: null,
     });
+    expect(Object.values(first?.extras ?? {}).every((cell) => cell === null)).toBe(true);
+  });
+
+  it('reads the extra columns when present; only תאריך לידה keeps a date cell as a date', async () => {
+    const headers = [...FIXTURE_HEADERS, ...FIXTURE_EXTRA_HEADERS];
+    const [first] = await read(
+      [
+        {
+          ...row,
+          birthDate: new Date('1980-05-03T00:00:00Z'),
+          jobPercent: 50,
+          city: new Date('2020-01-01T00:00:00Z'),
+          studyFund: ' הראל ',
+        },
+      ],
+      { headers },
+    );
+    expect(first?.extras).toMatchObject({
+      birthDate: { kind: 'date', value: '1980-05-03' },
+      jobPercent: { kind: 'number', value: 50 },
+      city: { kind: 'text', value: '2020-01-01T00:00:00.000Z' },
+      studyFund: { kind: 'text', value: 'הראל' },
+      address: null,
+    });
+  });
+
+  it('a missing extra column is fine; one twice fails the file', async () => {
+    const some = [...FIXTURE_HEADERS, 'כתובת'];
+    expect(await read([row], { headers: some })).toHaveLength(1);
+    const error = await failure(read([row], { headers: [...some, 'כתובת'] }));
+    expect(error.code).toBe('IMPORT_DUPLICATE_COLUMN');
+    expect(error.details).toEqual({ columns: ['כתובת'] });
   });
 
   it('skips empty rows and keeps the Excel row numbers', async () => {
