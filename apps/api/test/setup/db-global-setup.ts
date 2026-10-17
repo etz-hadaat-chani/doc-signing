@@ -32,12 +32,53 @@ async function createDatabaseIfMissing(databaseUrl: string): Promise<void> {
 }
 
 /**
- * Runs once before the DB tests: create the test database and apply all migrations to it; pick
- * the test bucket (the storage adapter creates it).
+ * Key of the session-level advisory lock one DB test run holds from start to end (the app's own
+ * locks use 3_xxx_xxx keys).
  */
-export default async function setup(project: TestProject): Promise<void> {
+const TEST_RUN_LOCK = 9_000_001;
+/** How long a second run waits for the first before giving up. */
+const TEST_RUN_WAIT = '10min';
+
+/**
+ * Only one DB test run at a time: two runs (two terminals, or an editor's test runner) share the
+ * test database, so each one's resetDatabase would empty tables under the other's tests (lost
+ * sessions, missing rows, deadlocks on TRUNCATE). The lock is held on its own connection until
+ * the run ends; if the run is killed, Postgres drops the connection and the lock with it.
+ * Returns the function that releases it.
+ */
+async function lockTestRun(databaseUrl: string): Promise<() => Promise<void>> {
+  const client = new pg.Client({ connectionString: databaseUrl, connectionTimeoutMillis: 5000 });
+  await client.connect();
+  const tried = await client.query<{ locked: boolean }>('SELECT pg_try_advisory_lock($1) AS locked', [
+    TEST_RUN_LOCK,
+  ]);
+  if (!tried.rows[0]?.locked) {
+    console.log('Another DB test run is using the test database; waiting for it to finish...');
+    try {
+      await client.query(`SET lock_timeout = '${TEST_RUN_WAIT}'`);
+      await client.query('SELECT pg_advisory_lock($1)', [TEST_RUN_LOCK]);
+    } catch (error) {
+      await client.end();
+      throw new Error(
+        `Another DB test run held the test database for over ${TEST_RUN_WAIT}. Stop it and run again.`,
+        { cause: error },
+      );
+    }
+  }
+  return async () => {
+    await client.end();
+  };
+}
+
+/**
+ * Runs once before the DB tests: create the test database, wait for any other DB test run to end
+ * (lockTestRun), apply all migrations; pick the test bucket (the storage adapter creates it).
+ * Returns the teardown that releases the run lock.
+ */
+export default async function setup(project: TestProject): Promise<() => Promise<void>> {
   const databaseUrl = testDatabaseUrl();
   await createDatabaseIfMissing(databaseUrl);
+  const unlock = await lockTestRun(databaseUrl);
 
   const prismaCli = createRequire(import.meta.url).resolve('prisma/build/index.js');
   execFileSync(process.execPath, [prismaCli, 'migrate', 'deploy'], {
@@ -48,4 +89,5 @@ export default async function setup(project: TestProject): Promise<void> {
 
   project.provide('databaseUrl', databaseUrl);
   project.provide('s3Bucket', testBucketName());
+  return unlock;
 }
