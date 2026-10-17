@@ -26,10 +26,19 @@ export const AUDIT_ACTIONS = [
   'template.updated',
   'template.version_created',
   'template.archived',
+  'settings.updated',
+  'settings.employer_signature_uploaded',
+  'settings.employer_signature_viewed',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
-export const AUDIT_ENTITY_TYPES = ['user', 'employee', 'import_batch', 'template'] as const;
+export const AUDIT_ENTITY_TYPES = [
+  'user',
+  'employee',
+  'import_batch',
+  'template',
+  'settings',
+] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 
 /**
@@ -121,4 +130,19 @@ export interface AuditDetailsMap {
     changes: string[];
   };
   'template.archived': { name: string; version: number };
+  // Settings (3.18): the manager is the actor; the entity is `settings` with no id (text keys).
+  /** One line per changed value, "field: old → new" (`null` = no limit). */
+  'settings.updated': { changes: string[] };
+  /** A new employer signature image (FR-ADM-2). `fileId` is the uuid in its storage key. */
+  'settings.employer_signature_uploaded': {
+    fileId: string;
+    width: number;
+    height: number;
+    size: number;
+    fileSha256: string;
+    /** The image this one replaces (kept in storage), if any. */
+    replacedFileId: string | null;
+  };
+  /** A short-lived link to the image was given out (NFR-SEC-8). */
+  'settings.employer_signature_viewed': { fileId: string };
 }

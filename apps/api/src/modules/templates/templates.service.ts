@@ -17,6 +17,7 @@ import { AuditService } from '../../common/audit/audit.service.js';
 import { AppException } from '../../common/errors/app.exception.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { Db } from '../../common/prisma/prisma.types.js';
+import { SettingsService } from '../../common/settings/settings.service.js';
 import { StorageAdapter } from '../../common/storage/storage.adapter.js';
 import { type PdfContent, readPdfContent } from '../../common/upload/pdf-content.js';
 import { Prisma } from '../../generated/prisma/client.js';
@@ -57,11 +58,13 @@ function toPosition(field: TemplateRow['fields'][number]): FieldPosition {
   };
 }
 
-function toItem(row: TemplateRow): TemplateItem {
+/** `employerSignatureImageUploaded`: whether the employer signature image exists (3.18). */
+function toItem(row: TemplateRow, employerSignatureImageUploaded: boolean): TemplateItem {
   const fields = row.fields.map((field) => ({ id: field.id, ...toPosition(field) }));
   const notReadyReasons = templateReadiness({
     employerSignatureMode: row.employerSignatureMode,
     fields,
+    employerSignatureImageUploaded,
   });
   return {
     id: row.id,
@@ -115,16 +118,19 @@ export class TemplatesService {
     private readonly repository: TemplatesRepository,
     private readonly storage: StorageAdapter,
     private readonly audit: AuditService,
+    private readonly settings: SettingsService,
   ) {}
 
   async list(query: TemplateListQuery): Promise<Paged<TemplateItem>> {
     const { rows, total } = await this.repository.list(query);
-    return { items: rows.map(toItem), total, page: query.page, pageSize: query.pageSize };
+    const uploaded = await this.settings.hasEmployerSignatureImage();
+    const items = rows.map((row) => toItem(row, uploaded));
+    return { items, total, page: query.page, pageSize: query.pageSize };
   }
 
   /** Any version, also archived or old ones. */
   async get(id: string): Promise<TemplateItem> {
-    return toItem(await this.mustFind(id));
+    return this.toItem(await this.mustFind(id));
   }
 
   /**
@@ -166,7 +172,7 @@ export class TemplatesService {
       );
       return created;
     });
-    return toItem(row);
+    return this.toItem(row);
   }
 
   /**
@@ -185,7 +191,8 @@ export class TemplatesService {
     // Every version of a template shares its file, so this result holds whatever happens next.
     if (input.fields) await this.checkPositions(id, input.fields);
     try {
-      return await this.prisma.$transaction((tx) => this.applyUpdate(id, input, actor, tx));
+      const row = await this.prisma.$transaction((tx) => this.applyUpdate(id, input, actor, tx));
+      return await this.toItem(row);
     } catch (error) {
       // Backstop: another edit created the next version first (unique parent_template_id).
       if (isUniqueViolation(error)) {
@@ -214,7 +221,7 @@ export class TemplatesService {
       );
       return archived;
     });
-    return toItem(row);
+    return this.toItem(row);
   }
 
   /**
@@ -227,13 +234,18 @@ export class TemplatesService {
     }
   }
 
+  /** The API item, with the readiness check that needs to know whether the image exists. */
+  private async toItem(row: TemplateRow): Promise<TemplateItem> {
+    return toItem(row, await this.settings.hasEmployerSignatureImage());
+  }
+
   /** Inside the transaction: lock, check, compare, then edit in place or create a version. */
   private async applyUpdate(
     id: string,
     input: TemplateUpdateInput,
     actor: TemplateActor,
     db: Db,
-  ): Promise<TemplateItem> {
+  ): Promise<TemplateRow> {
     const stored = await this.repository.lockForUpdate(id, db);
     if (!stored) throw new AppException('NOT_FOUND', HttpStatus.NOT_FOUND);
     if (stored.isArchived) throw new AppException('TEMPLATE_ARCHIVED', HttpStatus.CONFLICT);
@@ -251,7 +263,7 @@ export class TemplatesService {
       fields: input.fields ?? before.fields,
     };
     const changes = describeTemplateChanges(before, after);
-    if (changes.length === 0) return toItem(stored);
+    if (changes.length === 0) return stored;
 
     const user = { type: 'user', userId: actor.userId } as const;
     if (stored.isLocked && documentChanged(before, after)) {
@@ -281,7 +293,7 @@ export class TemplatesService {
         },
         db,
       );
-      return toItem(created);
+      return created;
     }
     const updated = await this.repository.updateInPlace(
       id,
@@ -306,7 +318,7 @@ export class TemplatesService {
       },
       db,
     );
-    return toItem(updated);
+    return updated;
   }
 
   /**

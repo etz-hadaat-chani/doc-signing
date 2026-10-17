@@ -15,6 +15,7 @@ import { PrismaService } from '../../src/common/prisma/prisma.service.js';
 import { StorageAdapter } from '../../src/common/storage/storage.adapter.js';
 import { TemplatesService } from '../../src/modules/templates/templates.service.js';
 import { PAGE, testPdf } from '../fixtures/pdf.js';
+import { testPng } from '../fixtures/png.js';
 import { createTestApp, httpServer } from '../setup/app.js';
 import { resetDatabase } from '../setup/database.js';
 
@@ -84,6 +85,15 @@ async function uploaded(options: UploadOptions & { bytes?: Buffer } = {}): Promi
   const response = await upload(options.bytes ?? (await testPdf()), options);
   expect(response.status).toBe(201);
   return itemOf(response);
+}
+
+/** Uploads the employer signature image (3.18): `pre_signed` / `after_employee` need it. */
+async function uploadEmployerSignature(): Promise<void> {
+  const response = await server()
+    .post('/api/settings/employer-signature')
+    .set('Cookie', managerCookie)
+    .attach('file', testPng(), 'חתימה.png');
+  expect(response.status).toBe(201);
 }
 
 function patch(id: string, body: object, cookie: string | null = managerCookie) {
@@ -516,6 +526,7 @@ describe('field types and box settings (3.20)', () => {
   ]);
 
   it('saves every type with its settings and reads them back', async () => {
+    await uploadEmployerSignature();
     const created = await uploaded();
     const box = (fieldType: string) => ({ label: `תיבה ${fieldType}`, fieldType });
     const settingsFor: Record<string, object> = {
@@ -594,6 +605,7 @@ describe('field types and box settings (3.20)', () => {
   });
 
   it('the substitute contract saves and reports ready; each missing pair is a reason', async () => {
+    await uploadEmployerSignature();
     const created = await uploaded();
     const ready = await patch(created.id, {
       fields: substitute,
@@ -624,6 +636,31 @@ describe('field types and box settings (3.20)', () => {
     expect(await reasonsWithout('pension_no_fund')).toEqual(['PENSION_INCOMPLETE']);
     expect(await reasonsWithout('pension_has_fund')).toEqual(['PENSION_INCOMPLETE']);
     expect(await reasonsWithout('employer_signature')).toEqual(['EMPLOYER_SIGNATURE_MISSING']);
+  });
+
+  it('a pre_signed template is not ready until the employer signature image is uploaded', async () => {
+    const created = await uploaded();
+    const notReady = itemOf(
+      await patch(created.id, { fields: substitute, employerSignatureMode: 'pre_signed' }),
+    );
+    expect(notReady).toMatchObject({
+      isReady: false,
+      notReadyReasons: [
+        {
+          code: 'EMPLOYER_SIGNATURE_IMAGE_MISSING',
+          message: 'לא הועלתה תמונת חתימת המעסיק',
+          keys: [],
+        },
+      ],
+    });
+    const listed = await server().get('/api/templates').set('Cookie', managerCookie);
+    expect(listed.body).toMatchObject({ items: [{ id: created.id, isReady: false }] });
+
+    await uploadEmployerSignature();
+    const read = itemOf(
+      await server().get(`/api/templates/${created.id}`).set('Cookie', managerCookie),
+    );
+    expect(read).toMatchObject({ isReady: true, notReadyReasons: [] });
   });
 
   it('one box of each of the six types, with a condition and limits, reports ready', async () => {

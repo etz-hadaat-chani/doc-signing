@@ -304,6 +304,7 @@ export const TEMPLATE_NOT_READY_MESSAGES = {
   PENSION_INCOMPLETE: 'בקרן הפנסיה חייבים להופיע יחד "יש קרן פעילה" ו"אין קרן פעילה"',
   PENSION_SOURCE_MISMATCH: 'כל שדות קרן הפנסיה חייבים להשתמש באותו מקור (א ואז ב, או ב בלבד)',
   EMPLOYER_SIGNATURE_MISSING: 'נבחרה חתימת מעסיק, אבל אין בתבנית מיקום לחתימת המעסיק',
+  EMPLOYER_SIGNATURE_IMAGE_MISSING: 'לא הועלתה תמונת חתימת המעסיק',
   LABEL_MISSING: 'לכל תיבה שהעובד ממלא חייבת להיות כותרת בעברית',
   TOO_FEW_CHOICES: 'ברשימת בחירה חייבות להיות לפחות 2 אפשרויות',
   CONDITION_KEY_MISSING: 'תנאי מפנה לתיבה שאינה קיימת בתבנית',
@@ -366,11 +367,13 @@ function conditionValues(target: TemplateFieldSettings): readonly string[] | nul
 /**
  * The "template ready" check (FR-TPL-8): every reason the template can't be used in a round,
  * or an empty list when it can. Saving never waits for this; rounds refuse a template that
- * isn't ready (3.8, 3.9).
+ * isn't ready (3.8, 3.9). Pure (no database): the caller says whether the employer signature
+ * image is uploaded (3.18), since `pre_signed` and `after_employee` need it.
  */
 export function templateReadiness(template: {
   employerSignatureMode: EmployerSignatureMode;
   fields: readonly TemplateFieldSettings[];
+  employerSignatureImageUploaded: boolean;
 }): TemplateNotReadyReason[] {
   const { fields } = template;
   const found = new Map<TemplateNotReadyCode, string[]>();
@@ -407,6 +410,9 @@ export function templateReadiness(template: {
   }
   if (template.employerSignatureMode !== 'none' && !has('employer_signature')) {
     add('EMPLOYER_SIGNATURE_MISSING');
+  }
+  if (template.employerSignatureMode !== 'none' && !template.employerSignatureImageUploaded) {
+    add('EMPLOYER_SIGNATURE_IMAGE_MISSING');
   }
 
   let drawings = 0;

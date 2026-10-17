@@ -28,7 +28,11 @@ const messagesOf = (value: object) => {
 
 const fields = (list: object[]) => templateFieldListSchema.parse(list);
 const codes = (list: object[], employerSignatureMode: EmployerSignatureMode = 'none') =>
-  templateReadiness({ employerSignatureMode, fields: fields(list) }).map(({ code }) => code);
+  templateReadiness({
+    employerSignatureMode,
+    fields: fields(list),
+    employerSignatureImageUploaded: true,
+  }).map(({ code }) => code);
 
 const signature = pos('signature');
 const labelled = (fieldType: string, settings: object = {}) =>
@@ -228,6 +232,7 @@ describe('templateReadiness (FR-TPL-8)', () => {
     const reasons = templateReadiness({
       employerSignatureMode: 'none',
       fields: fields([signature, pos('text', { key: 'note' }), pos('text')]),
+      employerSignatureImageUploaded: false,
     });
     expect(reasons).toEqual([
       {
@@ -413,6 +418,31 @@ describe('templateReadiness (FR-TPL-8)', () => {
   ];
   it.each(cases)('%s', (_name, list, code, mode = 'none') => {
     expect(codes(list, mode)).toEqual([code]);
+  });
+
+  describe('the employer signature image (3.18)', () => {
+    const withEmployer = fields([signature, pos('employer_signature')]);
+    const reasonsFor = (mode: EmployerSignatureMode, uploaded: boolean) =>
+      templateReadiness({
+        employerSignatureMode: mode,
+        fields: withEmployer,
+        employerSignatureImageUploaded: uploaded,
+      }).map(({ code }) => code);
+
+    it.each(['pre_signed', 'after_employee'] as const)('%s needs the image', (mode) => {
+      expect(reasonsFor(mode, false)).toEqual(['EMPLOYER_SIGNATURE_IMAGE_MISSING']);
+      expect(reasonsFor(mode, true)).toEqual([]);
+    });
+
+    it('none never needs it', () => {
+      expect(
+        templateReadiness({
+          employerSignatureMode: 'none',
+          fields: fields([signature]),
+          employerSignatureImageUploaded: false,
+        }),
+      ).toEqual([]);
+    });
   });
 
   it('a box drawn at several positions with the same settings is one box', () => {

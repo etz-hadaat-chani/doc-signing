@@ -55,10 +55,13 @@ describe('Swagger page outside production', () => {
         'GET /api/employees',
         'GET /api/employees/{id}',
         'GET /api/health',
+        'GET /api/settings',
+        'GET /api/settings/employer-signature',
         'GET /api/templates',
         'GET /api/templates/{id}',
         'GET /api/users',
         'PATCH /api/employees/{id}',
+        'PATCH /api/settings',
         'PATCH /api/templates/{id}',
         'PATCH /api/users/{id}',
         'POST /api/auth/login',
@@ -66,6 +69,7 @@ describe('Swagger page outside production', () => {
         'POST /api/employees',
         'POST /api/employees/import/{batchId}/commit',
         'POST /api/employees/import/preview',
+        'POST /api/settings/employer-signature',
         'POST /api/templates',
         'POST /api/templates/{id}/archive',
         'POST /api/users',
@@ -98,6 +102,13 @@ describe('Swagger page outside production', () => {
     const body = document.paths['/api/templates']?.post?.requestBody;
     const schema = body?.content['multipart/form-data']?.schema;
     expect(schema?.required).toEqual(['file', 'name', 'departmentIds']);
+    expect(schema?.properties?.file).toMatchObject({ type: 'string', format: 'binary' });
+  });
+
+  it('shows a file picker for the employer signature image', () => {
+    const body = document.paths['/api/settings/employer-signature']?.post?.requestBody;
+    const schema = body?.content['multipart/form-data']?.schema;
+    expect(schema?.required).toEqual(['file']);
     expect(schema?.properties?.file).toMatchObject({ type: 'string', format: 'binary' });
   });
 });

@@ -736,7 +736,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| key | varchar(100) PK | e.g. `reminder_interval_days`, `link_expiry_days`, `sender_name`, `employer_signature` (`{ fileKey, uploadedAt }`, FR-ADM-2) |
+| key | varchar(100) PK | e.g. `reminder_interval_days`, `max_reminders` (null = no limit), `link_expiry_days`, `sender_name`, `employer_signature` (`{ fileKey, uploadedAt, width, height, sha256 }`, FR-ADM-2) |
 | value | jsonb |  |
 | updated\_by | uuid FK → users NULL |  |
 
