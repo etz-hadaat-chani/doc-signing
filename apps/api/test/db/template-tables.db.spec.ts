@@ -49,6 +49,7 @@ function fieldData(
   return {
     templateId,
     fieldType: 'full_name',
+    key: 'full_name',
     page: 1,
     x: 100,
     y: 200,
@@ -150,6 +151,9 @@ describe('template fields', () => {
     ['negative width', { width: -1 }, /template_fields_width_check/],
     ['height 0', { height: 0 }, /template_fields_height_check/],
     ['font_size 0', { fontSize: 0 }, /template_fields_font_size_check/],
+    ['a key with capitals', { key: 'Box_1' }, /template_fields_key_check/],
+    ['a key with a hyphen', { key: 'box-1' }, /template_fields_key_check/],
+    ['an empty key', { key: '' }, /template_fields_key_check/],
   ])('rejects %s', async (_case, overrides, constraint) => {
     const user = await createUser();
     const template = await createTemplate(user.id);

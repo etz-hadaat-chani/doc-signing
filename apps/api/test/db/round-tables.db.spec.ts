@@ -365,6 +365,7 @@ describe('assignment_responses', () => {
       data: {
         templateId: base.template.id,
         fieldType: 'checkbox',
+        key: 'box_1',
         page: 1,
         x: 100,
         y: 200,

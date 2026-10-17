@@ -1,4 +1,4 @@
-import type { TemplateListQuery } from '@doc-signing/shared';
+import type { EmployerSignatureMode, TemplateListQuery } from '@doc-signing/shared';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { Db } from '../../common/prisma/prisma.types.js';
@@ -16,6 +16,7 @@ const templateColumns = {
   parentTemplateId: true,
   isLocked: true,
   isArchived: true,
+  employerSignatureMode: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.TemplateSelect;
@@ -25,6 +26,13 @@ const fieldColumns = {
   id: true,
   templateId: true,
   fieldType: true,
+  key: true,
+  fillMode: true,
+  showWhen: true,
+  options: true,
+  isRequired: true,
+  label: true,
+  needsApproval: true,
   page: true,
   x: true,
   y: true,
@@ -45,11 +53,24 @@ export interface TemplateRow extends TemplateColumns {
 export interface TemplateWrite {
   name: string;
   departmentIds: string[];
+  employerSignatureMode: EmployerSignatureMode;
   fields: FieldPosition[];
 }
 
-function fieldRows(templateId: string, fields: readonly FieldPosition[]) {
-  return fields.map((field, index) => ({ templateId, ...field, sortOrder: index }));
+/** A JSON column's value; SQL NULL (not JSON `null`) when there is none. */
+const jsonOrNull = (value: object | null) => value ?? Prisma.DbNull;
+
+function fieldRows(
+  templateId: string,
+  fields: readonly FieldPosition[],
+): Prisma.TemplateFieldCreateManyInput[] {
+  return fields.map(({ showWhen, options, ...field }, index) => ({
+    templateId,
+    ...field,
+    showWhen: jsonOrNull(showWhen),
+    options: jsonOrNull(options),
+    sortOrder: index,
+  }));
 }
 
 /** Template queries that join, count, lock or write several tables (layering rule). */
@@ -130,14 +151,21 @@ export class TemplatesRepository {
         .map(({ id, code, name }) => ({ id, code, name })),
       fields: fields
         .filter(({ templateId }) => templateId === row.id)
-        .map(({ id, fieldType, page, x, y, width, height }) => ({
-          id,
-          fieldType,
-          page,
-          x,
-          y,
-          width,
-          height,
+        .map((field) => ({
+          id: field.id,
+          fieldType: field.fieldType,
+          key: field.key,
+          fillMode: field.fillMode,
+          showWhen: field.showWhen,
+          options: field.options,
+          isRequired: field.isRequired,
+          label: field.label,
+          needsApproval: field.needsApproval,
+          page: field.page,
+          x: field.x,
+          y: field.y,
+          width: field.width,
+          height: field.height,
         })),
     }));
   }
@@ -172,17 +200,28 @@ export class TemplatesRepository {
 
   /**
    * Changes a version in place: the name, the department links (only the difference is written)
-   * and, for an unlocked version only, the positions (replaced: an unlocked version was never
+   * and, for an unlocked version only, the employer-signature setting and the positions (replaced: an unlocked version was never
    * sent, so nothing refers to its positions). Parts left undefined stay as they are.
    */
   async updateInPlace(
     id: string,
-    change: { name?: string; departmentIds?: string[]; fields?: FieldPosition[] },
+    change: {
+      name?: string;
+      departmentIds?: string[];
+      employerSignatureMode?: EmployerSignatureMode;
+      fields?: FieldPosition[];
+    },
     db: Db,
   ): Promise<TemplateRow> {
     await db.template.update({
       where: { id },
-      data: { ...(change.name !== undefined && { name: change.name }), updatedAt: new Date() },
+      data: {
+        ...(change.name !== undefined && { name: change.name }),
+        ...(change.employerSignatureMode !== undefined && {
+          employerSignatureMode: change.employerSignatureMode,
+        }),
+        updatedAt: new Date(),
+      },
     });
     if (change.departmentIds) {
       await db.templateDepartment.deleteMany({
@@ -202,7 +241,7 @@ export class TemplatesRepository {
 
   /**
    * The next version of `parent`: the same PDF file, kind and page count, with `data` as its
-   * name, departments and positions; unlocked and not archived. The parent is not touched. The
+   * name, departments, employer-signature setting and positions (keys kept as given); unlocked and not archived. The parent is not touched. The
    * unique index on `parent_template_id` refuses a second child (P2002).
    */
   async createVersion(
@@ -219,6 +258,7 @@ export class TemplatesRepository {
         pageCount: parent.pageCount,
         version: parent.version + 1,
         parentTemplateId: parent.id,
+        employerSignatureMode: data.employerSignatureMode,
         createdById,
       },
       select: { id: true },

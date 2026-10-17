@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { TEMPLATE_FIELD_TYPES } from './enums.js';
 import {
-  missingFieldTypes,
   templateCreateSchema,
   templateFieldInputSchema,
   templateListQuerySchema,
@@ -12,23 +12,27 @@ const B = '22222222-2222-4222-8222-222222222222';
 
 const field = { fieldType: 'full_name', page: 1, x: 10, y: 20, width: 100, height: 15 };
 
-const messagesOf = (result: { error?: { issues: { message: string }[] } }) =>
-  result.error?.issues.map(({ message }) => message) ?? [];
-
 describe('templateFieldInputSchema', () => {
-  it.each(['full_name', 'id_number', 'date', 'signature'])('accepts %s', (fieldType) => {
+  it.each(TEMPLATE_FIELD_TYPES)('accepts %s', (fieldType) => {
     expect(templateFieldInputSchema.parse({ ...field, fieldType }).fieldType).toBe(fieldType);
   });
 
-  it.each(['checkbox', 'text'])('refuses %s for now, with its own code', (fieldType) => {
+  it.each(['photo', 'work_hours'])('refuses the unknown type %s', (fieldType) => {
     const result = templateFieldInputSchema.safeParse({ ...field, fieldType });
-    expect(messagesOf(result)).toEqual(['TEMPLATE_FIELD_TYPE_NOT_SUPPORTED']);
+    expect(result.success).toBe(false);
   });
 
-  it('refuses an unknown type', () => {
-    expect(templateFieldInputSchema.safeParse({ ...field, fieldType: 'photo' }).success).toBe(
-      false,
-    );
+  it('an old-style position (no settings) gets the defaults of its type', () => {
+    expect(templateFieldInputSchema.parse(field)).toEqual({
+      ...field,
+      key: 'full_name',
+      fillMode: 'system',
+      showWhen: null,
+      options: null,
+      isRequired: true,
+      label: null,
+      needsApproval: false,
+    });
   });
 
   it('rounds to 2 decimals, as the database stores it', () => {
@@ -44,7 +48,7 @@ describe('templateFieldInputSchema', () => {
     ['a negative y', { y: -0.5 }],
     ['width 0', { width: 0 }],
     ['a height that rounds to 0', { height: 0.004 }],
-    ['an unknown key', { fontSize: 12 }],
+    ['an unknown property', { fontSize: 12 }],
   ])('refuses %s', (_name, change) => {
     expect(templateFieldInputSchema.safeParse({ ...field, ...change }).success).toBe(false);
   });
@@ -82,6 +86,21 @@ describe('templateUpdateSchema', () => {
     expect(templateUpdateSchema.parse({ fields: [] })).toEqual({ fields: [] });
   });
 
+  it('gives boxes without a key the next box_<n>, keeping the keys sent', () => {
+    const box = { ...field, fieldType: 'text' };
+    const parsed = templateUpdateSchema.parse({
+      fields: [box, { ...box, key: 'box_4' }, box, { ...box, key: 'notes' }],
+    });
+    expect(parsed.fields?.map(({ key }) => key)).toEqual(['box_5', 'box_4', 'box_6', 'notes']);
+  });
+
+  it('accepts employerSignatureMode alone, and refuses an unknown one', () => {
+    expect(templateUpdateSchema.parse({ employerSignatureMode: 'pre_signed' })).toEqual({
+      employerSignatureMode: 'pre_signed',
+    });
+    expect(templateUpdateSchema.safeParse({ employerSignatureMode: 'later' }).success).toBe(false);
+  });
+
   it('refuses more than 40 positions', () => {
     const fields = Array.from({ length: 41 }, () => field);
     expect(templateUpdateSchema.safeParse({ fields }).success).toBe(false);
@@ -103,14 +122,5 @@ describe('templateListQuerySchema', () => {
       dept: A,
     });
     expect(templateListQuerySchema.safeParse({ includeArchived: 'yes' }).success).toBe(false);
-  });
-});
-
-describe('missingFieldTypes', () => {
-  it('lists the MVP types with no position, in a fixed order', () => {
-    expect(missingFieldTypes([])).toEqual(['full_name', 'id_number', 'date', 'signature']);
-    expect(
-      missingFieldTypes([{ fieldType: 'date' }, { fieldType: 'date' }, { fieldType: 'full_name' }]),
-    ).toEqual(['id_number', 'signature']);
   });
 });

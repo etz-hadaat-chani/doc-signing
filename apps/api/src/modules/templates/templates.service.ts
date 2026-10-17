@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import {
   formatDepartment,
-  missingFieldTypes,
   type Paged,
+  showWhenSchema,
   TEMPLATE_MAX_PAGES,
   type TemplateCreateInput,
   type TemplateFieldInput,
   type TemplateItem,
   type TemplateListQuery,
+  templateFieldOptionsSchema,
+  templateReadiness,
   type TemplateUpdateInput,
 } from '@doc-signing/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
@@ -20,6 +22,7 @@ import { type PdfContent, readPdfContent } from '../../common/upload/pdf-content
 import { Prisma } from '../../generated/prisma/client.js';
 import {
   describeTemplateChanges,
+  documentChanged,
   type FieldPosition,
   sameFields,
   type TemplateState,
@@ -35,27 +38,31 @@ export interface TemplateActor {
 
 const PDF_CONTENT_TYPE = 'application/pdf';
 
-function toPositions(row: TemplateRow): FieldPosition[] {
-  return row.fields.map(({ fieldType, page, x, y, width, height }) => ({
-    fieldType,
-    page,
-    x: x.toNumber(),
-    y: y.toNumber(),
-    width: width.toNumber(),
-    height: height.toNumber(),
-  }));
-}
-
-function toItem(row: TemplateRow): TemplateItem {
-  const fields = row.fields.map((field) => ({
-    id: field.id,
+/** A stored position with its settings; the JSON columns are read with the shared schemas. */
+function toPosition(field: TemplateRow['fields'][number]): FieldPosition {
+  return {
     fieldType: field.fieldType,
+    key: field.key,
+    fillMode: field.fillMode,
+    showWhen: showWhenSchema.nullable().parse(field.showWhen),
+    options: templateFieldOptionsSchema.nullable().parse(field.options),
+    isRequired: field.isRequired,
+    label: field.label,
+    needsApproval: field.needsApproval,
     page: field.page,
     x: field.x.toNumber(),
     y: field.y.toNumber(),
     width: field.width.toNumber(),
     height: field.height.toNumber(),
-  }));
+  };
+}
+
+function toItem(row: TemplateRow): TemplateItem {
+  const fields = row.fields.map((field) => ({ id: field.id, ...toPosition(field) }));
+  const notReadyReasons = templateReadiness({
+    employerSignatureMode: row.employerSignatureMode,
+    fields,
+  });
   return {
     id: row.id,
     name: row.name,
@@ -66,6 +73,7 @@ function toItem(row: TemplateRow): TemplateItem {
     isLocked: row.isLocked,
     isArchived: row.isArchived,
     isLatest: row.isLatest,
+    employerSignatureMode: row.employerSignatureMode,
     departments: row.departments.map(({ id, code, name }) => ({
       id,
       code,
@@ -73,7 +81,8 @@ function toItem(row: TemplateRow): TemplateItem {
       label: formatDepartment(code, name),
     })),
     fields,
-    missingFieldTypes: missingFieldTypes(fields),
+    isReady: notReadyReasons.length === 0,
+    notReadyReasons,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -83,7 +92,8 @@ function stateOf(row: TemplateRow): TemplateState {
   return {
     name: row.name,
     departmentCodes: row.departments.map(({ code }) => code),
-    fields: toPositions(row),
+    employerSignatureMode: row.employerSignatureMode,
+    fields: row.fields.map(toPosition),
   };
 }
 
@@ -92,9 +102,10 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 /**
- * Department templates (FR-TPL-1, FR-TPL-2, FR-TPL-4): upload a PDF, link departments, store
- * positions, archive. Never deletes. A locked (sent) version never changes its name, file or
- * positions; such an edit creates the next version instead, so documents already sent stay as
+ * Department templates (FR-TPL-1, FR-TPL-2, FR-TPL-4, FR-TPL-7, FR-TPL-10): upload a PDF, link
+ * departments, store positions with their box settings, archive. Never deletes. A locked (sent)
+ * version never changes its name, file, positions, settings or employer-signature setting; such
+ * an edit creates the next version instead, so documents already sent stay as
  * they were. Department links are only about future rounds and change in place.
  */
 @Injectable()
@@ -159,8 +170,9 @@ export class TemplatesService {
   }
 
   /**
-   * Changes the name, departments or positions (FR-TPL-2, FR-TPL-4). Unlocked: in place. Locked:
-   * departments alone change in place; a new name or new positions create the next version
+   * Changes the name, departments, employer-signature setting or positions with their settings
+   * (FR-TPL-2, FR-TPL-4). Unlocked: in place. Locked: departments alone change in place; any
+   * other change creates the next version
    * (same PDF) and the locked one stays exactly as it was. Only the latest version that is not
    * archived can be edited (409 otherwise). Nothing changed → nothing written.
    */
@@ -235,17 +247,22 @@ export class TemplatesService {
     const after: TemplateState = {
       name: input.name ?? before.name,
       departmentCodes: departments.map(({ code }) => code),
+      employerSignatureMode: input.employerSignatureMode ?? before.employerSignatureMode,
       fields: input.fields ?? before.fields,
     };
     const changes = describeTemplateChanges(before, after);
     if (changes.length === 0) return toItem(stored);
 
     const user = { type: 'user', userId: actor.userId } as const;
-    const documentChanged = after.name !== before.name || !sameFields(before.fields, after.fields);
-    if (stored.isLocked && documentChanged) {
+    if (stored.isLocked && documentChanged(before, after)) {
       const created = await this.repository.createVersion(
         stored,
-        { name: after.name, departmentIds: departments.map((d) => d.id), fields: after.fields },
+        {
+          name: after.name,
+          departmentIds: departments.map((d) => d.id),
+          employerSignatureMode: after.employerSignatureMode,
+          fields: after.fields,
+        },
         actor.userId,
         db,
       );
@@ -271,7 +288,10 @@ export class TemplatesService {
       {
         ...(after.name !== before.name && { name: after.name }),
         ...(input.departmentIds && { departmentIds: input.departmentIds }),
-        // A locked version reaches here only when its positions did not change.
+        // A locked version reaches here only when nothing but its departments changed.
+        ...(after.employerSignatureMode !== before.employerSignatureMode && {
+          employerSignatureMode: after.employerSignatureMode,
+        }),
         ...(!sameFields(before.fields, after.fields) && { fields: after.fields }),
       },
       db,

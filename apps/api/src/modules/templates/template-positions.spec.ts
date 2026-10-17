@@ -1,12 +1,10 @@
-import type { TemplateFieldInput } from '@doc-signing/shared';
 import { describe, expect, it } from 'vitest';
-import { positionProblems } from './template-positions.js';
+import { type PositionBox, positionProblems } from './template-positions.js';
 
 const a4 = { width: 595.28, height: 841.89 };
 const landscape = { width: 1190.55, height: 841.89 };
 
-const at = (change: Partial<TemplateFieldInput>): TemplateFieldInput => ({
-  fieldType: 'full_name',
+const at = (change: Partial<PositionBox>): PositionBox => ({
   page: 1,
   x: 10,
   y: 10,

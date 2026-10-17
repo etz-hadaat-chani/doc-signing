@@ -3,6 +3,8 @@ import {
   type FieldError,
   type TemplateItem,
   templateItemSchema,
+  TEMPLATE_FIELD_TYPES,
+  TEMPLATE_NOT_READY_MESSAGES,
   TEMPLATE_MAX_FILE_BYTES,
 } from '@doc-signing/shared';
 import type { INestApplication } from '@nestjs/common';
@@ -139,8 +141,16 @@ describe('POST /api/templates', () => {
       isLocked: false,
       isArchived: false,
       isLatest: true,
+      employerSignatureMode: 'none',
       fields: [],
-      missingFieldTypes: ['full_name', 'id_number', 'date', 'signature'],
+      isReady: false,
+      notReadyReasons: [
+        {
+          code: 'NO_MAIN_SIGNATURE',
+          message: TEMPLATE_NOT_READY_MESSAGES.NO_MAIN_SIGNATURE,
+          keys: [],
+        },
+      ],
     });
     expect(item.departments.map(({ label }) => label)).toEqual([
       '15 - ממלאות מקום ירושלים',
@@ -223,7 +233,7 @@ describe('PATCH /api/templates/:id on an unlocked template (in place)', () => {
     });
     expect(response.status).toBe(200);
     const item = itemOf(response);
-    expect(item).toMatchObject({ id: created.id, version: 1, missingFieldTypes: [] });
+    expect(item).toMatchObject({ id: created.id, version: 1, isReady: true, notReadyReasons: [] });
     expect(item.fields.map(({ fieldType }) => fieldType)).toEqual([
       'full_name',
       'id_number',
@@ -270,7 +280,7 @@ describe('PATCH /api/templates/:id on an unlocked template (in place)', () => {
     expect((await rowsOf(created.id)).fields).toHaveLength(1);
   });
 
-  it('refuses a position over the top edge, and checkbox or text fields', async () => {
+  it('refuses a position over the top edge, and the unknown type work_hours', async () => {
     const created = await uploaded();
     const outside = await patch(created.id, {
       fields: [position('full_name', { y: 830, height: 20 })],
@@ -278,13 +288,11 @@ describe('PATCH /api/templates/:id on an unlocked template (in place)', () => {
     expect(outside.status).toBe(400);
     expect(errorOf(outside).code).toBe('TEMPLATE_FIELD_OUTSIDE_PAGE');
 
-    const checkbox = await patch(created.id, { fields: [position('checkbox')] });
-    expect(checkbox.status).toBe(400);
-    const fields = errorOf(checkbox).details?.fields as FieldError[];
-    expect(fields[0]).toMatchObject({
-      field: 'fields.0.fieldType',
-      code: 'TEMPLATE_FIELD_TYPE_NOT_SUPPORTED',
-    });
+    // No work_hours until HR confirms the hours-base codes (PRD §14).
+    const hours = await patch(created.id, { fields: [position('work_hours')] });
+    expect(hours.status).toBe(400);
+    const fields = errorOf(hours).details?.fields as FieldError[];
+    expect(fields[0]?.field).toBe('fields.0.fieldType');
   });
 
   it('404 for an unknown template', async () => {
@@ -479,5 +487,362 @@ describe('access: managers only', () => {
     const response = await upload(await testPdf(), { cookie: officerCookie });
     expect(response.status).toBe(403);
     expect(await prisma.template.count()).toBe(0);
+  });
+});
+
+describe('field types and box settings (3.20)', () => {
+  /** Positions down the page, one under the other, so each fits on A4. */
+  const stacked = (list: object[]) =>
+    list.map((item, index) => ({ ...position('full_name', { y: 20 + index * 30 }), ...item }));
+
+  const reasonsOf = (item: TemplateItem) => item.notReadyReasons.map(({ code }) => code);
+
+  /** The substitute contract (PRD §14). */
+  const substitute = stacked([
+    { fieldType: 'full_name' },
+    { fieldType: 'id_number' },
+    { fieldType: 'address' },
+    { fieldType: 'mobile' },
+    { fieldType: 'landline', isRequired: false },
+    { fieldType: 'age' },
+    { fieldType: 'pension_has_fund' },
+    { fieldType: 'pension_no_fund' },
+    { fieldType: 'pension_fund_name' },
+    { fieldType: 'email_input' },
+    { fieldType: 'no_email_checkbox' },
+    { fieldType: 'signature' },
+    { fieldType: 'signature', showWhen: { key: 'email_choice', equals: 'office' } },
+    { fieldType: 'employer_signature' },
+  ]);
+
+  it('saves every type with its settings and reads them back', async () => {
+    const created = await uploaded();
+    const box = (fieldType: string) => ({ label: `תיבה ${fieldType}`, fieldType });
+    const settingsFor: Record<string, object> = {
+      text: { ...box('text'), key: 'car_number', options: { maxLength: 20 }, needsApproval: true },
+      long_text: { ...box('long_text'), isRequired: false, options: { maxLength: 1500 } },
+      select: { ...box('select'), key: 'shift', options: { choices: ['בוקר', 'ערב'] } },
+      checkbox: { ...box('checkbox'), key: 'has_car' },
+      date_input: {
+        ...box('date_input'),
+        options: { minDate: 'signing_day', maxDate: '2027-06-30' },
+      },
+      drawing: { ...box('drawing'), showWhen: { key: 'shift', equals: 'ערב' } },
+      address: { fieldType: 'address', fillMode: 'system_then_employee', label: 'כתובת' },
+      landline: { fieldType: 'landline', isRequired: false },
+      mobile: {
+        fieldType: 'mobile',
+        fillMode: 'employee',
+        label: 'נייד',
+        options: { maxLength: 15 },
+      },
+      pension_has_fund: { fieldType: 'pension_has_fund', options: { pensionSource: 'b_only' } },
+      pension_no_fund: { fieldType: 'pension_no_fund', options: { pensionSource: 'b_only' } },
+      pension_fund_name: { fieldType: 'pension_fund_name', options: { pensionSource: 'b_only' } },
+    };
+    const sent = stacked(
+      TEMPLATE_FIELD_TYPES.map((type) => settingsFor[type] ?? { fieldType: type }),
+    );
+    const response = await patch(created.id, {
+      fields: sent,
+      employerSignatureMode: 'after_employee',
+    });
+    expect(response.status).toBe(200);
+    const item = itemOf(response);
+    expect(item.employerSignatureMode).toBe('after_employee');
+    expect(item.fields.map(({ fieldType }) => fieldType)).toEqual([...TEMPLATE_FIELD_TYPES]);
+
+    const read = itemOf(
+      await server().get(`/api/templates/${created.id}`).set('Cookie', managerCookie),
+    );
+    expect(read).toEqual(item);
+    const byType = Object.fromEntries(read.fields.map((field) => [field.fieldType, field]));
+    expect(byType.text).toMatchObject({
+      key: 'car_number',
+      fillMode: 'employee',
+      label: 'תיבה text',
+      options: { maxLength: 20 },
+      needsApproval: true,
+      isRequired: true,
+      showWhen: null,
+    });
+    expect(byType.long_text).toMatchObject({
+      key: 'box_1',
+      isRequired: false,
+      options: { maxLength: 1500 },
+    });
+    expect(byType.select?.options).toEqual({ choices: ['בוקר', 'ערב'] });
+    expect(byType.date_input?.options).toEqual({ minDate: 'signing_day', maxDate: '2027-06-30' });
+    expect(byType.drawing?.showWhen).toEqual({ key: 'shift', equals: 'ערב' });
+    expect(byType.address).toMatchObject({
+      key: 'address',
+      fillMode: 'system_then_employee',
+      options: { maxLength: 100 },
+    });
+    expect(byType.mobile).toMatchObject({ fillMode: 'employee', options: { maxLength: 15 } });
+    expect(byType.pension_fund_name?.options).toEqual({ pensionSource: 'b_only' });
+    expect(byType.signature).toMatchObject({ key: 'signature', fillMode: null, options: null });
+    expect(byType.full_name).toMatchObject({ key: 'full_name', fillMode: 'system' });
+    expect(read.isReady).toBe(true);
+
+    // No condition and no limits are SQL NULL, not JSON null.
+    const nulls = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT count(*) AS count FROM template_fields
+      WHERE template_id = ${created.id}::uuid AND show_when IS NULL AND options IS NULL
+        AND field_type = 'signature'`;
+    expect(Number(nulls[0]?.count)).toBe(1);
+  });
+
+  it('the substitute contract saves and reports ready; each missing pair is a reason', async () => {
+    const created = await uploaded();
+    const ready = await patch(created.id, {
+      fields: substitute,
+      employerSignatureMode: 'pre_signed',
+    });
+    expect(ready.status).toBe(200);
+    expect(itemOf(ready)).toMatchObject({ isReady: true, notReadyReasons: [] });
+
+    const without = (type: string) => substitute.filter(({ fieldType }) => fieldType !== type);
+    const reasonsWithout = async (type: string) =>
+      reasonsOf(itemOf(await patch(created.id, { fields: without(type) })));
+
+    const noEmailBox = itemOf(await patch(created.id, { fields: without('no_email_checkbox') }));
+    expect(noEmailBox.notReadyReasons).toEqual([
+      {
+        code: 'EMAIL_SECTION_INCOMPLETE',
+        message: TEMPLATE_NOT_READY_MESSAGES.EMAIL_SECTION_INCOMPLETE,
+        keys: ['email_input'],
+      },
+      // The "office" signature now points to an email choice that doesn't exist.
+      {
+        code: 'CONDITION_KEY_MISSING',
+        message: TEMPLATE_NOT_READY_MESSAGES.CONDITION_KEY_MISSING,
+        keys: ['signature'],
+      },
+    ]);
+    expect(await reasonsWithout('email_input')).toContain('EMAIL_SECTION_INCOMPLETE');
+    expect(await reasonsWithout('pension_no_fund')).toEqual(['PENSION_INCOMPLETE']);
+    expect(await reasonsWithout('pension_has_fund')).toEqual(['PENSION_INCOMPLETE']);
+    expect(await reasonsWithout('employer_signature')).toEqual(['EMPLOYER_SIGNATURE_MISSING']);
+  });
+
+  it('one box of each of the six types, with a condition and limits, reports ready', async () => {
+    const created = await uploaded();
+    const response = await patch(created.id, {
+      fields: stacked([
+        { fieldType: 'signature' },
+        { fieldType: 'checkbox', key: 'has_car', label: 'יש לי רכב' },
+        {
+          fieldType: 'text',
+          label: 'מספר רכב',
+          showWhen: { key: 'has_car', equals: 'true' },
+          options: { maxLength: 10 },
+        },
+        { fieldType: 'long_text', label: 'הערות', options: { maxLength: 500 } },
+        { fieldType: 'select', label: 'משמרת', options: { choices: ['בוקר', 'ערב'] } },
+        {
+          fieldType: 'date_input',
+          label: 'תאריך התחלה',
+          options: { minDate: '2026-01-01', maxDate: 'signing_day' },
+        },
+        { fieldType: 'drawing', label: 'ראשי תיבות' },
+      ]),
+    });
+    expect(response.status).toBe(200);
+    expect(itemOf(response)).toMatchObject({ isReady: true, notReadyReasons: [] });
+  });
+
+  it('a bad condition, a bad date range or a same-key mismatch saves but is a reason', async () => {
+    const created = await uploaded();
+    const checkboxA = { fieldType: 'checkbox', key: 'a', label: 'א' };
+    const cases: [object[], string][] = [
+      [
+        [{ fieldType: 'text', label: 'א', showWhen: { key: 'box_9', equals: 'true' } }],
+        'CONDITION_KEY_MISSING',
+      ],
+      [
+        [
+          checkboxA,
+          { fieldType: 'checkbox', key: 'b', label: 'ב', showWhen: { key: 'a', equals: 'true' } },
+          { fieldType: 'text', label: 'ג', showWhen: { key: 'b', equals: 'true' } },
+        ],
+        'CONDITION_TARGET_HAS_CONDITION',
+      ],
+      [
+        [checkboxA, { fieldType: 'text', label: 'ב', showWhen: { key: 'a', equals: 'כן' } }],
+        'CONDITION_VALUE_INVALID',
+      ],
+      [
+        [
+          { fieldType: 'text', key: 'a', label: 'א' },
+          { fieldType: 'text', key: 'a', label: 'א', options: { maxLength: 30 } },
+        ],
+        'KEY_SETTINGS_MISMATCH',
+      ],
+      [
+        [
+          {
+            fieldType: 'date_input',
+            label: 'א',
+            options: { minDate: '2026-06-01', maxDate: '2026-05-01' },
+          },
+        ],
+        'DATE_RANGE_INVALID',
+      ],
+    ];
+    for (const [boxes, code] of cases) {
+      const response = await patch(created.id, {
+        fields: stacked([{ fieldType: 'signature' }, ...boxes]),
+      });
+      expect(response.status).toBe(200);
+      expect(reasonsOf(itemOf(response))).toEqual([code]);
+    }
+  });
+
+  it('refuses a wrong fill mode, key, limit or approval with a 400 naming the position', async () => {
+    const created = await uploaded();
+    const notAllowed = 'TEMPLATE_FIELD_OPTION_NOT_ALLOWED';
+    const cases: [object, string, string][] = [
+      [
+        { fieldType: 'full_name', fillMode: 'employee' },
+        'fields.0.fillMode',
+        'TEMPLATE_FIELD_FILL_MODE_NOT_ALLOWED',
+      ],
+      [{ fieldType: 'address', key: 'home' }, 'fields.0.key', 'TEMPLATE_FIELD_KEY_NOT_ALLOWED'],
+      [{ fieldType: 'text', key: 'Box-1' }, 'fields.0.key', 'TEMPLATE_FIELD_KEY_NOT_ALLOWED'],
+      [
+        { fieldType: 'text', key: 'email_choice' },
+        'fields.0.key',
+        'TEMPLATE_FIELD_KEY_NOT_ALLOWED',
+      ],
+      [
+        { fieldType: 'signature', options: { maxLength: 10 } },
+        'fields.0.options.maxLength',
+        notAllowed,
+      ],
+      [
+        { fieldType: 'address', options: { pensionSource: 'b_only' } },
+        'fields.0.options.pensionSource',
+        notAllowed,
+      ],
+      [{ fieldType: 'full_name', needsApproval: true }, 'fields.0.needsApproval', notAllowed],
+      [
+        { fieldType: 'text', options: { maxLength: 501 } },
+        'fields.0.options.maxLength',
+        'TEMPLATE_FIELD_LIMIT_INVALID',
+      ],
+      [
+        { fieldType: 'select', options: { choices: ['א', 'א'] } },
+        'fields.0.options.choices',
+        'TEMPLATE_FIELD_LIMIT_INVALID',
+      ],
+    ];
+    for (const [item, field, code] of cases) {
+      const response = await patch(created.id, { fields: stacked([item]) });
+      expect(response.status).toBe(400);
+      expect(errorOf(response).details?.fields).toContainEqual(
+        expect.objectContaining({ field, code }),
+      );
+    }
+    expect((await rowsOf(created.id)).fields).toHaveLength(0);
+  });
+
+  it('a template from before 3.20 still works, and its next version keeps the keys', async () => {
+    const v1 = await uploaded();
+    // The rows exactly as the migration left them: key = type, name/ID/date system, no settings.
+    const oldTypes = ['full_name', 'id_number', 'date', 'signature'] as const;
+    await prisma.templateField.createMany({
+      data: oldTypes.map((type, index) => ({
+        templateId: v1.id,
+        fieldType: type,
+        key: type,
+        fillMode: type === 'signature' ? null : ('system' as const),
+        page: 1,
+        x: 50,
+        y: 100 + index * 40,
+        width: 150,
+        height: 20,
+        sortOrder: index,
+      })),
+    });
+    const old = itemOf(await server().get(`/api/templates/${v1.id}`).set('Cookie', managerCookie));
+    expect(old).toMatchObject({ isReady: true, employerSignatureMode: 'none' });
+    const settings = (item: TemplateItem) =>
+      item.fields.map((field) => ({ ...field, id: undefined }));
+
+    // Sending the same positions the old way (no settings) is no change.
+    const same = itemOf(await patch(v1.id, { fields: allFour }));
+    expect(settings(same)).toEqual(settings(old));
+    expect(await auditOf('template.updated')).toHaveLength(0);
+
+    await lock(v1.id);
+    const v2 = itemOf(await patch(v1.id, { name: 'טופס 101 גרסה 2' }));
+    expect(v2.version).toBe(2);
+    expect(settings(v2)).toEqual(settings(old));
+  });
+});
+
+describe('PATCH on a locked template: settings create a new version (3.20)', () => {
+  const note = { key: 'note', label: 'הערה' };
+  const fieldsWith = (change: object = {}) => [
+    position('signature'),
+    position('text', { y: 150, ...note, ...change }),
+    position('employer_signature', { y: 200 }),
+  ];
+
+  async function lockedV1() {
+    const v1 = await uploaded();
+    await patch(v1.id, { fields: fieldsWith(), employerSignatureMode: 'pre_signed' });
+    await lock(v1.id);
+    return { v1, before: await rowsOf(v1.id) };
+  }
+
+  it('changing employerSignatureMode creates version 2; version 1 stays the same', async () => {
+    const { v1, before } = await lockedV1();
+    const response = await patch(v1.id, { employerSignatureMode: 'after_employee' });
+    expect(response.status).toBe(200);
+    const v2 = itemOf(response);
+    expect(v2).toMatchObject({
+      version: 2,
+      parentTemplateId: v1.id,
+      employerSignatureMode: 'after_employee',
+    });
+    expect(v2.fields.map(({ key }) => key)).toEqual(['signature', 'note', 'employer_signature']);
+    expect(await rowsOf(v1.id)).toEqual(before);
+    expect(before.template.employerSignatureMode).toBe('pre_signed');
+    const [log] = await auditOf('template.version_created');
+    expect(log?.details).toMatchObject({
+      changes: ['employerSignatureMode: pre_signed → after_employee'],
+    });
+  });
+
+  it.each([
+    ['needsApproval', { needsApproval: true }],
+    ['label', { label: 'הערה חדשה' }],
+    ['isRequired', { isRequired: false }],
+    ['condition', { showWhen: { key: 'email_choice', equals: 'office' } }],
+    ['limit', { options: { maxLength: 40 } }],
+  ])("changing a box's %s creates version 2; version 1 stays the same", async (_name, change) => {
+    const { v1, before } = await lockedV1();
+    const response = await patch(v1.id, { fields: fieldsWith(change) });
+    expect(response.status).toBe(200);
+    const v2 = itemOf(response);
+    expect(v2).toMatchObject({
+      version: 2,
+      parentTemplateId: v1.id,
+      employerSignatureMode: 'pre_signed',
+    });
+    expect(v2.fields[1]).toMatchObject({ key: 'note', ...change });
+    expect(await rowsOf(v1.id)).toEqual(before);
+    const [log] = await auditOf('template.version_created');
+    expect(log?.details).toMatchObject({ changes: ['fields: 3 → 3'] });
+  });
+
+  it('officer 403 and signed out 401 for a settings change', async () => {
+    const { v1 } = await lockedV1();
+    const body = { employerSignatureMode: 'none' };
+    expect((await patch(v1.id, body, officerCookie)).status).toBe(403);
+    expect((await patch(v1.id, body, null)).status).toBe(401);
+    expect(await prisma.template.count()).toBe(1);
   });
 });

@@ -23,7 +23,9 @@ export const TEMPLATE_KINDS = ['signature', 'acknowledgment', 'external_report']
 export const templateKindSchema = z.enum(TEMPLATE_KINDS);
 export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
 
-// template_fields.field_type. `checkbox` and `text` are for later.
+// template_fields.field_type (FR-TPL-2), in the database's order. Values are only ever added;
+// code must not assume the list is closed. No `work_hours` until the hours-base codes are
+// confirmed (PRD §14). The groups (system value, box, signature…) are in template-fields.ts.
 export const TEMPLATE_FIELD_TYPES = [
   'full_name',
   'id_number',
@@ -31,9 +33,39 @@ export const TEMPLATE_FIELD_TYPES = [
   'signature',
   'checkbox',
   'text',
+  'employee_number',
+  'address',
+  'landline',
+  'mobile',
+  'age',
+  'job_title',
+  'employment_status',
+  'job_percent',
+  'work_days',
+  'study_fund',
+  'pension_has_fund',
+  'pension_no_fund',
+  'pension_fund_name',
+  'email_input',
+  'no_email_checkbox',
+  'long_text',
+  'select',
+  'date_input',
+  'drawing',
+  'employer_signature',
 ] as const;
 export const templateFieldTypeSchema = z.enum(TEMPLATE_FIELD_TYPES);
 export type TemplateFieldType = (typeof TEMPLATE_FIELD_TYPES)[number];
+
+// template_fields.fill_mode: who fills a box in (FR-TPL-10). NULL for signatures.
+export const TEMPLATE_FILL_MODES = ['system', 'employee', 'system_then_employee'] as const;
+export const templateFillModeSchema = z.enum(TEMPLATE_FILL_MODES);
+export type TemplateFillMode = (typeof TEMPLATE_FILL_MODES)[number];
+
+// templates.employer_signature_mode (FR-TPL-7).
+export const EMPLOYER_SIGNATURE_MODES = ['pre_signed', 'after_employee', 'none'] as const;
+export const employerSignatureModeSchema = z.enum(EMPLOYER_SIGNATURE_MODES);
+export type EmployerSignatureMode = (typeof EMPLOYER_SIGNATURE_MODES)[number];
 
 // rounds.mode
 export const ROUND_MODES = ['single_template', 'by_department'] as const;

@@ -8,6 +8,8 @@ const pairs: [string, readonly string[], z.ZodType][] = [
   ['IMPORT_STATUSES', enums.IMPORT_STATUSES, enums.importStatusSchema],
   ['TEMPLATE_KINDS', enums.TEMPLATE_KINDS, enums.templateKindSchema],
   ['TEMPLATE_FIELD_TYPES', enums.TEMPLATE_FIELD_TYPES, enums.templateFieldTypeSchema],
+  ['TEMPLATE_FILL_MODES', enums.TEMPLATE_FILL_MODES, enums.templateFillModeSchema],
+  ['EMPLOYER_SIGNATURE_MODES', enums.EMPLOYER_SIGNATURE_MODES, enums.employerSignatureModeSchema],
   ['ROUND_MODES', enums.ROUND_MODES, enums.roundModeSchema],
   ['ROUND_STATUSES', enums.ROUND_STATUSES, enums.roundStatusSchema],
   ['ASSIGNMENT_STATUSES', enums.ASSIGNMENT_STATUSES, enums.assignmentStatusSchema],

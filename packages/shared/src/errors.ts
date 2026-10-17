@@ -46,12 +46,25 @@ export const ERROR_MESSAGES = {
   PDF_ROTATED_PAGES:
     'בקובץ ה-PDF יש עמודים מסובבים. יש לשמור אותו מחדש בעזרת "הדפסה ל-PDF" ולהעלות שוב',
   PDF_TOO_MANY_PAGES: 'בקובץ ה-PDF יש יותר מדי עמודים (עד 50 עמודים)',
-  TEMPLATE_FIELD_TYPE_NOT_SUPPORTED:
-    'סוג השדה עדיין אינו נתמך. אפשר להשתמש בשם מלא, מספר זהות, תאריך וחתימה',
+  TEMPLATE_FIELD_FILL_MODE_NOT_ALLOWED: 'האפשרות "מי ממלא" שנבחרה אינה מתאימה לסוג השדה',
+  TEMPLATE_FIELD_KEY_NOT_ALLOWED:
+    'המפתח של השדה אינו תקין: אותיות אנגליות קטנות, ספרות וקו תחתון (עד 50 תווים). שדות מערכת וחתימות משתמשים בשם הקבוע שלהם',
+  TEMPLATE_FIELD_OPTION_NOT_ALLOWED: 'הגדרה זו אינה מתאימה לסוג השדה',
+  TEMPLATE_FIELD_LIMIT_INVALID:
+    'אחת המגבלות של השדה אינה תקינה (אורך הטקסט, האפשרויות ברשימה או התאריכים)',
   TEMPLATE_FIELD_OUTSIDE_PAGE: 'מיקום של שדה חורג מגבולות העמוד או מפנה לעמוד שאינו קיים',
   TEMPLATE_ARCHIVED: 'התבנית הועברה לארכיון ולא ניתן לשנות אותה',
   TEMPLATE_HAS_NEWER_VERSION:
     'קיימת גרסה חדשה יותר של התבנית. יש לרענן את הדף ולערוך את הגרסה האחרונה',
+  INVALID_EMAIL: 'כתובת האימייל אינה תקינה',
+  EMAIL_CHOICE_REQUIRED: 'יש לבחור אחת משתי האפשרויות: כתובת אימייל, או "אין לי אימייל"',
+  ANSWER_REQUIRED: 'יש למלא שדה זה',
+  ANSWER_TOO_LONG: 'הטקסט ארוך מדי',
+  ANSWER_NOT_A_CHOICE: 'יש לבחור אחת מהאפשרויות ברשימה',
+  ANSWER_DATE_INVALID: 'התאריך אינו תקין',
+  ANSWER_DATE_OUT_OF_RANGE: 'התאריך מחוץ לטווח המותר',
+  ANSWER_BOX_HIDDEN: 'נשלחה תשובה לשדה שאינו מוצג לפי הבחירות בטופס',
+  ANSWER_UNKNOWN_BOX: 'נשלחה תשובה לשדה שאינו קיים במסמך',
   PAYLOAD_TOO_LARGE: 'הקובץ או הבקשה גדולים מדי',
   LOCKED: 'הגישה נחסמה. יש לפנות למשאבי אנוש',
   TOO_MANY_REQUESTS: 'יותר מדי ניסיונות. נא לנסות שוב מאוחר יותר',

@@ -3,6 +3,9 @@ import type { TemplateFieldInput } from '@doc-signing/shared';
 /** Float sums like 495.28 + 100 may land a hair over 595.28; this much over still fits. */
 const TOLERANCE = 1e-6;
 
+/** Where a position is: its page and box, in PDF points. */
+export type PositionBox = Pick<TemplateFieldInput, 'page' | 'x' | 'y' | 'width' | 'height'>;
+
 export interface PositionProblem {
   /** Index in the `fields` list that was sent. */
   index: number;
@@ -16,7 +19,7 @@ export interface PositionProblem {
  * corner. Returns every problem, or an empty list.
  */
 export function positionProblems(
-  fields: readonly TemplateFieldInput[],
+  fields: readonly PositionBox[],
   pages: readonly { width: number; height: number }[],
 ): PositionProblem[] {
   const problems: PositionProblem[] = [];
