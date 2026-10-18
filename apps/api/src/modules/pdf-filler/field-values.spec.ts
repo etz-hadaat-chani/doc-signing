@@ -18,10 +18,7 @@ const IMAGE: SavedEmployerSignature = {
   sha256: 'a'.repeat(64),
 };
 
-function build(
-  specs: FieldSpec[],
-  change: Partial<Omit<BuildFieldValuesInput, 'fields'>> = {},
-) {
+function build(specs: FieldSpec[], change: Partial<Omit<BuildFieldValuesInput, 'fields'>> = {}) {
   return buildFieldValues({
     employee: madeUpEmployee(),
     fields: layout(specs),

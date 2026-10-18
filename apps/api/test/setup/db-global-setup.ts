@@ -49,9 +49,10 @@ const TEST_RUN_WAIT = '10min';
 async function lockTestRun(databaseUrl: string): Promise<() => Promise<void>> {
   const client = new pg.Client({ connectionString: databaseUrl, connectionTimeoutMillis: 5000 });
   await client.connect();
-  const tried = await client.query<{ locked: boolean }>('SELECT pg_try_advisory_lock($1) AS locked', [
-    TEST_RUN_LOCK,
-  ]);
+  const tried = await client.query<{ locked: boolean }>(
+    'SELECT pg_try_advisory_lock($1) AS locked',
+    [TEST_RUN_LOCK],
+  );
   if (!tried.rows[0]?.locked) {
     console.log('Another DB test run is using the test database; waiting for it to finish...');
     try {

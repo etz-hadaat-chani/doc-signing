@@ -36,8 +36,9 @@ export const UNSUPPORTED_MARK = '?';
  * Line breaks and tabs become spaces; other control characters and the invisible direction marks
  * (the drawing does its own bidi ordering) are dropped.
  */
-// eslint-disable-next-line no-control-regex
-const DROPPED = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g;
+const DROPPED =
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g;
 
 /**
  * The embedded font, read once (NFR "PDF": the font is loaded once). Measures text without a PDF,
@@ -176,7 +177,10 @@ function startSize(font: TextFont, height: number, lines = 1): number {
   const unit = font.capHeightAt(1) + font.descentAt(1);
   const perLine = lines === 1 ? unit : LINE_SPACING;
   const bySize = height / (perLine * lines);
-  return Math.max(TEXT_MIN_SIZE, Math.min(TEXT_MAX_SIZE, Math.floor(bySize / SIZE_STEP) * SIZE_STEP));
+  return Math.max(
+    TEXT_MIN_SIZE,
+    Math.min(TEXT_MAX_SIZE, Math.floor(bySize / SIZE_STEP) * SIZE_STEP),
+  );
 }
 
 export interface FittedLine {

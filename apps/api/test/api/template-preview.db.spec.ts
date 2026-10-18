@@ -83,10 +83,7 @@ function binary(req: request.Test): request.Test {
 }
 
 /** Uploads a template with this contract's positions; `pdf` defaults to one A4 page. */
-async function contractTemplate(
-  contract: ContractLayout,
-  pdf?: Buffer,
-): Promise<TemplateItem> {
+async function contractTemplate(contract: ContractLayout, pdf?: Buffer): Promise<TemplateItem> {
   const created = await server()
     .post('/api/templates')
     .set('Cookie', managerCookie)
@@ -114,13 +111,21 @@ async function uploadEmployerSignature(): Promise<void> {
   expect(response.status).toBe(201);
 }
 
-function preview(id: string, query: Record<string, string> = {}, cookie: string | null = managerCookie) {
+function preview(
+  id: string,
+  query: Record<string, string> = {},
+  cookie: string | null = managerCookie,
+) {
   const req = server().get(`/api/templates/${id}/preview`).query(query);
   if (cookie) req.set('Cookie', cookie);
   return binary(req);
 }
 
-function check(id: string, query: Record<string, string> = {}, cookie: string | null = managerCookie) {
+function check(
+  id: string,
+  query: Record<string, string> = {},
+  cookie: string | null = managerCookie,
+) {
   const req = server().get(`/api/templates/${id}/preview/check`).query(query);
   if (cookie) req.set('Cookie', cookie);
   return req;
@@ -154,7 +159,12 @@ describe('GET /api/templates/:id/preview', () => {
     // The made-up sample: a name with a hyphen and a number, both funds (א wins).
     const read = (await readPdfText(body)).map(({ str }) => str);
     expect(read).toEqual(
-      expect.arrayContaining(['שירה כהן-לוי 2', '012345674', 'הרב קוק 12, בני ברק', 'קרן פנסיה לדוגמה א']),
+      expect.arrayContaining([
+        'שירה כהן-לוי 2',
+        '012345674',
+        'הרב קוק 12, בני ברק',
+        'קרן פנסיה לדוגמה א',
+      ]),
     );
   });
 
@@ -204,7 +214,9 @@ describe('GET /api/templates/:id/preview', () => {
   it('a template with a saved image whose file changed is a clear error, never a wrong image', async () => {
     await uploadEmployerSignature();
     const template = await contractTemplate(SUBSTITUTE);
-    const setting = await prisma.setting.findUniqueOrThrow({ where: { key: 'employer_signature' } });
+    const setting = await prisma.setting.findUniqueOrThrow({
+      where: { key: 'employer_signature' },
+    });
     await prisma.setting.update({
       where: { key: 'employer_signature' },
       data: { value: { ...(setting.value as object), sha256: 'b'.repeat(64) } },
@@ -265,7 +277,10 @@ describe('GET /api/templates/:id/preview/check', () => {
   });
 
   it('an empty address on a system_then_employee box is left for her, not missing', async () => {
-    await prisma.employee.update({ where: { id: employeeId }, data: { address: null, city: null } });
+    await prisma.employee.update({
+      where: { id: employeeId },
+      data: { address: null, city: null },
+    });
     const template = await contractTemplate({
       ...SUBSTITUTE,
       fields: SUBSTITUTE.fields.map((field) =>

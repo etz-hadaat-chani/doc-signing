@@ -211,7 +211,8 @@ export const TEMPLATE_PREVIEW_WARNINGS = {
   EMPLOYER_SIGNATURE_IMAGE_MISSING: 'לא הועלתה תמונת חתימת המעסיק, ולכן החתימה לא מוצגת',
   EMPLOYEE_INACTIVE: 'העובד אינו פעיל',
   TEXT_TOO_LONG: 'הטקסט ארוך מדי לתיבה גם בגופן הקטן ביותר, ולכן הוא חורג מגבולות התיבה',
-  CHARACTERS_NOT_SUPPORTED: 'יש תווים שהגופן אינו תומך בהם (למשל סמלים או ערבית); הם מוצגים כסימן ?',
+  CHARACTERS_NOT_SUPPORTED:
+    'יש תווים שהגופן אינו תומך בהם (למשל סמלים או ערבית); הם מוצגים כסימן ?',
 } as const;
 export type TemplatePreviewWarningCode = keyof typeof TEMPLATE_PREVIEW_WARNINGS;
 

@@ -56,7 +56,7 @@ describe('prepareText', () => {
     });
   });
 
-  it("draws ' \" - for Hebrew punctuation a font lacks, not ?", () => {
+  it('draws \' " - for Hebrew punctuation a font lacks, not ?', () => {
     const lacking = new FontWithout('׳״־');
     expect(prepareText('ג׳ורג׳ בית״ר תל־אביב', lacking)).toEqual({
       text: `ג'ורג' בית"ר תל-אביב`,
@@ -172,8 +172,8 @@ describe('checkTextFit (per recipient, no PDF)', () => {
       { fieldType: 'checkbox', key: 'moved', label: 'עברתי' },
       { fieldType: 'address', width: 20, showWhen: { key: 'moved', equals: 'true' } },
     ]);
-    expect(checkTextFit(fields, values({ address: 'הרב קוק 12, ירושלים' }), font).tooLong).toEqual(
-      ['address'],
-    );
+    expect(checkTextFit(fields, values({ address: 'הרב קוק 12, ירושלים' }), font).tooLong).toEqual([
+      'address',
+    ]);
   });
 });

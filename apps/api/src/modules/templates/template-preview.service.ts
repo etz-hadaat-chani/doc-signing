@@ -10,10 +10,7 @@ import { AuditService } from '../../common/audit/audit.service.js';
 import { AppException } from '../../common/errors/app.exception.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { SettingsService } from '../../common/settings/settings.service.js';
-import {
-  detailsFromRow,
-  employeeDetailsSelect,
-} from '../employees/employees.repository.js';
+import { detailsFromRow, employeeDetailsSelect } from '../employees/employees.repository.js';
 import {
   buildFieldValues,
   type FieldValuesResult,
@@ -78,7 +75,9 @@ export class TemplatePreviewService {
       employerSignatureMode: parts.row.employerSignatureMode,
       fieldValues,
       documentDate: parts.today,
-      employerSignaturePng: drawsEmployerSignature ? await this.assets.employerSignature(saved) : null,
+      employerSignaturePng: drawsEmployerSignature
+        ? await this.assets.employerSignature(saved)
+        : null,
       font: this.assets.font,
     });
     await this.audit.record({
@@ -161,7 +160,14 @@ export class TemplatePreviewService {
     if (!row) throw new AppException('EMPLOYEE_NOT_FOUND', HttpStatus.NOT_FOUND);
     const { firstName, lastName, idNumber, employeeNumber, email, isActive } = row;
     return {
-      employee: { firstName, lastName, idNumber, employeeNumber, email, details: detailsFromRow(row) },
+      employee: {
+        firstName,
+        lastName,
+        idNumber,
+        employeeNumber,
+        email,
+        details: detailsFromRow(row),
+      },
       isActive,
     };
   }

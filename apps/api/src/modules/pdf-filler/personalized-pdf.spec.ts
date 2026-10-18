@@ -84,7 +84,10 @@ describe('renderPersonalizedPdf: Hebrew reads correctly (NFR-HEB-3)', () => {
       const box = fields[index];
       if (!box) throw new Error('missing box');
       const inBox = read.filter(({ y }) => y >= box.y && y <= box.y + box.height);
-      expect(inBox.map(({ str }) => str), sample.text).toEqual([sample.read]);
+      expect(
+        inBox.map(({ str }) => str),
+        sample.text,
+      ).toEqual([sample.read]);
       const [item] = inBox;
       // Right-aligned: the text ends at the box's right edge, less the padding.
       const right = box.x + box.width - TEXT_PADDING;
