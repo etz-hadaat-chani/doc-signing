@@ -92,6 +92,7 @@ docker-compose.yml      # postgres, minio, mailpit
 - Dates stored UTC; displayed `DD/MM/YYYY` in `Asia/Jerusalem`.
 - Excel exports: neutralize cells starting with `= + - @`. ZIP names UTF-8.
 - Tests: unit tests for logic, API tests for every endpoint's happy path + permissions. Tests must pass before commit.
+- Before every commit run all four checks CI runs: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`. ESLint doesn't check formatting; fix it with `pnpm format`, then lint again (Prettier may rewrap a line away from its `eslint-disable-next-line` comment).
 - Small commits, one task per session. Migrations via Prisma only; never edit an applied migration.
 - Migration order: some migrations have hand-written timestamps (e.g. `20261013140000`). Every new migration folder name must sort after the newest existing one. Create it with `prisma migrate dev --create-only --name <name>`; if Prisma's timestamp is earlier, rename the folder before applying it.
 - Python is not installed on this machine. For helper scripts use Node.js (node -e or a .mjs file), never python.
@@ -106,4 +107,5 @@ pnpm test           # unit + api
 pnpm test:e2e
 pnpm email:preview  # the 3 emails with sample data → Mailpit (http://localhost:8025)
 pnpm lint && pnpm typecheck
+pnpm format:check   # pnpm format fixes it
 ```
