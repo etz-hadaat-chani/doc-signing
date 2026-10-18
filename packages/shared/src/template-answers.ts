@@ -5,6 +5,7 @@ import {
   EMAIL_CHOICES,
   type EmailChoice,
   employeeMayFill,
+  type ShowWhen,
   SIGNING_DAY,
   TEMPLATE_FIELD_GROUPS,
   type TemplateFieldSettings,
@@ -58,13 +59,36 @@ function kindOf(box: TemplateFieldSettings, leftForEmployee: readonly string[]):
   return null;
 }
 
+/** The answers a condition looks at: the form as sent, or the checked answers. */
+export interface ConditionAnswers {
+  emailChoice?: EmailChoice | null;
+  answers?: Readonly<Record<string, string | boolean>>;
+}
+
+/**
+ * Whether a position with this condition (`show_when`, FR-TPL-10) is shown for these answers:
+ * no condition → always; `email_choice` → the choice; a checkbox → `"true"` / `"false"`; a list
+ * or text → its value. The one rule for the form (`buildAnswersSchema`) and the signed PDF (3.7).
+ */
+export function conditionMatches(
+  condition: ShowWhen | null,
+  fields: readonly Pick<TemplateFieldSettings, 'fieldType' | 'key'>[],
+  given: ConditionAnswers,
+): boolean {
+  if (!condition) return true;
+  if (condition.key === EMAIL_CHOICE_KEY) return given.emailChoice === condition.equals;
+  const target = fields.find(({ key }) => key === condition.key);
+  const value = given.answers?.[condition.key];
+  if (target?.fieldType === 'checkbox') return String(value === true) === condition.equals;
+  return typeof value === 'string' && value.trim() === condition.equals;
+}
+
 const answersInputSchema = z.strictObject({
   emailChoice: z.enum(EMAIL_CHOICES).optional(),
   email: z.string().optional(),
   answers: z.record(z.string(), z.union([z.string(), z.boolean()])).optional(),
   drawings: z.record(z.string(), z.string()).optional(),
 });
-type AnswersInput = z.output<typeof answersInputSchema>;
 
 /**
  * Builds the zod schema for a template's answers from its boxes (FR-TPL-10, FR-SGN-4, FR-SGN-9),
@@ -91,15 +115,6 @@ export function buildAnswersSchema(
   }
   const hasEmailSection = [...boxes.values()].some(({ fieldType }) => fieldType === 'email_input');
 
-  const isShown = (box: TemplateFieldSettings, input: AnswersInput): boolean => {
-    const condition = box.showWhen;
-    if (!condition) return true;
-    if (condition.key === EMAIL_CHOICE_KEY) return input.emailChoice === condition.equals;
-    const target = boxes.get(condition.key);
-    const value = input.answers?.[condition.key];
-    if (target?.fieldType === 'checkbox') return String(value === true) === condition.equals;
-    return typeof value === 'string' && value.trim() === condition.equals;
-  };
   const dateLimit = (limit: string | undefined) =>
     limit === SIGNING_DAY ? context.signingDay : limit;
 
@@ -133,7 +148,7 @@ export function buildAnswersSchema(
     }
 
     for (const [key, { box, kind }] of asked) {
-      if (!isShown(box, input)) {
+      if (!conditionMatches(box.showWhen, fields, input)) {
         const given = kind === 'drawing' ? input.drawings?.[key] : input.answers?.[key];
         const hasValue = given === true || (typeof given === 'string' && given.trim() !== '');
         if (hasValue)

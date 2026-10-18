@@ -68,6 +68,9 @@ importers:
       '@pdf-lib/fontkit':
         specifier: 1.1.1
         version: 1.1.1
+      '@pdf-lib/upng':
+        specifier: 1.0.1
+        version: 1.0.1
       '@prisma/adapter-pg':
         specifier: 7.10.0
         version: 7.10.0

@@ -1,9 +1,10 @@
 import { formatDayIL } from '@doc-signing/shared';
-import { type PDFFont, type PDFImage, type PDFPage, rgb } from 'pdf-lib';
+import { type Color, type PDFFont, type PDFImage, type PDFPage, rgb } from 'pdf-lib';
 import {
   fitBlock,
   fitLine,
   type LaidOutLine,
+  layoutLine,
   prepareText,
   TEXT_PADDING,
   textArea,
@@ -40,10 +41,11 @@ function drawLine(
   baseline: number,
   size: number,
   font: PDFFont,
+  color: Color = INK,
 ): void {
   let x = right - line.width;
   for (const piece of line.pieces) {
-    page.drawText(piece.draw, { x, y: baseline, size, font, color: INK });
+    page.drawText(piece.draw, { x, y: baseline, size, font, color });
     x += piece.width;
   }
 }
@@ -87,6 +89,25 @@ export function drawTextBlock(
     drawLine(page, line, box.x + box.width - TEXT_PADDING, baseline, size, fonts.pdf);
   });
   return { tooLong, unsupported: prepared.unsupported };
+}
+
+/**
+ * One line of text at a fixed size, centred on `centreX` with its baseline at `baseline`, right to
+ * left like every other line (the signed PDF's footer, 3.7). Returns whether some character was
+ * drawn as `?`.
+ */
+export function drawCentredLine(
+  page: PDFPage,
+  at: { centreX: number; baseline: number },
+  value: string,
+  size: number,
+  fonts: DrawFonts,
+  color: Color = INK,
+): boolean {
+  const prepared = prepareText(value, fonts.text);
+  const line = layoutLine(prepared.text, fonts.text, size);
+  drawLine(page, line, at.centreX + line.width / 2, at.baseline, size, fonts.pdf, color);
+  return prepared.unsupported;
 }
 
 /** A date as DD/MM/YYYY (`day` is `YYYY-MM-DD`), drawn like one line of text. */

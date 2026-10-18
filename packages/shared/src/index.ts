@@ -10,6 +10,7 @@ export * from './field-values.js';
 export * from './id-number.js';
 export * from './pagination.js';
 export * from './settings.js';
+export * from './signing.js';
 export * from './status.js';
 export * from './template-answers.js';
 export * from './template-fields.js';

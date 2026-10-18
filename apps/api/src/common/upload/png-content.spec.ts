@@ -43,6 +43,7 @@ describe('readPngContent', () => {
     ['a cut-off file', testPng().subarray(0, testPng().length - 40)],
     ['cut-off image data with correct checksums', testPng({ cutImageData: true })],
     ['data after the end', Buffer.concat([testPng(), Buffer.from('extra')])],
+    ['a row with an unknown filter type', testPng({ badFilter: true })],
   ])('refuses %s', async (_label, bytes) => {
     expect(await readPngContent(bytes, limits)).toEqual({ ok: false, problem: 'invalid' });
   });
@@ -51,6 +52,15 @@ describe('readPngContent', () => {
     const bytes = Buffer.from(testPng());
     bytes.write('IHDX', 12, 'latin1');
     expect(await readPngContent(bytes, limits)).toEqual({ ok: false, problem: 'invalid' });
+  });
+
+  it('refuses more pixels than maxArea, when given', async () => {
+    const bytes = testPng({ width: 400, height: 150 });
+    expect(await readPngContent(bytes, { ...limits, maxArea: 59_999 })).toEqual({
+      ok: false,
+      problem: 'dimensions',
+    });
+    expect((await readPngContent(bytes, { ...limits, maxArea: 60_000 })).ok).toBe(true);
   });
 
   it('refuses a size of 0', async () => {

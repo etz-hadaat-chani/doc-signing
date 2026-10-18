@@ -40,7 +40,8 @@ class BadPng extends Error {}
 /**
  * Checks that the bytes are a real PNG (NFR-SEC-9), not just a file named so, and that pdf-lib
  * (the library that later draws it) can embed it. Transparency is fine. Never throws for a bad
- * file: not a PNG or broken → 'invalid'; a side outside `minPixels`..`maxPixels` → 'dimensions'.
+ * file: not a PNG or broken → 'invalid'; a side outside `minPixels`..`maxPixels`, or more pixels
+ * than `maxArea` (when given) → 'dimensions'.
  *
  * The structure is checked by hand first: every chunk and its CRC, IHDR first, IEND last, and
  * the image data must unpack (with a size cap) to exactly the size the header promises. Only
@@ -49,7 +50,7 @@ class BadPng extends Error {}
  */
 export async function readPngContent(
   bytes: Buffer,
-  { minPixels, maxPixels }: { minPixels: number; maxPixels: number },
+  { minPixels, maxPixels, maxArea }: { minPixels: number; maxPixels: number; maxArea?: number },
 ): Promise<PngContentResult> {
   let header: Header;
   let data: Buffer;
@@ -61,10 +62,13 @@ export async function readPngContent(
   const { width, height } = header;
   const inRange = (side: number) => side >= minPixels && side <= maxPixels;
   if (!inRange(width) || !inRange(height)) return { ok: false, problem: 'dimensions' };
+  if (maxArea !== undefined && width * height > maxArea)
+    return { ok: false, problem: 'dimensions' };
   try {
     const expected = rawSize(header);
     const raw = inflateSync(data, { maxOutputLength: expected + 1 });
     if (raw.length !== expected) return { ok: false, problem: 'invalid' };
+    if (!filtersValid(raw, header)) return { ok: false, problem: 'invalid' };
     const doc = await PDFDocument.create();
     const image = await doc.embedPng(bytes);
     if (image.width !== width || image.height !== height) return { ok: false, problem: 'invalid' };
@@ -122,6 +126,21 @@ function readHeader(body: Buffer): Header {
     throw new BadPng('header values');
   }
   return { width, height, bitDepth, colourType, interlaced: interlace === 1 };
+}
+
+/** Every row starts with its filter type, 0–4 (PNG spec 9.2); anything else is a broken file. */
+function filtersValid(raw: Buffer, { width, height, bitDepth, colourType, interlaced }: Header) {
+  const bitsPerPixel = (COLOUR_TYPES[colourType]?.channels ?? 0) * bitDepth;
+  const passes = interlaced
+    ? ADAM7.map(([x0, y0, dx, dy]) => [Math.ceil((width - x0) / dx), Math.ceil((height - y0) / dy)])
+    : [[width, height]];
+  let at = 0;
+  for (const [w = 0, h = 0] of passes) {
+    if (w === 0 || h === 0) continue;
+    const rowBytes = 1 + Math.ceil((w * bitsPerPixel) / 8);
+    for (let row = 0; row < h; row += 1, at += rowBytes) if ((raw[at] ?? 255) > 4) return false;
+  }
+  return true;
 }
 
 /** Bytes of the unpacked image data: one filter byte plus the pixels, per row (per pass). */

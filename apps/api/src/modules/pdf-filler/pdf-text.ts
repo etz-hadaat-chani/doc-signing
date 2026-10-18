@@ -51,6 +51,11 @@ export class TextFont {
     this.font = fontkit.create(bytes);
   }
 
+  /** The font's own name (PostScript), used as its fixed name in each PDF. */
+  get name(): string {
+    return this.font.postscriptName ?? 'EmbeddedFont';
+  }
+
   hasChar(codePoint: number): boolean {
     return this.font.hasGlyphForCodePoint(codePoint);
   }
