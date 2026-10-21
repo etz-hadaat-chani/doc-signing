@@ -129,7 +129,7 @@ Everything is tracked per **assignment**: one employee in one send round. That i
 
 | Status (Hebrew) | Set when |
 | --- | --- |
-| Waiting to send (ממתין לשליחה) | The round was created; the email is in the queue. |
+| Waiting to send (ממתין לשליחה) | The round was created, or sent and its email is in the queue. In a sent round, a "Waiting to send" row whose invitation failed shows as "Send failed" (שליחה נכשלה) until it is resent. |
 | Sent (נשלח) | The email provider accepted the invitation. |
 | Opened (נפתח) | The employee entered a correct ID number. |
 | Signed (נחתם) | The employee signed digitally. |
@@ -137,7 +137,7 @@ Everything is tracked per **assignment**: one employee in one send round. That i
 | Delivered (נמסר) | Delivery-only round (later): the email provider accepted the email. No  signature needed. |
 | Missing data (חסרים פרטים) | A required value for the document is empty on the employee card (for example no address). Nothing is sent; needs manual handling (FR-MAN-1). Takes precedence over "No email". |
 | No email (אין מייל) | The employee has no email address; needs manual handling. |
-| Invalid email (מייל שגוי) | The email bounced; needs manual handling. |
+| Invalid email (מייל שגוי) | The email provider refused the address or the email bounced; needs manual handling. |
 | Cancelled (בוטל) | A manager cancelled the round or this employee, or returned the signed document for correction (FR-TRK-6; shown and counted as "Returned for correction" (הוחזר לתיקון), apart from ordinary cancellations). |
 
 Three more conditions show on screen but are **flags, not statuses**, so the status isn't lost when they clear:
@@ -161,7 +161,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | FR-EMP-3 | Checks: valid Israeli ID number (check digit), no repeated employee numbers or ID numbers in the file, an ID number not already used by another employee, the email format when present, and a department cell in the form code - name: digits, optional spaces, "-", optional spaces, name. It is split at the **first** hyphen only, because names can contain hyphens and numbers ("45 - ממלאות מקום אלעד-45"). The code must be a whole number above 0, and the name must not be empty. A bad cell makes that row an error. A wrong email format is **not** an error: the row is imported with email status `invalid` (FR-EMP-4) and listed as a warning with its row number, so the employee still appears in manual handling. A phone that can't be read is saved empty, also as a warning. An extra-column cell that can't be read (a birth date that isn't a date or is in the future, a job % that isn't a number from 0 to 100, an hours-base code that isn't a whole number, text that is too long) is a warning too: that value is not written and the row is still imported. |
 | FR-EMP-4 | On confirm, rows are matched by **employee number**: new numbers create employees, existing numbers update them. Employees missing from the file are left as they are, because payroll exports may be filtered by department. A manager can mark an employee inactive by hand. **Har Gal is the main source:** an import overwrites the fields it carries, including manual edits (FR-EMP-7). Email status: same email as stored → status kept as it is (a bounced email stays bounced); different email → `valid`, or `invalid` if the format is wrong; empty → `missing`. **Extra columns** (FR-EMP-1): an empty cell, or a column missing from the file, never erases a stored value; only a filled cell overwrites it. The 10 required columns keep the rules above. The preview shows every change, including the extra fields, as "field: old → new". An import never sends anything (FR-EMP-6). |
 | FR-EMP-5 | Departments are matched by **code**, not by name. New codes in the file are created during import, after the manager confirms them. A known code with a different name renames the department on confirm (shown as "department renamed" in the preview). |
-| FR-EMP-6 | Employees without a valid email are marked "No email" and appear in manual handling. When an import adds an email, **nothing is sent automatically**: the employee's open assignments in status `no_email` appear in manual handling as "email added, ready to send", and the manager sends them with one click (FR-MAN-1). |
+| FR-EMP-6 | Employees without a valid email are marked "No email" and appear in manual handling. When an import adds an email, **nothing is sent automatically**: the employee's open assignments in status `no_email` appear in manual handling as "email added, ready to send", and the manager sends them with one click (FR-MAN-1). This protects rounds already sent: a draft round that was never sent emails everyone who has a valid email when the manager sends it (the send is the manager's action). |
 | FR-EMP-7 | A manager can add or edit a single employee (for example, fix an email), including the extra fields (address, city, birth date, role, employment status, job %, work days, work hours base code, pension funds א and ב, study fund) and both phones. The card also shows the age, and the hours base as "42 שעות" for a known code (otherwise the code itself). The next import overwrites these edits with the Har Gal data (FR-EMP-4), so managers should make the same fix in Har Gal. |
 | FR-EMP-8 | Every import is recorded: who, when, file, and counts. |
 | FR-EMP-9 | Two phones, stored separately as `050-1234567` (a prefix that lost its leading 0 gets it back): **landline** = קידומת + טלפון, **mobile** = נייד פרטי - קידומת + נייד פרטי - מספר. Nothing is ever sent to them; they are filled into documents. |
@@ -190,9 +190,9 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | FR-RND-3 | In by-department mode, the system picks each department's template and warns if a department in the round has none. |
 | FR-RND-4 | Before sending, the system shows counts: will get email, no email, already signed this template in another round (skip or send again), and **missing data**, with a list of who is missing what (for example "address, mobile"). Only required values filled in by the system only count as missing; an empty value the employee may fill in (FR-TPL-10) is not. Employees with missing data are added to the round in status "Missing data" and nothing is sent to them until the manager fills in the employee card (FR-MAN-1). "Already signed" counts any version of the same template, signed digitally or on paper. Employees who still have the same document open in another round that can be signed (link not expired) are counted apart and left out, so nobody gets two emails for one document. Inactive employees are never added, even when picked by hand (they are counted and named). |
 | FR-RND-5 | Per round: reminders on/off, reminder interval (default 3 days), link expiry (default 60 days, counted from the day the round is sent). Reminders continue until the employee signs; an optional maximum can be set. |
-| FR-RND-6 | Sending runs in the background in batches; the round screen shows progress. |
+| FR-RND-6 | Sending runs in the background in batches; the round screen shows progress ("sent 640 of 1,220", from the round's invitations: queued, sent, failed). The round is "sending" until every invitation is sent or failed, then "active". |
 | FR-RND-7 | A manager can cancel a round or a single recipient. |
-| FR-RND-8 | **Values are saved at send.** When an assignment is sent (also for "No email" assignments, so they can be printed), the system checks the required values again and saves the filled-in values with the assignment (`assignments.field_values`), including the age on that day and which employer-signature image is used. A required system-only value missing at that moment sets "Missing data" instead. An empty value of a "system, and the employee when empty" box is saved as empty, and the employee fills it in on the signing screen. The view, the print and the signed PDF all use the saved values; a later import or card edit doesn't change a document already sent. To change one, cancel it and send again. |
+| FR-RND-8 | **Values are saved at send.** When an assignment is sent (also for "No email" assignments, so they can be printed), the system checks the required values again and saves the filled-in values with the assignment (`assignments.field_values`), including the age on that day and which employer-signature image is used. A required system-only value missing at that moment sets "Missing data" instead (no values are saved for it until it is sent from manual handling). An employee who became inactive after the round was created is cancelled at the send. Everything else is checked again too: details filled in since the round was created, or an email added or removed, count as they are at the send. An empty value of a "system, and the employee when empty" box is saved as empty, and the employee fills it in on the signing screen. The view, the print and the signed PDF all use the saved values; a later import or card edit doesn't change a document already sent. To change one, cancel it and send again. |
 
 ### Signing (employee)
 
@@ -451,7 +451,7 @@ All management endpoints need a staff session; the role column says who may call
 | GET | `/api/rounds` | List rounds with % signed | M, O |
 | POST | `/api/rounds/recipients-preview` | Counts for a recipient choice (mode, templates, recipients, skip or send again to those who signed): will send, no email, already signed, already open in another round, missing data (who is missing what), inactive; each department with its template, "no template" or the templates to choose from; text that won't fit (box names only); what still blocks creating the round. Field names only, nothing created | M |
 | POST | `/api/rounds` | Create a draft round (name, mode, templates, recipients, settings): the round, its templates and one assignment per recipient; nothing is sent; 409 while the preview has blockers | M |
-| POST | `/api/rounds/:id/send` | Start sending | M |
+| POST | `/api/rounds/:id/send` | Send a draft round: body `{ confirmOutdatedTemplateIds? }`. Saves the values, checks every status again, sets the link expiry and queues one invitation per employee with an email; 202 with the counts. 409 if not a draft, if a template isn't ready, or if a template was archived or has a newer version and its id isn't in `confirmOutdatedTemplateIds` (the round still sends its own version) | M |
 | GET | `/api/rounds/:id` | Round details and status counts | M, O |
 | GET | `/api/rounds/:id/assignments?status=&dept=&q=&page=` | Per-employee table | M, O |
 | GET | `/api/rounds/:id/export` | Status export to Excel | M, O |
@@ -702,7 +702,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | assignment\_id | uuid FK → assignments |  |
 | type | enum `invite` / `reminder` / `signed_copy` |  |
 | to\_email | varchar(255) | Address actually used |
-| token\_hash | char(64) UNIQUE NULL | SHA-256 of this email's link token; NULL for the signed copy |
+| token\_hash | char(64) UNIQUE NULL | SHA-256 of this email's link token; NULL for the signed copy. An invite or reminder gets it just before it is sent (NULL while `queued`, and again if it clearly never left, then `failed`); one that went out always has it |
 | provider\_message\_id | varchar(255) NULL | Matches bounce notices |
 | status | enum `queued` / `sent` / `delivered` / `bounced` / `failed` |  |
 | error | text NULL |  |
@@ -838,7 +838,7 @@ The data includes ID numbers and signed employment documents, so security and pr
 
 | Area | Requirement |
 | --- | --- |
-| Bulk sending | A full round of 1,500 emails goes through the queue in batches, within the provider's rate limits. SES production access is requested early. |
+| Bulk sending | A full round of 1,500 emails goes through the queue in batches, within the provider's rate limits: the send queues one job per email in one transaction (under 1 second for 1,500), and the worker sends at most `EMAIL_SEND_RATE_PER_SECOND` a second (default 10; AWS SES starts at 14, its sandbox allows 1): about 2.5 minutes for 1,500. An email whose result is unclear (a timeout while it was handed over) is never sent a second time; the next reminder carries a new link. SES production access is requested early. |
 | Reminders | The daily job is safe to run twice and runs as one copy at a time. |
 | PDF | The personalized PDF opens in under 2 seconds. The Hebrew font is loaded once. |
 | Screens | Lists are paged; round counts come from indexed `GROUP BY` queries. |

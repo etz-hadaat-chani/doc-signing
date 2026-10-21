@@ -367,3 +367,64 @@ export const roundCreatedSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 export type RoundCreated = z.infer<typeof roundCreatedSchema>;
+
+/** At most this many templates in one send confirmation (a round has one per department). */
+export const ROUND_MAX_CONFIRMED_TEMPLATES = ROUND_MAX_DEPARTMENT_IDS;
+
+/**
+ * `POST /api/rounds/:id/send` (3.10). `confirmOutdatedTemplateIds`: the manager's "send the old
+ * version anyway" for templates archived or replaced by a newer version since the round was
+ * created. Every outdated template must be named, so one confirmation never covers a version the
+ * manager didn't see (409 `ROUND_TEMPLATE_OUTDATED` lists them).
+ */
+export const roundSendSchema = z.strictObject({
+  confirmOutdatedTemplateIds: idListSchema(ROUND_MAX_CONFIRMED_TEMPLATES),
+});
+export type RoundSendInput = z.output<typeof roundSendSchema>;
+
+/** Why a round's template version is outdated at send. */
+export const ROUND_OUTDATED_REASONS = ['newer_version', 'archived'] as const;
+export type RoundOutdatedReason = (typeof ROUND_OUTDATED_REASONS)[number];
+
+/** One outdated template in the details of 409 `ROUND_TEMPLATE_OUTDATED`. */
+export const roundOutdatedTemplateSchema = templateRefSchema.extend({
+  reason: z.enum(ROUND_OUTDATED_REASONS),
+  /** The newest version of the same document, when the reason is `newer_version`. */
+  newestVersion: z.int().min(1).nullable(),
+  /** Assignments of the round that would get this version. */
+  assignmentCount: z.int().min(0),
+});
+export type RoundOutdatedTemplate = z.infer<typeof roundOutdatedTemplateSchema>;
+
+/** One template that isn't ready, in the details of 409 `ROUND_TEMPLATE_NOT_READY`. */
+export const roundNotReadyTemplateSchema = templateRefSchema.extend({
+  reasons: z.array(notReadyReasonSchema),
+});
+
+/**
+ * `POST /api/rounds/:id/send` (202): what the send did. The emails go out in the background
+ * (`status` `sending`); `active` at once when there was nothing to email. Box names only, never
+ * values (NFR-PRV-7).
+ */
+export const roundSentSchema = z.object({
+  id: z.uuid(),
+  status: z.enum(['sending', 'active']),
+  sentAt: z.iso.datetime(),
+  /** The send time + the round's `linkExpiryDays` (FR-RND-5). */
+  linkExpiresAt: z.iso.datetime(),
+  counts: z.object({
+    /** Invitations queued, one per employee (`pending` until it is sent). */
+    queued: z.int().min(0),
+    /** Values saved, no email (missing, invalid or bounced address); printable. */
+    noEmail: z.int().min(0),
+    /** A required value is empty now; nothing saved or sent. */
+    missingData: z.int().min(0),
+    /** The employee became inactive after the round was created; cancelled. */
+    cancelledInactive: z.int().min(0),
+  }),
+  /** The outdated templates the manager confirmed (empty when none). */
+  outdatedTemplateIds: z.array(z.uuid()),
+  /** Text that won't draw as it is (3.6 `checkTextFit`), as in the preview; doesn't stop it. */
+  textWarnings: recipientsPreviewReportSchema.shape.lists.shape.textWarnings,
+});
+export type RoundSent = z.infer<typeof roundSentSchema>;

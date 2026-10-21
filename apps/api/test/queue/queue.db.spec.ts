@@ -163,6 +163,60 @@ describe('job queue', () => {
     expect(await send(3, 'assignment-b')).toEqual(expect.any(String));
   });
 
+  it('sendMany adds jobs only when the transaction commits; a key already waiting is skipped', async () => {
+    const jobs = (keys: string[]) => keys.map((key, n) => ({ data: { n }, singletonKey: key }));
+    await expect(
+      prisma.$transaction(async (tx) => {
+        expect(await api.sendMany(EXCLUSIVE_QUEUE, jobs(['k1', 'k2']), tx)).toBe(2);
+        throw new Error('rolled back');
+      }),
+    ).rejects.toThrow('rolled back');
+    const count = async () =>
+      (
+        await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+          `SELECT count(*) AS n FROM "${QUEUE_SCHEMA}".job WHERE name = $1`,
+          EXCLUSIVE_QUEUE.name,
+        )
+      )[0]?.n;
+    expect(await count()).toBe(0n);
+
+    const added = await prisma.$transaction((tx) =>
+      api.sendMany(EXCLUSIVE_QUEUE, jobs(['k1', 'k2']), tx),
+    );
+    expect(added).toBe(2);
+    expect(
+      await prisma.$transaction((tx) => api.sendMany(EXCLUSIVE_QUEUE, jobs(['k2', 'k3']), tx)),
+    ).toBe(1);
+    expect(await count()).toBe(3n);
+  });
+
+  it('batchSize > 1: runs every job, one at a time, and retries only the one that failed', async () => {
+    const ids = await Promise.all([1, 2, 3, 4, 5].map((n) => api.send(FAILING_QUEUE, { n })));
+    const runs: { n: number; attempt: number }[] = [];
+    let concurrent = 0;
+    let maxConcurrent = 0;
+    worker = await createTestWorker();
+    await worker.get(QueueService).work(
+      FAILING_QUEUE,
+      async ({ data, attempt }) => {
+        concurrent += 1;
+        maxConcurrent = Math.max(maxConcurrent, concurrent);
+        runs.push({ n: data.n, attempt });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        concurrent -= 1;
+        if (data.n === 3) throw new Error('only this one fails');
+      },
+      { ...fastPolling, batchSize: 3 },
+    );
+    for (const [index, id] of ids.entries()) {
+      await waitForState(FAILING_QUEUE, id ?? '', index === 2 ? 'failed' : 'completed');
+    }
+    expect(maxConcurrent).toBe(1);
+    expect(runs.filter(({ n }) => n !== 3).every(({ attempt }) => attempt === 1)).toBe(true);
+    expect(runs.filter(({ n }) => n === 3).map(({ attempt }) => attempt)).toEqual([1, 2]);
+    expect(runs).toHaveLength(6);
+  });
+
   it('only the worker runs jobs and schedules', async () => {
     await expect(api.work(ECHO_QUEUE, async () => {})).rejects.toThrow('worker only');
   });

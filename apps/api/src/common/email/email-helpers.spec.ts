@@ -112,6 +112,67 @@ describe('toEmailSendError', () => {
     expect(toEmailSendError(null)).toMatchObject({ kind: 'temporary' });
   });
 
+  /** nodemailer's socket errors: the Node error with its code replaced and `command` added. */
+  function socketError(message: string, fields: Record<string, string>) {
+    return Object.assign(new Error(message), fields);
+  }
+
+  // Clearly not sent: the server refused out loud, or it failed before the message was handed over.
+  it.each([
+    ['a refusal at RCPT TO', smtpError({ responseCode: 550, command: 'RCPT TO' })],
+    ['a busy reply to the body', smtpError({ responseCode: 451, command: 'DATA' })],
+    ['a 421 as the server closes', smtpError({ responseCode: 421, command: 'CONN' })],
+    ['a login refused', smtpError({ responseCode: 535, command: 'AUTH PLAIN', code: 'EAUTH' })],
+    ['missing credentials', smtpError({ command: 'API', code: 'EAUTH' })],
+    ['a TLS failure', smtpError({ command: 'STARTTLS', code: 'ETLS' })],
+    ['a DNS failure', smtpError({ command: 'CONN', code: 'EDNS' })],
+    ['a bad envelope', smtpError({ command: 'API', code: 'EENVELOPE' })],
+    ['an already closed connection', smtpError({ command: 'API', code: 'ECONNECTION' })],
+    ['a dropped connection at MAIL FROM', smtpError({ command: 'MAIL FROM', code: 'ESOCKET' })],
+    [
+      'a refused connection',
+      socketError('connect ECONNREFUSED 127.0.0.1:1025', {
+        code: 'ESOCKET',
+        syscall: 'connect',
+        command: 'CONN',
+      }),
+    ],
+    [
+      'an unknown host',
+      socketError('getaddrinfo ENOTFOUND smtp.invalid', {
+        code: 'ESOCKET',
+        syscall: 'getaddrinfo',
+        command: 'CONN',
+      }),
+    ],
+    [
+      'a connect timeout',
+      socketError('Connection timeout', { code: 'ETIMEDOUT', command: 'CONN' }),
+    ],
+    ['no greeting', socketError('Greeting never received', { code: 'ETIMEDOUT', command: 'CONN' })],
+  ])('%s is not_sent', (_label, error) => {
+    expect(toEmailSendError(error).delivery).toBe('not_sent');
+  });
+
+  // Unclear: the message may have been handed over. Never sent twice.
+  it.each([
+    ['a timeout while sending', socketError('Timeout', { code: 'ETIMEDOUT', command: 'CONN' })],
+    [
+      'a reset while sending',
+      socketError('read ECONNRESET', { code: 'ESOCKET', syscall: 'read', command: 'CONN' }),
+    ],
+    [
+      'a connection closed with no reply',
+      socketError('Connection closed unexpectedly', { code: 'ECONNECTION', command: 'CONN' }),
+    ],
+    ['a failure at DATA with no reply', socketError('boom', { code: 'ESOCKET', command: 'DATA' })],
+    ['an error of unknown shape', new Error('boom')],
+    ['not an error at all', 'boom'],
+  ])('%s is maybe_sent', (_label, error) => {
+    const mapped = toEmailSendError(error);
+    expect(mapped).toMatchObject({ kind: 'temporary', delivery: 'maybe_sent' });
+  });
+
   it('never carries the recipient or the original message', () => {
     const error = toEmailSendError(smtpError({ responseCode: 550, command: 'RCPT TO' }));
     expect(error.message).toBe('Email send failed (permanent, 550)');

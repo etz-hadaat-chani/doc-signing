@@ -25,6 +25,7 @@ function resolved(
     missing: outcome === 'missing_data' ? [{ key: 'address', name: 'כתובת' }] : [],
     textWarnings: [],
     noEmailReason: outcome === 'no_email' ? 'bounced' : null,
+    fieldValues: null,
     ...change,
   };
 }

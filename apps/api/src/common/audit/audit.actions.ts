@@ -3,6 +3,7 @@ import type {
   EmailStatus,
   RecipientsPreviewReport,
   RoundMode,
+  RoundSent,
   RoundSettings,
   UserRole,
 } from '@doc-signing/shared';
@@ -37,6 +38,10 @@ export const AUDIT_ACTIONS = [
   'template.preview_checked',
   'round.recipients_previewed',
   'round.created',
+  'round.sent',
+  'round.sending_finished',
+  'assignment.invite_sent',
+  'assignment.invite_failed',
   'settings.updated',
   'settings.employer_signature_uploaded',
   'settings.employer_signature_viewed',
@@ -49,6 +54,7 @@ export const AUDIT_ENTITY_TYPES = [
   'import_batch',
   'template',
   'round',
+  'assignment',
   'settings',
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
@@ -178,6 +184,40 @@ export interface AuditDetailsMap {
     alreadySigned: AlreadySignedChoice;
     settings: RoundSettings;
     counts: RecipientsPreviewReport['counts'];
+  };
+  /**
+   * A draft round was sent (3.10), entity = the round: the statuses changed, values saved and the
+   * invitations queued. Ids and counts only: `valuesSaved` says how many documents got their
+   * values, never the values (NFR-PRV-7).
+   */
+  'round.sent': {
+    templateIds: string[];
+    /** Outdated templates the manager confirmed sending as they are. */
+    outdatedTemplateIds: string[];
+    linkExpiresAt: string;
+    counts: RoundSent['counts'];
+    valuesSaved: number;
+    textWarnings: number;
+  };
+  /** Every invitation of the round is settled (system actor): `sending` → `active`. */
+  'round.sending_finished': { sent: number; failed: number };
+  /**
+   * One invitation went out (system actor, entity = the assignment). `unconfirmed`: it may have
+   * gone out, but the provider never confirmed it (a crash or a timeout); it is not sent again.
+   */
+  'assignment.invite_sent': {
+    roundId: string;
+    emailMessageId: string;
+    unconfirmed: boolean;
+    providerCode: string | null;
+  };
+  /** One invitation failed for good (system actor). The provider's code only, never its text. */
+  'assignment.invite_failed': {
+    roundId: string;
+    emailMessageId: string;
+    reason:
+      'permanent' | 'temporary_last_attempt' | 'unexpected_last_attempt' | 'assignment_closed';
+    providerCode: string | null;
   };
   // Settings (3.18): the manager is the actor; the entity is `settings` with no id (text keys).
   /** One line per changed value, "field: old → new" (`null` = no limit). */

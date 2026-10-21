@@ -5,9 +5,10 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
-import { PgBoss } from 'pg-boss';
+import { fromPrisma, type Job, type JobResult, PgBoss } from 'pg-boss';
 import { AppConfig } from '../config/config.schema.js';
 import { describeError, maskDatabaseUrl } from '../prisma/prisma.service.js';
+import type { Db } from '../prisma/prisma.types.js';
 import {
   QUEUE_SCHEMA,
   QUEUES,
@@ -45,9 +46,24 @@ export interface SendOptions {
   readonly startAfter?: Date;
 }
 
+/** One job of a bulk `sendMany`. */
+export interface BulkJob<TData> {
+  readonly data: TData;
+  readonly singletonKey?: string;
+}
+
+/** Jobs per insert statement. */
+const BULK_BATCH = 1000;
+
 export interface WorkOptions {
   /** How often an idle worker checks for jobs. Default 2 s. */
   readonly pollingIntervalSeconds?: number;
+  /**
+   * Jobs fetched at once (default 1). Above 1, the worker keeps fetching with no pause while
+   * fetches come back full (a backlog, e.g. a round's invitations), still runs the jobs one at a
+   * time, and settles each job on its own: one that throws is retried alone.
+   */
+  readonly batchSize?: number;
 }
 
 export interface JobState {
@@ -164,6 +180,29 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Adds many jobs inside the caller's Prisma transaction (pg-boss `fromPrisma`): they are saved,
+   * and become visible to the worker, only if the transaction commits. One insert per 1,000 jobs.
+   * Returns how many were added: on an `exclusive` queue a job whose `singletonKey` already has a
+   * waiting or running job is skipped (not added, no error).
+   */
+  async sendMany<TData extends object>(
+    queue: QueueDefinition<TData>,
+    jobs: readonly BulkJob<TData>[],
+    db: Db,
+  ): Promise<number> {
+    let added = 0;
+    for (let start = 0; start < jobs.length; start += BULK_BATCH) {
+      const batch = jobs.slice(start, start + BULK_BATCH).map(({ data, singletonKey }) => ({
+        data,
+        ...(singletonKey !== undefined && { singletonKey }),
+      }));
+      const ids = await this.boss.insert(queue.name, batch, { db: fromPrisma(db), returnId: true });
+      added += ids?.length ?? 0;
+    }
+    return added;
+  }
+
+  /**
    * Runs `handler` for each job of the queue, one at a time (worker only). Throw to fail the
    * attempt: the job is retried with backoff until its retry limit, then marked failed.
    */
@@ -173,32 +212,75 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     options: WorkOptions = {},
   ): Promise<void> {
     this.assertWorker('work');
-    const { retryLimit } = queue.retry;
-    await this.boss.work<TData>(
+    const pollingIntervalSeconds = options.pollingIntervalSeconds ?? 2;
+    const batchSize = options.batchSize ?? 1;
+    if (batchSize === 1) {
+      await this.boss.work<TData>(
+        queue.name,
+        { batchSize, pollingIntervalSeconds },
+        async (jobs) => {
+          for (const job of jobs) await this.runOne(queue, job, handler, { rethrow: true });
+        },
+      );
+      return;
+    }
+    await this.boss.work<
+      TData,
+      unknown,
+      {
+        batchSize: number;
+        pollingIntervalSeconds: number;
+        burstWhenBatchFull: true;
+        perJobResults: true;
+      }
+    >(
       queue.name,
-      { batchSize: 1, pollingIntervalSeconds: options.pollingIntervalSeconds ?? 2 },
+      { batchSize, pollingIntervalSeconds, burstWhenBatchFull: true, perJobResults: true },
       async (jobs) => {
+        const results: JobResult[] = [];
         for (const job of jobs) {
-          const context: JobContext<TData> = {
-            id: job.id,
-            data: job.data,
-            attempt: job.retryCount + 1,
-            isLastAttempt: job.retryCount >= retryLimit,
-            signal: job.signal,
-          };
-          try {
-            await handler(context);
-          } catch (error) {
-            const next = context.isLastAttempt ? 'no more retries' : 'will retry';
-            this.logger.warn(
-              `Job ${queue.name} ${job.id} failed (attempt ${context.attempt} of ` +
-                `${retryLimit + 1}, ${next}): ${errorText(error)}`,
-            );
-            throw error;
-          }
+          const outcome = await this.runOne(queue, job, handler, { rethrow: false });
+          results.push(
+            outcome.error === undefined
+              ? { id: job.id, status: 'completed' }
+              : { id: job.id, status: 'failed', output: { message: errorText(outcome.error) } },
+          );
         }
+        return results;
       },
     );
+  }
+
+  /**
+   * Runs one job. A failure is logged (queue, job id, attempt, error message), then rethrown
+   * (`rethrow`: pg-boss fails the job) or returned (the caller settles the job itself).
+   */
+  private async runOne<TData extends object>(
+    queue: QueueDefinition<TData>,
+    job: Job<TData>,
+    handler: JobHandler<TData>,
+    { rethrow }: { rethrow: boolean },
+  ): Promise<{ error?: unknown }> {
+    const { retryLimit } = queue.retry;
+    const context: JobContext<TData> = {
+      id: job.id,
+      data: job.data,
+      attempt: job.retryCount + 1,
+      isLastAttempt: job.retryCount >= retryLimit,
+      signal: job.signal,
+    };
+    try {
+      await handler(context);
+      return {};
+    } catch (error) {
+      const next = context.isLastAttempt ? 'no more retries' : 'will retry';
+      this.logger.warn(
+        `Job ${queue.name} ${job.id} failed (attempt ${context.attempt} of ` +
+          `${retryLimit + 1}, ${next}): ${errorText(error)}`,
+      );
+      if (rethrow) throw error;
+      return { error };
+    }
   }
 
   /**

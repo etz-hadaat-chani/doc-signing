@@ -4,3 +4,5 @@ import { inject } from 'vitest';
 // database and the test bucket.
 process.env.DATABASE_URL = inject('databaseUrl');
 process.env.S3_BUCKET = inject('s3Bucket');
+// Mailpit has no limit; the send tests shouldn't wait on the production default.
+process.env.EMAIL_SEND_RATE_PER_SECOND = '100';

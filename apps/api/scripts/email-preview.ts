@@ -1,4 +1,5 @@
-// Sends the 3 emails with sample data, to look at them in Mailpit (http://localhost:8025) now and
+// Sends the 3 emails, plus the correction-round invitation, with sample data, to look at them in
+// Mailpit (http://localhost:8025) now and
 // in Outlook and Gmail later (task 7.3). Development only. Usage: pnpm email:preview [to-address]
 //
 // The services are created by hand, not by Nest: tsx (esbuild) doesn't emit the decorator
@@ -53,6 +54,7 @@ async function main(): Promise<void> {
     const token = () => randomBytes(32).toString('base64url');
 
     await email.sendInvitation({ ...sample, token: token(), expiresAt });
+    await email.sendInvitation({ ...sample, token: token(), expiresAt, correction: true });
     await email.sendReminder({ ...sample, token: token(), expiresAt });
     await email.sendSignedCopy({
       ...sample,
@@ -65,7 +67,9 @@ async function main(): Promise<void> {
   }
 
   const mailpit = (process.env.MAILPIT_API_URL || 'http://localhost:8025').replace(/\/+$/, '');
-  console.log(`Sent 3 sample emails to ${to}. Open ${mailpit} to view them.`);
+  console.log(
+    `Sent 4 sample emails (incl. the correction invitation) to ${to}. Open ${mailpit} to view them.`,
+  );
 }
 
 main().catch((error: unknown) => {

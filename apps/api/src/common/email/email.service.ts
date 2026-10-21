@@ -9,6 +9,7 @@ import { SettingsService } from '../settings/settings.service.js';
 import { attachmentName } from './attachment-name.js';
 import { EmailAdapter, type EmailAttachment, type SendResult } from './email.adapter.js';
 import { EmailSendError } from './email.errors.js';
+import { SendRate } from './send-rate.js';
 import { signingLink } from './signing-link.js';
 import { renderInvitation } from './templates/invitation.js';
 import type { RenderedEmail } from './templates/layout.js';
@@ -29,6 +30,11 @@ export interface SigningEmailInput {
   readonly expiresAt?: Date;
 }
 
+export interface InvitationEmailInput extends SigningEmailInput {
+  /** A correction round (FR-TRK-6): adds the "corrected document" line. Never the note. */
+  readonly correction?: boolean;
+}
+
 export interface SignedCopyEmailInput {
   readonly to: string;
   readonly employeeName: string;
@@ -41,21 +47,32 @@ export interface SignedCopyEmailInput {
 /**
  * Renders and sends the three emails. Returns the provider's message id (store it in
  * `email_messages` for bounce matching). Throws `EmailSendError`: `temporary` = retry,
- * `permanent` = mark the send as failed. Logs only the email type, message id and error kind.
+ * `permanent` = mark the send as failed; `delivery` says whether it may have left (an adapter
+ * error of any other type becomes `maybe_sent`). An error thrown before the adapter is called
+ * (rendering, the sender name) is passed on as it is: nothing was sent. Logs only the email type,
+ * message id and error kind.
  */
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
+  /** The provider's rate limit, for every email this process sends (3.10). */
+  private readonly rate: SendRate;
 
   constructor(
     private readonly adapter: EmailAdapter,
     private readonly config: AppConfig,
     private readonly settings: SettingsService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    this.rate = new SendRate(config.email.sendRatePerSecond);
+  }
 
-  sendInvitation(input: SigningEmailInput, db: Db = this.prisma): Promise<SendResult> {
-    return this.send('invite', input.to, renderInvitation(this.requestData(input)), [], db);
+  sendInvitation(input: InvitationEmailInput, db: Db = this.prisma): Promise<SendResult> {
+    const rendered = renderInvitation({
+      ...this.requestData(input),
+      correction: input.correction === true,
+    });
+    return this.send('invite', input.to, rendered, [], db);
   }
 
   sendReminder(input: SigningEmailInput, db: Db = this.prisma): Promise<SendResult> {
@@ -95,12 +112,13 @@ export class EmailService {
   ): Promise<SendResult> {
     if (!recipientSchema.safeParse(to).success) {
       this.logger.warn(`Email not sent (${type}): invalid recipient address`);
-      throw new EmailSendError('permanent', 'INVALID_ADDRESS');
+      throw new EmailSendError('permanent', 'INVALID_ADDRESS', 'not_sent');
     }
     const from = {
       name: await this.settings.getSenderName(db),
       address: this.config.email.fromAddress,
     };
+    await this.rate.take();
     try {
       const result = await this.adapter.send({ to, from, subject, html, text, attachments });
       this.logger.log(redactForLog(`Email sent (${type}, ${result.providerMessageId})`));
@@ -108,11 +126,12 @@ export class EmailService {
     } catch (error) {
       if (error instanceof EmailSendError) {
         this.logger.warn(redactForLog(`Email not sent (${type}): ${error.message}`));
-      } else {
-        const name = error instanceof Error ? error.name : 'unknown error';
-        this.logger.error(`Email not sent (${type}): unexpected ${name}`);
+        throw error;
       }
-      throw error;
+      const name = error instanceof Error ? error.name : 'unknown error';
+      this.logger.error(`Email not sent (${type}): unexpected ${name}`);
+      // The adapter broke its contract: whether the message left is unknown.
+      throw new EmailSendError('temporary', 'UNEXPECTED', 'maybe_sent');
     }
   }
 }

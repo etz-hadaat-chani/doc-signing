@@ -15,6 +15,8 @@ export interface SigningRequestEmailData {
   /** The round's link expiry; the line is left out when missing. */
   readonly expiresAt?: Date;
   readonly hrContact: HrContact;
+  /** A correction round (FR-TRK-6): one line that a corrected document is waiting. */
+  readonly correction?: boolean;
 }
 
 interface RequestTexts {
@@ -22,6 +24,8 @@ interface RequestTexts {
   readonly intro: string;
   readonly action: string;
   readonly button: string;
+  /** A line right after the intro. */
+  readonly lead?: string;
   readonly extra?: string;
 }
 
@@ -40,10 +44,21 @@ export function renderSigningRequest(
   const bodyHtml = [
     paragraph(greeting),
     paragraph(texts.intro),
+    ...(texts.lead ? [paragraph(texts.lead)] : []),
     paragraph(texts.action),
     linkBlock(data.link, texts.button),
     ...notes.map(paragraph),
   ].join('\n');
-  const textLines = [greeting, '', texts.intro, texts.action, '', data.link, '', ...notes];
+  const textLines = [
+    greeting,
+    '',
+    texts.intro,
+    ...(texts.lead ? [texts.lead] : []),
+    texts.action,
+    '',
+    data.link,
+    '',
+    ...notes,
+  ];
   return renderLayout({ subject: texts.subject, bodyHtml, textLines, hrContact: data.hrContact });
 }

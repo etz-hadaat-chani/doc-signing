@@ -108,16 +108,36 @@ describe('EmailService', () => {
   );
 
   it('passes the adapter error on', async () => {
-    adapter.failure = new EmailSendError('temporary', '421');
+    adapter.failure = new EmailSendError('temporary', '421', 'not_sent');
     await expect(service.sendInvitation(request)).rejects.toBe(adapter.failure);
+  });
+
+  it('turns any other adapter error into a temporary maybe_sent failure', async () => {
+    adapter.failure = new TypeError('socket gone');
+    await expect(service.sendInvitation(request)).rejects.toMatchObject({
+      name: 'EmailSendError',
+      kind: 'temporary',
+      providerCode: 'UNEXPECTED',
+      delivery: 'maybe_sent',
+    });
+  });
+
+  it('adds the correction line to a correction invitation only', async () => {
+    await service.sendInvitation(request);
+    await service.sendInvitation({ ...request, correction: true });
+    const line = 'זהו מסמך מתוקן שממתין לחתימתך';
+    expect(adapter.sent[0]?.text).not.toContain(line);
+    expect(adapter.sent[1]?.text).toContain(line);
+    expect(adapter.sent[1]?.html).toContain(line);
+    expect(adapter.sent[1]?.subject).toBe(adapter.sent[0]?.subject);
   });
 
   it('never logs the link, the token, the address or the subject', async () => {
     await service.sendInvitation(request);
-    adapter.failure = new EmailSendError('permanent', '550');
+    adapter.failure = new EmailSendError('permanent', '550', 'not_sent');
     await expect(service.sendReminder(request)).rejects.toThrow(EmailSendError);
     adapter.failure = new TypeError(`bad ${token}`);
-    await expect(service.sendReminder(request)).rejects.toThrow(TypeError);
+    await expect(service.sendReminder(request)).rejects.toThrow(EmailSendError);
 
     expect(logLines).toHaveLength(3);
     const logged = logLines.join('\n');

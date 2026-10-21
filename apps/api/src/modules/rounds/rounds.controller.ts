@@ -5,15 +5,20 @@ import {
   type RoundCreated,
   type RoundCreateInput,
   type RoundSelection,
+  type RoundSendInput,
+  roundSendSchema,
+  type RoundSent,
 } from '@doc-signing/shared';
-import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Param, Post, Req } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { z } from 'zod';
 import { ApiZodBody } from '../../common/api-docs/api-docs.js';
 import { ZodValidationPipe } from '../../common/validation/zod-validation.pipe.js';
 import { Roles } from '../auth/access.decorators.js';
 import type { AuthRequest } from '../auth/auth-request.js';
 import type { TemplateActor } from '../templates/templates.service.js';
 import { RoundRecipientsService } from './round-recipients.service.js';
+import { RoundSendService } from './round-send.service.js';
 import { RoundsService } from './rounds.service.js';
 
 /** The acting manager. AccessGuard sets `request.auth` on every @Roles route. */
@@ -54,6 +59,12 @@ const CREATE_EXAMPLES = [
   }),
 ];
 
+/** The send: first without a confirmation, then confirming the outdated templates of the 409. */
+const SEND_EXAMPLES = [
+  JSON.stringify({}),
+  JSON.stringify({ confirmOutdatedTemplateIds: ['<template id from the 409 details>'] }),
+];
+
 /** Send rounds (PRD §11). Each route sets its own roles. */
 @ApiTags('rounds')
 @Controller('rounds')
@@ -61,6 +72,7 @@ export class RoundsController {
   constructor(
     private readonly recipients: RoundRecipientsService,
     private readonly rounds: RoundsService,
+    private readonly sending: RoundSendService,
   ) {}
 
   @ApiOperation({
@@ -82,6 +94,30 @@ export class RoundsController {
     @Req() request: AuthRequest,
   ): Promise<RoundCreated> {
     return this.rounds.create(body, actorOf(request));
+  }
+
+  @ApiOperation({
+    summary:
+      'Send a draft round (FR-RND-5, FR-RND-6, FR-RND-8): values saved, statuses checked ' +
+      'again, one invitation queued per employee with an email; the worker sends them',
+    description:
+      'Answers 202 at once; the emails go out in the background (round status sending, then ' +
+      'active). The link expires linkExpiryDays after this moment. 409 ROUND_NOT_DRAFT for a ' +
+      'round already sent or cancelled; 409 ROUND_TEMPLATE_NOT_READY (no override); 409 ' +
+      'ROUND_TEMPLATE_OUTDATED when a template was archived or has a newer version: send again ' +
+      "with every template id from its details to send the round's own version anyway. " +
+      `Examples:\n\n\`${SEND_EXAMPLES[0] ?? ''}\`\n\n\`${SEND_EXAMPLES[1] ?? ''}\``,
+  })
+  @ApiZodBody(roundSendSchema)
+  @Roles('manager')
+  @Post(':id/send')
+  @HttpCode(HttpStatus.ACCEPTED)
+  send(
+    @Param('id', new ZodValidationPipe(z.uuid())) id: string,
+    @Body(new ZodValidationPipe(roundSendSchema)) body: RoundSendInput,
+    @Req() request: AuthRequest,
+  ): Promise<RoundSent> {
+    return this.sending.send(id, body, actorOf(request));
   }
 
   @ApiOperation({

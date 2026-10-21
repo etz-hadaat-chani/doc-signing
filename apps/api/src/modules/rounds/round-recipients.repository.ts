@@ -11,7 +11,7 @@ import type { Db } from '../../common/prisma/prisma.types.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { employeeDetailsSelect } from '../employees/employees.repository.js';
 
-const recipientColumns = {
+export const recipientColumns = {
   id: true,
   employeeNumber: true,
   idNumber: true,

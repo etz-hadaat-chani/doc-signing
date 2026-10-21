@@ -11,6 +11,7 @@ export const emailTexts = {
     intro: (documentName: string) => `נשלח אליך המסמך "${documentName}" לחתימה.`,
     action: 'לצפייה במסמך ולחתימה עליו:',
     button: 'לצפייה ולחתימה',
+    correction: 'זהו מסמך מתוקן שממתין לחתימתך, במקום המסמך שנשלח אליך קודם.',
   },
   reminder: {
     subject: (documentName: string) => `תזכורת: מסמך ממתין לחתימתך – ${documentName}`,

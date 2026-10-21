@@ -29,7 +29,9 @@ export interface SendResult {
 /**
  * Sends one email. Injected by class: `constructor(private readonly email: EmailAdapter)`.
  * SMTP (Mailpit locally) now; SES or Postmark later (task 7.5) is another class.
- * Failures throw `EmailSendError`. Most code should use `EmailService`, which renders the emails.
+ * Failures throw `EmailSendError` and nothing else, with its `delivery` decided (`not_sent` only
+ * when the message clearly never left; 3.10 relies on it to never send one link twice). Most code
+ * should use `EmailService`, which renders the emails.
  */
 export abstract class EmailAdapter {
   abstract send(message: OutgoingEmail): Promise<SendResult>;

@@ -29,6 +29,7 @@ function recipient(
     missing: outcome === 'missing_data' ? [{ key: 'address', name: 'כתובת' }] : [],
     textWarnings: [],
     noEmailReason: outcome === 'no_email' ? 'missing' : null,
+    fieldValues: null,
   };
 }
 

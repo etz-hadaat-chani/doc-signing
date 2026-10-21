@@ -399,10 +399,19 @@ describe('email_messages', () => {
   it.each([
     ['an uppercase token_hash', { tokenHash: 'A'.repeat(64) }, /email_messages_token_hash_check/],
     ['a non-hex token_hash', { tokenHash: 'z'.repeat(64) }, /email_messages_token_hash_check/],
-    ['an invite without a token', { tokenHash: null }, /email_messages_token_hash_type_check/],
     [
-      'a reminder without a token',
-      { type: 'reminder', tokenHash: null },
+      'a sent invite without a token',
+      { tokenHash: null, status: 'sent' },
+      /email_messages_token_hash_type_check/,
+    ],
+    [
+      'a sent reminder without a token',
+      { type: 'reminder', tokenHash: null, status: 'sent' },
+      /email_messages_token_hash_type_check/,
+    ],
+    [
+      'a bounced invite without a token',
+      { tokenHash: null, status: 'bounced' },
       /email_messages_token_hash_type_check/,
     ],
     [
@@ -419,6 +428,17 @@ describe('email_messages', () => {
       await expect(createEmail(assignment.id, overrides)).rejects.toThrow(constraint);
     },
   );
+
+  it('accepts an invite with no token yet while queued or after it failed (3.10)', async () => {
+    const base = await createBase();
+    const assignment = await createAssignment(base);
+    await expect(createEmail(assignment.id, { tokenHash: null })).resolves.toMatchObject({
+      status: 'queued',
+    });
+    await expect(
+      createEmail(assignment.id, { type: 'reminder', tokenHash: null, status: 'failed' }),
+    ).resolves.toMatchObject({ tokenHash: null });
+  });
 
   it('accepts two signed copies without tokens, with default status queued', async () => {
     const base = await createBase();

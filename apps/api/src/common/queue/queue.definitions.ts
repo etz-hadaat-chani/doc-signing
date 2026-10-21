@@ -64,5 +64,22 @@ export const CLEANUP_QUEUE: QueueDefinition<Record<string, never>> = Object.free
   schedule: Object.freeze({ cron: '0 3 * * *', description: 'daily 03:00' }),
 });
 
+/** IDs only (3.10): never the token, the address or anything about the employee. */
+export interface InvitationJobData {
+  readonly assignmentId: string;
+  readonly emailMessageId: string;
+}
+
+/**
+ * One invitation email per job (3.10), added by the round send in its own transaction. Exclusive
+ * with `singletonKey` = the assignment id: one waiting or running job per assignment. Default
+ * retries (temporary send errors).
+ */
+export const INVITATION_QUEUE: QueueDefinition<InvitationJobData> = Object.freeze({
+  name: 'round-invitation',
+  policy: 'exclusive',
+  retry: DEFAULT_RETRY,
+});
+
 /** Every queue of the app. Both processes create (or update) them at start. */
-export const QUEUES: readonly QueueDefinition[] = Object.freeze([CLEANUP_QUEUE]);
+export const QUEUES: readonly QueueDefinition[] = Object.freeze([CLEANUP_QUEUE, INVITATION_QUEUE]);

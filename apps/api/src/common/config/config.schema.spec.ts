@@ -28,6 +28,7 @@ describe('loadConfig', () => {
         fromAddress: 'no-reply@doc-signing.local',
         publicUrl: 'http://localhost:5173',
         hrContact: { name: 'מחלקת משאבי אנוש', phone: '02-1234567', email: undefined },
+        sendRatePerSecond: 10,
       },
     });
     expect(loadConfig({ ...base, PORT: '8080', NODE_ENV: 'test' })).toMatchObject({
@@ -121,6 +122,7 @@ describe('loadConfig', () => {
       HR_CONTACT_NAME: 'משאבי אנוש',
       HR_CONTACT_PHONE: '',
       HR_CONTACT_EMAIL: 'hr@example.org',
+      EMAIL_SEND_RATE_PER_SECOND: '14',
     });
     expect(config.email).toEqual({
       smtp: {
@@ -132,7 +134,16 @@ describe('loadConfig', () => {
       fromAddress: 'no-reply@doc-signing.local',
       publicUrl: 'https://sign.example.org/app',
       hrContact: { name: 'משאבי אנוש', phone: undefined, email: 'hr@example.org' },
+      sendRatePerSecond: 14,
     });
+  });
+
+  it('refuses a send rate outside 1–100 a second', () => {
+    for (const value of ['0', '101', '2.5', 'fast']) {
+      expect(() => loadConfig({ ...base, EMAIL_SEND_RATE_PER_SECOND: value })).toThrow(
+        'EMAIL_SEND_RATE_PER_SECOND (invalid)',
+      );
+    }
   });
 
   it('needs both SMTP user and password or neither, and never prints them', () => {

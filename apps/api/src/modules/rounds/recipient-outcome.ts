@@ -1,6 +1,7 @@
 import {
   type AlreadySignedChoice,
   type EmailStatus,
+  type FieldValues,
   isSystemValueType,
   type NoEmailReason,
   OPEN_ASSIGNMENT_STATUSES,
@@ -87,6 +88,11 @@ export interface ResolvedRecipient {
   textWarnings: RecipientTextWarning[];
   /** Set when the employee has no usable email. */
   noEmailReason: NoEmailReason | null;
+  /**
+   * The values step's result for this recipient (3.6), set whenever it ran (missing data, no
+   * email, email). The send (3.10) saves it as `field_values`; the preview never does.
+   */
+  fieldValues: FieldValues | null;
 }
 
 export interface ResolveRecipientInput {
@@ -137,6 +143,7 @@ export function resolveRecipient(input: ResolveRecipientInput): ResolvedRecipien
     missing: [],
     textWarnings: [],
     noEmailReason: null,
+    fieldValues: null,
   };
   if (!employee.isActive) return result;
   if (input.departmentStatus !== 'ready' || !template) {
@@ -171,6 +178,7 @@ export function resolveRecipient(input: ResolveRecipientInput): ResolvedRecipien
     result.textWarnings.push({ code: 'CHARACTERS_NOT_SUPPORTED', keys: named(fit.unsupported) });
   }
   result.missing = missing;
+  result.fieldValues = fieldValues;
   result.noEmailReason = noEmailReasonOf(employee);
   if (missing.length > 0) result.outcome = 'missing_data';
   else if (result.noEmailReason) result.outcome = 'no_email';

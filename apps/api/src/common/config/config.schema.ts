@@ -50,6 +50,8 @@ const envSchema = z
         .optional(),
     ),
     HR_CONTACT_EMAIL: optional(z.email().optional()),
+    // Emails a second, at most, per worker process (the provider's limit; AWS SES starts at 14).
+    EMAIL_SEND_RATE_PER_SECOND: optional(z.coerce.number().int().min(1).max(100).default(10)),
   })
   .superRefine((env, ctx) => {
     if ((env.S3_ACCESS_KEY === undefined) !== (env.S3_SECRET_KEY === undefined)) {
@@ -94,6 +96,8 @@ export interface EmailConfig {
   /** No trailing slash. */
   readonly publicUrl: string;
   readonly hrContact: HrContact;
+  /** Emails a second, at most, per process (3.10). */
+  readonly sendRatePerSecond: number;
 }
 
 /** Validated settings. Injected by class: `constructor(private readonly config: AppConfig)`. */
@@ -155,6 +159,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
         phone: data.HR_CONTACT_PHONE,
         email: data.HR_CONTACT_EMAIL,
       }),
+      sendRatePerSecond: data.EMAIL_SEND_RATE_PER_SECOND,
     }),
   });
 }
