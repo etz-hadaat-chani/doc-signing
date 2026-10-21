@@ -213,8 +213,8 @@ export class TemplatesRepository {
   }
 
   /**
-   * Marks a template as sent (FR-TPL-4); from now on an edit of its name or positions creates a
-   * new version. For the send (3.10), inside its transaction. The UPDATE takes the row lock, so
+   * Marks a template as used (FR-TPL-4); from now on an edit of its name or positions creates a
+   * new version. Round creation (3.9) calls it inside its transaction. The UPDATE takes the row lock, so
    * an edit running at the same moment finishes first or sees it locked. Already locked → no
    * change. Returns false when there is no such template.
    */

@@ -173,7 +173,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | FR-TPL-1 | A manager can upload a PDF, name it and link it to one or more departments. |
 | FR-TPL-2 | Each template stores positions (page, X, Y, size) for what is drawn on it. In the MVP the developer sets these once per PDF. Any type can appear in any number of positions, or not at all. **System values:** full name, ID number, employee number, address ("כתובת, יישוב"), landline, mobile, age (whole years from the birth date, on the day the assignment is sent), role, employment status, job %, work days, study fund; pension fund (FR-TPL-5); document date ("drawn up and signed": today's date while the employee views the document, the signing date in the signed PDF; DD/MM/YYYY, Asia/Jerusalem). **Boxes the employee fills in:** the email section (FR-SGN-9), and short text, long text, choose from a list, checkbox, date and drawing boxes (FR-TPL-9). A system value can also be filled in by the employee, per its settings (FR-TPL-10). **Signatures:** the employee's (FR-SGN-10) and the employer's (FR-TPL-7). The organization's own details (עץ הדעת) are part of the PDF itself, not fields. Work hours are **not** a system value yet: שעות עבודה is a base code whose meaning is not fully confirmed (section 14). |
 | FR-TPL-3 | A manager can preview a template filled with a sample employee, to check the Hebrew text. The preview lists the values that sample employee is missing. |
-| FR-TPL-4 | Once a template has been sent, it is locked. A change to its name, field positions or any box setting (FR-TPL-10: who fills it in, required, condition, limits, approval, label), or to its employer-signature setting, creates a new version (same PDF); documents already sent don't change. Linking or unlinking departments changes the locked template in place, since it only decides which template future rounds offer. |
+| FR-TPL-4 | Once a template is used in a round (when the round is created, even before it is sent), it is locked, so a draft round sends exactly the document that was previewed. A change to its name, field positions or any box setting (FR-TPL-10: who fills it in, required, condition, limits, approval, label), or to its employer-signature setting, creates a new version (same PDF); documents already sent don't change. Linking or unlinking departments changes the locked template in place, since it only decides which template future rounds offer. |
 | FR-TPL-5 | **Pension fund.** Two checkbox positions, "has an active fund" and "has no active fund", plus a position for the fund name. A setting on the template's pension field picks the source: **"א, then ב"** (default: קופ"ג א; if empty, קופ"ג ב; if both are filled, א) or **"ב only"** (after-school contracts, which always use קופ"ג ב). If the column(s) used have a name: "has an active fund" is ticked and the name is written; if empty: "has no active fund" is ticked. An empty fund is a valid answer, never "missing data". |
 | FR-TPL-6 | Each box is **required** (default) or **may stay empty** (for example the landline, which many employees don't have). For a value filled in by the system only, a required value that is empty for an employee means "missing data" (FR-RND-4); an optional one is drawn blank. For "system, and the employee when empty", an empty value is never "missing data": the box goes to the signing form instead. For a box the employee fills in, required means she can't submit while it is empty (FR-SGN-4). A hidden box (FR-TPL-10) is never required. |
 | FR-TPL-7 | **Employer signature** (עץ הדעת), a setting per template: **already on the document when sent** (the employee receives the document signed by the employer, then signs herself), **added after the employee signs** (only in the signed PDF), or **none**. The image is the one the manager uploaded (FR-ADM-2), placed at the template's employer-signature positions. |
@@ -189,7 +189,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | FR-RND-2 | Recipients can be chosen and combined: all employees, chosen departments, hand-picked employees, or one employee (also from the employee card). |
 | FR-RND-3 | In by-department mode, the system picks each department's template and warns if a department in the round has none. |
 | FR-RND-4 | Before sending, the system shows counts: will get email, no email, already signed this template in another round (skip or send again), and **missing data**, with a list of who is missing what (for example "address, mobile"). Only required values filled in by the system only count as missing; an empty value the employee may fill in (FR-TPL-10) is not. Employees with missing data are added to the round in status "Missing data" and nothing is sent to them until the manager fills in the employee card (FR-MAN-1). "Already signed" counts any version of the same template, signed digitally or on paper. Employees who still have the same document open in another round that can be signed (link not expired) are counted apart and left out, so nobody gets two emails for one document. Inactive employees are never added, even when picked by hand (they are counted and named). |
-| FR-RND-5 | Per round: reminders on/off, reminder interval (default 3 days), link expiry (default 60 days). Reminders continue until the employee signs; an optional maximum can be set. |
+| FR-RND-5 | Per round: reminders on/off, reminder interval (default 3 days), link expiry (default 60 days, counted from the day the round is sent). Reminders continue until the employee signs; an optional maximum can be set. |
 | FR-RND-6 | Sending runs in the background in batches; the round screen shows progress. |
 | FR-RND-7 | A manager can cancel a round or a single recipient. |
 | FR-RND-8 | **Values are saved at send.** When an assignment is sent (also for "No email" assignments, so they can be printed), the system checks the required values again and saves the filled-in values with the assignment (`assignments.field_values`), including the age on that day and which employer-signature image is used. A required system-only value missing at that moment sets "Missing data" instead. An empty value of a "system, and the employee when empty" box is saved as empty, and the employee fills it in on the signing screen. The view, the print and the signed PDF all use the saved values; a later import or card edit doesn't change a document already sent. To change one, cancel it and send again. |
@@ -450,7 +450,7 @@ All management endpoints need a staff session; the role column says who may call
 | --- | --- | --- | --- |
 | GET | `/api/rounds` | List rounds with % signed | M, O |
 | POST | `/api/rounds/recipients-preview` | Counts for a recipient choice (mode, templates, recipients, skip or send again to those who signed): will send, no email, already signed, already open in another round, missing data (who is missing what), inactive; each department with its template, "no template" or the templates to choose from; text that won't fit (box names only); what still blocks creating the round. Field names only, nothing created | M |
-| POST | `/api/rounds` | Create a round (name, mode, templates, recipients, settings) | M |
+| POST | `/api/rounds` | Create a draft round (name, mode, templates, recipients, settings): the round, its templates and one assignment per recipient; nothing is sent; 409 while the preview has blockers | M |
 | POST | `/api/rounds/:id/send` | Start sending | M |
 | GET | `/api/rounds/:id` | Round details and status counts | M, O |
 | GET | `/api/rounds/:id/assignments?status=&dept=&q=&page=` | Per-employee table | M, O |
@@ -604,7 +604,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | page\_count | int |  |
 | version | int | Starts at 1 |
 | parent\_template\_id | uuid FK → templates NULL | Earlier version |
-| is\_locked | boolean | True after first send |
+| is\_locked | boolean | True once a round uses it (set when the round is created) |
 | is\_archived | boolean |  |
 | employer\_signature\_mode | enum `pre_signed` / `after_employee` / `none` | Default `none` (FR-TPL-7). The current contracts use `pre_signed` |
 | created\_by | uuid FK → users |  |
@@ -647,7 +647,8 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | reminders\_enabled | boolean |  |
 | reminder\_interval\_days | int | Default 3 |
 | max\_reminders | int | NULL = no limit (default) |
-| link\_expires\_at | timestamptz NULL |  |
+| link\_expiry\_days | smallint | 1–365, from the settings or the manager's value; counted from the send |
+| link\_expires\_at | timestamptz NULL | NULL while the round is a draft; set at send = send time + `link_expiry_days` |
 | correction\_of\_assignment\_id | uuid FK → assignments NULL, UNIQUE | Set on a correction round: the returned assignment it replaces (FR-TRK-6). One correction round per returned assignment |
 | created\_by | uuid FK → users |  |
 | sent\_at, closed\_at | timestamptz NULL |  |

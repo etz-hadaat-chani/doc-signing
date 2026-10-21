@@ -3,6 +3,7 @@ import type {
   EmailStatus,
   RecipientsPreviewReport,
   RoundMode,
+  RoundSettings,
   UserRole,
 } from '@doc-signing/shared';
 
@@ -35,6 +36,7 @@ export const AUDIT_ACTIONS = [
   'template.previewed',
   'template.preview_checked',
   'round.recipients_previewed',
+  'round.created',
   'settings.updated',
   'settings.employer_signature_uploaded',
   'settings.employer_signature_viewed',
@@ -159,6 +161,22 @@ export interface AuditDetailsMap {
     employeeIdCount: number;
     templateIds: string[];
     alreadySigned: AlreadySignedChoice;
+    counts: RecipientsPreviewReport['counts'];
+  };
+  /**
+   * A draft round was created (3.9), entity = the round. The choice, its templates, settings and
+   * counts only: never the round name (a correction round's name holds the employee's name),
+   * names, employee ids or values.
+   */
+  'round.created': {
+    mode: RoundMode;
+    all: boolean;
+    departmentCount: number;
+    employeeIdCount: number;
+    /** The template ids in round_templates (each once). */
+    templateIds: string[];
+    alreadySigned: AlreadySignedChoice;
+    settings: RoundSettings;
     counts: RecipientsPreviewReport['counts'];
   };
   // Settings (3.18): the manager is the actor; the entity is `settings` with no id (text keys).

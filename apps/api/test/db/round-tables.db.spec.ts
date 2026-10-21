@@ -59,7 +59,13 @@ async function createRound(
   overrides: Partial<Prisma.RoundUncheckedCreateInput> = {},
 ) {
   return prisma.round.create({
-    data: { name: 'חוזה שנתי 2027', mode: 'single_template', createdById, ...overrides },
+    data: {
+      name: 'חוזה שנתי 2027',
+      mode: 'single_template',
+      linkExpiryDays: 60,
+      createdById,
+      ...overrides,
+    },
   });
 }
 
@@ -161,6 +167,7 @@ describe('rounds', () => {
       reminderIntervalDays: 3,
       maxReminders: null,
       linkExpiresAt: null,
+      correctionOfAssignmentId: null,
     });
   });
 
@@ -181,6 +188,8 @@ describe('rounds', () => {
       /rounds_reminder_interval_days_check/,
     ],
     ['max_reminders 0', { maxReminders: 0 }, /rounds_max_reminders_check/],
+    ['link_expiry_days 0', { linkExpiryDays: 0 }, /rounds_link_expiry_days_check/],
+    ['link_expiry_days 366', { linkExpiryDays: 366 }, /rounds_link_expiry_days_check/],
   ])('rejects %s', async (_case, overrides, constraint) => {
     const user = await createUser();
 
@@ -196,6 +205,30 @@ describe('assignments', () => {
       status: 'pending',
       failedAttempts: 0,
       reminderCount: 0,
+      fieldValues: null,
+      needsApproval: false,
+      approvedAt: null,
+      returnedAt: null,
+      returnNote: null,
+    });
+  });
+
+  it('accepts the missing_data status', async () => {
+    const base = await createBase();
+
+    await expect(createAssignment(base, { status: 'missing_data' })).resolves.toMatchObject({
+      status: 'missing_data',
+    });
+  });
+
+  it('links one correction round to a returned assignment, only once', async () => {
+    const base = await createBase();
+    const assignment = await createAssignment(base);
+    const link = { correctionOfAssignmentId: assignment.id };
+    await createRound(base.user.id, { name: 'תיקון 1', ...link });
+
+    await expect(createRound(base.user.id, { name: 'תיקון 2', ...link })).rejects.toMatchObject({
+      code: 'P2002',
     });
   });
 
@@ -278,6 +311,26 @@ describe('assignments', () => {
       { status: 'signed_manual', signedFileKey: 'r/d/1001.pdf' },
       /assignments_signed_check/,
     ],
+    [
+      'approved without needing approval',
+      { needsApproval: false, approvedAt: new Date() },
+      /assignments_approved_check/,
+    ],
+    [
+      'approved_at without approved_by',
+      { needsApproval: true, approvedAt: new Date() },
+      /assignments_approved_check/,
+    ],
+    [
+      'returned on a row that is not cancelled',
+      { status: 'pending', returnedAt: new Date(), returnNote: 'חסרה כתובת' },
+      /assignments_returned_check/,
+    ],
+    [
+      'returned without returned_by',
+      { status: 'cancelled', returnedAt: new Date(), returnNote: 'חסרה כתובת' },
+      /assignments_returned_check/,
+    ],
   ] satisfies [string, Partial<Prisma.AssignmentUncheckedCreateInput>, RegExp][])(
     'rejects %s',
     async (_case, overrides, constraint) => {
@@ -307,6 +360,29 @@ describe('assignments', () => {
       await expect(createAssignment(base, overrides)).resolves.toBeDefined();
     },
   );
+
+  it('accepts an approved signed row and a returned cancelled row', async () => {
+    const base = await createBase();
+    const signed = {
+      status: 'signed' as const,
+      signedAt: new Date(),
+      signedFileKey: 'r/d/1001.pdf',
+      needsApproval: true,
+      approvedAt: new Date(),
+      approvedById: base.user.id,
+    };
+    await expect(createAssignment(base, signed)).resolves.toBeDefined();
+
+    const other = await createRound(base.user.id, { name: 'סבב שני' });
+    const returned = {
+      roundId: other.id,
+      status: 'cancelled' as const,
+      returnedAt: new Date(),
+      returnedById: base.user.id,
+      returnNote: 'חסרה כתובת',
+    };
+    await expect(createAssignment(base, returned)).resolves.toBeDefined();
+  });
 });
 
 describe('email_messages', () => {
@@ -358,12 +434,10 @@ describe('email_messages', () => {
 });
 
 describe('assignment_responses', () => {
-  it('rejects two answers to the same field in one assignment', async () => {
-    const base = await createBase();
-    const assignment = await createAssignment(base);
-    const field = await prisma.templateField.create({
+  async function createField(templateId: string) {
+    return prisma.templateField.create({
       data: {
-        templateId: base.template.id,
+        templateId,
         fieldType: 'checkbox',
         key: 'box_1',
         page: 1,
@@ -373,11 +447,53 @@ describe('assignment_responses', () => {
         height: 20,
       },
     });
-    const answer = { assignmentId: assignment.id, templateFieldId: field.id, value: 'true' };
+  }
+
+  it('rejects two answers with the same key in one assignment', async () => {
+    const base = await createBase();
+    const assignment = await createAssignment(base);
+    const field = await createField(base.template.id);
+    const answer = {
+      assignmentId: assignment.id,
+      key: 'box_1',
+      templateFieldId: field.id,
+      value: 'true',
+    };
     await prisma.assignmentResponse.create({ data: answer });
 
     await expect(
       prisma.assignmentResponse.create({ data: { ...answer, value: 'false' } }),
     ).rejects.toMatchObject({ code: 'P2002' });
+  });
+
+  it('accepts the email section without a position, and a drawing as a file', async () => {
+    const base = await createBase();
+    const assignment = await createAssignment(base);
+    const assignmentId = assignment.id;
+
+    await prisma.assignmentResponse.createMany({
+      data: [
+        { assignmentId, key: 'email_choice', value: 'office' },
+        { assignmentId, key: 'box_2', fileKey: `responses/${assignmentId}/box_2.png` },
+      ],
+    });
+    await expect(prisma.assignmentResponse.count()).resolves.toBe(2);
+  });
+
+  it.each([
+    ['no value and no file', { key: 'box_1' }, /assignment_responses_value_or_file_check/],
+    [
+      'both a value and a file',
+      { key: 'box_1', value: 'x', fileKey: 'responses/x/box_1.png' },
+      /assignment_responses_value_or_file_check/,
+    ],
+    ['a key that is not a slug', { key: 'Box 1', value: 'x' }, /assignment_responses_key_check/],
+  ])('rejects %s', async (_case, data, constraint) => {
+    const base = await createBase();
+    const assignment = await createAssignment(base);
+
+    await expect(
+      prisma.assignmentResponse.create({ data: { assignmentId: assignment.id, ...data } }),
+    ).rejects.toThrow(constraint);
   });
 });

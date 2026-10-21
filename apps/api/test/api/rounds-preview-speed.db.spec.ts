@@ -113,7 +113,13 @@ it(`previews ${String(EMPLOYEES)} employees in under ${String(LIMIT_MS)} ms`, as
 
   // 300 of them signed the first department's document in an earlier round.
   const round = await prisma.round.create({
-    data: { name: 'סבב קודם', mode: 'single_template', status: 'closed', createdById: manager.id },
+    data: {
+      name: 'סבב קודם',
+      mode: 'single_template',
+      status: 'closed',
+      linkExpiryDays: 60,
+      createdById: manager.id,
+    },
   });
   const earlier = await prisma.employee.findMany({
     where: { departmentId: departments[0]?.id },

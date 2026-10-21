@@ -77,8 +77,9 @@ export const ROUND_STATUSES = ['draft', 'sending', 'active', 'closed', 'cancelle
 export const roundStatusSchema = z.enum(ROUND_STATUSES);
 export type RoundStatus = (typeof ROUND_STATUSES)[number];
 
-// assignments.status. `delivered` is used only by delivery-only rounds (later).
-// Locked and expired are flags, not statuses: see displayStatus().
+// assignments.status. `delivered` is used only by delivery-only rounds (later). `missing_data`:
+// a required value is empty, nothing is sent (FR-RND-4, FR-MAN-1).
+// Locked, expired, waiting for approval and returned are flags, not statuses: see displayStatus().
 export const ASSIGNMENT_STATUSES = [
   'pending',
   'sent',
@@ -86,6 +87,7 @@ export const ASSIGNMENT_STATUSES = [
   'signed',
   'signed_manual',
   'delivered',
+  'missing_data',
   'no_email',
   'invalid_email',
   'cancelled',

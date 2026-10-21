@@ -136,6 +136,7 @@ async function earlierRound(
       name: round.name ?? 'סבב קודם',
       mode: 'single_template',
       status: round.status ?? 'active',
+      linkExpiryDays: 60,
       linkExpiresAt:
         round.linkExpiresAt === undefined ? new Date(Date.now() + 86_400_000) : round.linkExpiresAt,
       createdById: managerId,

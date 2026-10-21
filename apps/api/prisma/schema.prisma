@@ -19,13 +19,17 @@
 //   templates.version >= 1, templates.page_count >= 1;
 //   template_fields.page >= 1, x >= 0, y >= 0, width > 0, height > 0, font_size > 0 (NULL allowed);
 //   template_fields.key matches ^[a-z][a-z0-9_]*$;
-//   rounds.reminder_interval_days > 0, max_reminders > 0 (NULL allowed);
+//   rounds.reminder_interval_days > 0, max_reminders > 0 (NULL allowed), link_expiry_days 1–365;
 //   assignments.failed_attempts 0–5, reminder_count >= 0, signed_file_sha256 64 lowercase hex,
-//   template_id or source_file_key set, signed/signed_manual need signed_at and signed_file_key;
+//   template_id or source_file_key set, signed/signed_manual need signed_at and signed_file_key,
+//   approved_at and approved_by together (and only with needs_approval), returned_at / returned_by /
+//   return_note together (and only on a cancelled row);
+//   assignment_responses.key matches ^[a-z][a-z0-9_]*$, exactly one of value / file_key;
 //   email_messages.token_hash 64 lowercase hex, NULL exactly when type = signed_copy;
 //   audit_log.actor_type = 'user' exactly when user_id is set.
 //   sessions.token_hash 64 lowercase hex; users.email = lower(email).
 //   Unique index with NULLS NOT DISTINCT: round_templates (round_id, department_id).
+//   Partial index: assignments_waiting_for_approval_idx (signed, needs approval, not approved).
 // - audit_log is append-only: triggers in the migration SQL reject UPDATE, DELETE and TRUNCATE.
 //   The test reset bypasses them with session_replication_role = replica (test/setup/database.ts).
 // - Exception to "never deleted": sessions and login_attempts rows are short-lived and deleted
@@ -150,8 +154,9 @@ enum RoundStatus {
   @@map("round_status")
 }
 
-// assignments.status. `delivered` is used only by delivery-only rounds (later).
-// Locked and expired are flags, not statuses (see displayStatus()).
+// assignments.status. `delivered` is used only by delivery-only rounds (later). `missing_data`:
+// a required value is empty, nothing is sent. Locked, expired, waiting for approval and returned
+// for correction are flags, not statuses (see displayStatus()).
 enum AssignmentStatus {
   pending
   sent
@@ -159,6 +164,7 @@ enum AssignmentStatus {
   signed
   signed_manual
   delivered
+  missing_data
   no_email
   invalid_email
   cancelled
@@ -223,7 +229,9 @@ model User {
   importBatches      ImportBatch[]
   templates          Template[]
   rounds             Round[]
-  handledAssignments Assignment[]
+  handledAssignments  Assignment[] @relation("AssignmentHandledBy")
+  approvedAssignments Assignment[] @relation("AssignmentApprovedBy")
+  returnedAssignments Assignment[] @relation("AssignmentReturnedBy")
   auditLogs          AuditLog[]
   updatedSettings    Setting[]
   sessions           Session[]
@@ -387,7 +395,9 @@ model TemplateField {
 // Rounds (task 1.4)
 // ---------------------------------------------------------------------------
 
-// Send rounds. link_expires_at is set by the app from settings when the round is created.
+// Send rounds. A new round copies the default settings (or the manager's values). The link expiry
+// is kept as a number of days until the send (3.10), which sets link_expires_at = send + days;
+// a draft has link_expires_at NULL.
 model Round {
   id                   String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                 String      @db.VarChar(150)
@@ -397,16 +407,20 @@ model Round {
   remindersEnabled     Boolean     @default(true) @map("reminders_enabled")
   reminderIntervalDays Int         @default(3) @map("reminder_interval_days")
   maxReminders         Int?        @map("max_reminders") // NULL = no limit
-  linkExpiresAt        DateTime?   @map("link_expires_at") @db.Timestamptz(3)
+  linkExpiryDays       Int         @map("link_expiry_days") @db.SmallInt // 1–365, counted from the send
+  linkExpiresAt        DateTime?   @map("link_expires_at") @db.Timestamptz(3) // Set at send
+  // A correction round (FR-TRK-6): the returned assignment it replaces. One per assignment.
+  correctionOfAssignmentId String?  @unique @map("correction_of_assignment_id") @db.Uuid
   createdById          String      @map("created_by") @db.Uuid
   sentAt               DateTime?   @map("sent_at") @db.Timestamptz(3)
   closedAt             DateTime?   @map("closed_at") @db.Timestamptz(3)
   createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  createdBy   User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  templates   RoundTemplate[]
-  assignments Assignment[]
+  createdBy          User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  correctionOf       Assignment?     @relation("CorrectionRound", fields: [correctionOfAssignmentId], references: [id], onDelete: Restrict)
+  templates          RoundTemplate[]
+  assignments        Assignment[]    @relation("RoundAssignments")
 
   @@map("rounds")
 }
@@ -439,6 +453,7 @@ model Assignment {
   templateId       String?          @map("template_id") @db.Uuid // NULL for an external report (later)
   sourceFileKey    String?          @map("source_file_key") // Ready per-employee PDF, e.g. Har Gal (later)
   status           AssignmentStatus @default(pending)
+  fieldValues      Json?            @map("field_values") // Values saved at send (FR-RND-8); NULL until then
   failedAttempts   Int              @default(0) @map("failed_attempts") @db.SmallInt // Wrong ID attempts
   lockedAt         DateTime?        @map("locked_at") @db.Timestamptz(3) // Set at 5 attempts; cleared on unlock
   sentAt           DateTime?        @map("sent_at") @db.Timestamptz(3)
@@ -452,17 +467,26 @@ model Assignment {
   signerIp         String?          @map("signer_ip") @db.Inet
   signerUserAgent  String?          @map("signer_user_agent")
   handledById      String?          @map("handled_by") @db.Uuid // Manual scan or kiosk
+  needsApproval    Boolean          @default(false) @map("needs_approval") // An answer needs approval (FR-TRK-6)
+  approvedAt       DateTime?        @map("approved_at") @db.Timestamptz(3)
+  approvedById     String?          @map("approved_by") @db.Uuid
+  returnedAt       DateTime?        @map("returned_at") @db.Timestamptz(3) // Returned for correction (status cancelled)
+  returnedById     String?          @map("returned_by") @db.Uuid
+  returnNote       String?          @map("return_note") @db.VarChar(500) // Never in emails, URLs or the audit log
   cancelledAt      DateTime?        @map("cancelled_at") @db.Timestamptz(3)
   createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  round      Round                @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  round      Round                @relation("RoundAssignments", fields: [roundId], references: [id], onDelete: Restrict)
   employee   Employee             @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   department Department           @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   template   Template?            @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  handledBy  User?                @relation(fields: [handledById], references: [id], onDelete: Restrict)
+  handledBy  User?                @relation("AssignmentHandledBy", fields: [handledById], references: [id], onDelete: Restrict)
+  approvedBy User?                @relation("AssignmentApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  returnedBy User?                @relation("AssignmentReturnedBy", fields: [returnedById], references: [id], onDelete: Restrict)
   emails     EmailMessage[]
   responses  AssignmentResponse[]
+  correctionRound Round?          @relation("CorrectionRound")
 
   @@unique([roundId, employeeId])
   @@index([roundId, status]) // Round counts
@@ -493,19 +517,22 @@ model EmailMessage {
   @@map("email_messages")
 }
 
-// Checkbox and text answers (later; table ready).
+// What the employee chose, wrote or drew: one row per box key (3.13). Exactly one of value and
+// file_key is set (CHECK in the migration SQL).
 model AssignmentResponse {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   assignmentId    String   @map("assignment_id") @db.Uuid
-  templateFieldId String   @map("template_field_id") @db.Uuid
-  value           String // `true` / `false` or free text
+  key             String   @db.VarChar(50) // email_choice, email, or the box key; open text
+  templateFieldId String?  @map("template_field_id") @db.Uuid // The box's first position; NULL for the email section
+  value           String? // `true` / `false`, the option, YYYY-MM-DD or the text; NULL for a drawing
+  fileKey         String?  @map("file_key") // Drawings: responses/<assignment_id>/<key>.png
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   assignment    Assignment    @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
-  templateField TemplateField @relation(fields: [templateFieldId], references: [id], onDelete: Restrict)
+  templateField TemplateField? @relation(fields: [templateFieldId], references: [id], onDelete: Restrict)
 
-  @@unique([assignmentId, templateFieldId])
+  @@unique([assignmentId, key])
   @@map("assignment_responses")
 }
 

@@ -6,6 +6,11 @@ import {
   type RoundStatus,
   signMethodSchema,
 } from './enums.js';
+import {
+  linkExpiryDaysSchema,
+  maxRemindersSchema,
+  reminderIntervalDaysSchema,
+} from './settings.js';
 import { TEMPLATE_NOT_READY_CODES } from './template-fields.js';
 import { TEMPLATE_PREVIEW_WARNINGS } from './templates.js';
 
@@ -22,14 +27,12 @@ export const SIGNED_ASSIGNMENT_STATUSES = [
   'signed_manual',
 ] as const satisfies readonly AssignmentStatus[];
 
-/**
- * An assignment in one of these is still waiting for its employee: not signed, not cancelled.
- * 3.9 adds `missing_data` here when the status exists.
- */
+/** An assignment in one of these is still waiting for its employee: not signed, not cancelled. */
 export const OPEN_ASSIGNMENT_STATUSES = [
   'pending',
   'sent',
   'opened',
+  'missing_data',
   'no_email',
   'invalid_email',
 ] as const satisfies readonly AssignmentStatus[];
@@ -125,6 +128,46 @@ export const recipientsPreviewSchema = z
   .strictObject(roundSelectionShape)
   .superRefine(checkRoundSelection);
 export type RoundSelection = z.output<typeof recipientsPreviewSchema>;
+
+/** A round's name (FR-RND-1): trimmed, one line, 1–150 characters. Not unique. */
+export const ROUND_NAME_MAX_LENGTH = 150;
+export const roundNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(ROUND_NAME_MAX_LENGTH)
+  .regex(/^[^\r\n]*$/);
+
+/**
+ * The round's settings (FR-RND-5). Each value left out is the default from the settings
+ * (`SettingsService.getRoundDefaults`); the same limits as the settings (3.18). `maxReminders`
+ * null = no limit. `linkExpiryDays` counts from the send (3.10), not from the creation.
+ */
+export const roundSettingsInputSchema = z.strictObject({
+  remindersEnabled: z.boolean().optional(),
+  reminderIntervalDays: reminderIntervalDaysSchema.optional(),
+  maxReminders: maxRemindersSchema.optional(),
+  linkExpiryDays: linkExpiryDaysSchema.optional(),
+});
+
+/** `POST /api/rounds`: the preview's selection plus a name and settings. */
+export const roundCreateSchema = z
+  .strictObject({
+    ...roundSelectionShape,
+    name: roundNameSchema,
+    settings: roundSettingsInputSchema.default({}),
+  })
+  .superRefine(checkRoundSelection);
+export type RoundCreateInput = z.output<typeof roundCreateSchema>;
+
+/** The settings a round was created with. */
+export const roundSettingsSchema = z.object({
+  remindersEnabled: z.boolean(),
+  reminderIntervalDays: z.int(),
+  maxReminders: z.int().nullable(),
+  linkExpiryDays: z.int(),
+});
+export type RoundSettings = z.infer<typeof roundSettingsSchema>;
 
 /** Why a round can't be created yet (3.9 refuses with 409 while any is left). */
 export const ROUND_PREVIEW_BLOCKERS = {
@@ -300,3 +343,27 @@ export const recipientsPreviewReportSchema = z.object({
   }),
 });
 export type RecipientsPreviewReport = z.infer<typeof recipientsPreviewReportSchema>;
+
+/** `POST /api/rounds` (201): the draft round, its templates and the preview's counts. */
+export const roundCreatedSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  mode: roundModeSchema,
+  status: z.literal('draft'),
+  settings: roundSettingsSchema,
+  /** NULL until the round is sent (3.10 sets it to the send time + `linkExpiryDays`). */
+  linkExpiresAt: z.iso.datetime().nullable(),
+  /** single_template: one row, department null; by_department: one per ready department. */
+  templates: z.array(
+    z.object({
+      departmentId: z.uuid().nullable(),
+      /** "15 - name"; null for the single_template row. */
+      department: z.string().nullable(),
+      template: templateRefSchema,
+    }),
+  ),
+  /** The same counts as the preview; `inRound` assignments were created. */
+  counts: recipientsPreviewReportSchema.shape.counts,
+  createdAt: z.iso.datetime(),
+});
+export type RoundCreated = z.infer<typeof roundCreatedSchema>;

@@ -545,7 +545,13 @@ describe('an import never sends anything (FR-EMP-6)', () => {
       data: { name: 'נוהל', fileKey: 'templates/t.pdf', pageCount: 1, createdById: user.id },
     });
     const round = await prisma.round.create({
-      data: { name: 'סבב', mode: 'single_template', status: 'active', createdById: user.id },
+      data: {
+        name: 'סבב',
+        mode: 'single_template',
+        status: 'active',
+        linkExpiryDays: 60,
+        createdById: user.id,
+      },
     });
     const assignment = await prisma.assignment.create({
       data: {

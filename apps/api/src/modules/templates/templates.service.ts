@@ -232,8 +232,8 @@ export class TemplatesService {
   }
 
   /**
-   * Locks a template at its first send (FR-TPL-4). For the send (3.10): call it with the send's
-   * transaction. Already locked → no change. No such template → 404.
+   * Locks a template when a round first uses it (FR-TPL-4). Round creation (3.9) locks through
+   * the repository inside its own transaction. Already locked → no change. No such template → 404.
    */
   async lockTemplate(id: string, db: Db = this.prisma): Promise<void> {
     if (!(await this.repository.lockTemplate(id, db))) {

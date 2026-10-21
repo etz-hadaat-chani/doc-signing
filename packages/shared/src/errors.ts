@@ -65,6 +65,10 @@ export const ERROR_MESSAGES = {
   ROUND_TEMPLATE_NOT_ALLOWED: 'בסבב לפי מחלקות התבנית נקבעת לכל מחלקה, ולא תבנית אחת לכולם',
   ROUND_DEPARTMENT_TEMPLATES_NOT_ALLOWED: 'בסבב עם תבנית אחת אין לבחור תבנית לכל מחלקה',
   DEPARTMENT_TEMPLATE_DUPLICATE: 'נבחרה יותר מתבנית אחת לאותה מחלקה',
+  ROUND_CANNOT_BE_CREATED:
+    'לא ניתן ליצור את הסבב עדיין. יש לטפל בבעיות שמופיעות בתצוגה המקדימה ולנסות שוב',
+  ROUND_TEMPLATES_CHANGED:
+    'אחת התבניות השתנתה בזמן יצירת הסבב. יש לבדוק שוב את התצוגה המקדימה ולנסות מחדש',
   EMPLOYER_SIGNATURE_IMAGE_MISMATCH:
     'תמונת חתימת המעסיק השמורה במסמך אינה תואמת לקובץ באחסון. המסמך לא נוצר; יש לפנות לתמיכה',
   EMPLOYER_SIGNATURE_NOT_SAVED: 'חתימת המעסיק לא נשמרה במסמך. המסמך לא נוצר; יש לפנות לתמיכה',

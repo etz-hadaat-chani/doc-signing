@@ -7,8 +7,8 @@ import { TemplatesRepository } from './templates.repository.js';
 import { TemplatesService } from './templates.service.js';
 
 /**
- * Department templates (FR-TPL). Exports the service (the send, 3.10, calls `lockTemplate`) and
- * the repository (the recipient preview and round creation, 3.8 / 3.9, read active templates).
+ * Department templates (FR-TPL). Exports the service and the repository (the recipient preview
+ * and round creation, 3.8 / 3.9, read active templates; round creation locks them).
  */
 @Module({
   imports: [AuthModule, PdfFillerModule],

@@ -72,6 +72,7 @@ describe('Swagger page outside production', () => {
         'POST /api/employees',
         'POST /api/employees/import/{batchId}/commit',
         'POST /api/employees/import/preview',
+        'POST /api/rounds',
         'POST /api/rounds/recipients-preview',
         'POST /api/settings/employer-signature',
         'POST /api/templates',

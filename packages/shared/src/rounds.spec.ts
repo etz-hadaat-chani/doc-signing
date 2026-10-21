@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  checkRoundSelection,
   ROUND_MAX_DEPARTMENT_IDS,
   ROUND_MAX_EMPLOYEE_IDS,
   recipientsPreviewSchema,
-  roundSelectionShape,
+  roundCreateSchema,
+  ROUND_NAME_MAX_LENGTH,
 } from './rounds.js';
-import { z } from 'zod';
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
@@ -97,14 +96,63 @@ describe('recipientsPreviewSchema', () => {
     expect(codesOf({ ...single, alreadySigned: 'maybe' })).not.toEqual([]);
     expect(codesOf({ ...single, alreadySigned: 'send_again' })).toEqual([]);
   });
+});
 
-  it('can be extended by round creation (3.9)', () => {
-    const create = z
-      .strictObject({ ...roundSelectionShape, name: z.string().min(1) })
-      .superRefine(checkRoundSelection);
-    expect(create.parse({ ...single, name: 'סבב' }).name).toBe('סבב');
+describe('roundCreateSchema', () => {
+  const create = { ...single, name: '  חוזה שנתי 2027  ' };
+  const createCodes = (body: unknown) => {
+    const result = roundCreateSchema.safeParse(body);
+    return result.success ? [] : result.error.issues.map(({ path }) => path.join('.'));
+  };
+
+  it('trims the name and leaves the settings to the defaults', () => {
+    const parsed = roundCreateSchema.parse(create);
+    expect(parsed.name).toBe('חוזה שנתי 2027');
+    expect(parsed.settings).toEqual({});
+    expect(parsed.alreadySigned).toBe('skip');
+  });
+
+  it('needs a name of one line, up to 150 characters', () => {
+    expect(createCodes(single)).toEqual(['name']);
+    expect(createCodes({ ...single, name: '   ' })).toEqual(['name']);
+    expect(createCodes({ ...single, name: 'שורה\nשנייה' })).toEqual(['name']);
+    expect(createCodes({ ...single, name: 'א'.repeat(ROUND_NAME_MAX_LENGTH + 1) })).toEqual([
+      'name',
+    ]);
+    expect(createCodes({ ...single, name: 'א'.repeat(ROUND_NAME_MAX_LENGTH) })).toEqual([]);
+  });
+
+  it('accepts settings within the limits of the default settings (3.18)', () => {
+    const settings = {
+      remindersEnabled: false,
+      reminderIntervalDays: 30,
+      maxReminders: null,
+      linkExpiryDays: 365,
+    };
+    expect(roundCreateSchema.parse({ ...create, settings }).settings).toEqual(settings);
+    expect(roundCreateSchema.parse({ ...create, settings: { maxReminders: 50 } }).settings).toEqual(
+      { maxReminders: 50 },
+    );
+  });
+
+  it.each([
+    ['interval 0', { reminderIntervalDays: 0 }],
+    ['interval 31', { reminderIntervalDays: 31 }],
+    ['max 0', { maxReminders: 0 }],
+    ['max 51', { maxReminders: 51 }],
+    ['expiry 0', { linkExpiryDays: 0 }],
+    ['expiry 366', { linkExpiryDays: 366 }],
+    ['expiry null', { linkExpiryDays: null }],
+    ['unknown setting', { senderName: 'x' }],
+  ])('refuses %s', (_label, settings) => {
+    expect(createCodes({ ...create, settings })).not.toEqual([]);
+  });
+
+  it('keeps the selection rules of the preview', () => {
     expect(
-      create.safeParse({ mode: 'single_template', name: 'סבב', recipients: { all: true } }).success,
-    ).toBe(false);
+      createCodes({ mode: 'single_template', name: 'סבב', recipients: { all: true } }),
+    ).toEqual(['templateId']);
+    expect(createCodes({ ...create, mode: 'by_department' })).toEqual(['templateId']);
+    expect(createCodes({ ...create, unknown: 1 })).not.toEqual([]);
   });
 });

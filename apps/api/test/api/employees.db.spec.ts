@@ -505,7 +505,7 @@ describe('PATCH /api/employees/:id', () => {
       data: { name: 'נוהל', fileKey: 'templates/t.pdf', pageCount: 1, createdById },
     });
     const round = await prisma.round.create({
-      data: { name: 'סבב', mode: 'single_template', createdById },
+      data: { name: 'סבב', mode: 'single_template', linkExpiryDays: 60, createdById },
     });
     const assignment = await prisma.assignment.create({
       data: { roundId: round.id, employeeId: id, departmentId: dept15, templateId: template.id },

@@ -5,15 +5,17 @@ import { TemplatesModule } from '../templates/templates.module.js';
 import { RoundRecipientsRepository } from './round-recipients.repository.js';
 import { RoundRecipientsService } from './round-recipients.service.js';
 import { RoundsController } from './rounds.controller.js';
+import { RoundsRepository } from './rounds.repository.js';
+import { RoundsService } from './rounds.service.js';
 
 /**
- * Send rounds (FR-RND). So far the recipient preview (3.8). Exports `RoundRecipientsService`:
- * round creation (3.9) resolves the same choice with `resolve`.
+ * Send rounds (FR-RND): the recipient preview (3.8) and round creation (3.9), which resolves the
+ * same choice with `RoundRecipientsService.resolve` inside its own transaction.
  */
 @Module({
   imports: [AuthModule, TemplatesModule, PdfFillerModule],
   controllers: [RoundsController],
-  providers: [RoundRecipientsService, RoundRecipientsRepository],
+  providers: [RoundRecipientsService, RoundRecipientsRepository, RoundsService, RoundsRepository],
   exports: [RoundRecipientsService],
 })
 export class RoundsModule {}

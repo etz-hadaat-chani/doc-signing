@@ -1,6 +1,9 @@
 import {
   type RecipientsPreviewReport,
   recipientsPreviewSchema,
+  roundCreateSchema,
+  type RoundCreated,
+  type RoundCreateInput,
   type RoundSelection,
 } from '@doc-signing/shared';
 import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
@@ -11,6 +14,7 @@ import { Roles } from '../auth/access.decorators.js';
 import type { AuthRequest } from '../auth/auth-request.js';
 import type { TemplateActor } from '../templates/templates.service.js';
 import { RoundRecipientsService } from './round-recipients.service.js';
+import { RoundsService } from './rounds.service.js';
 
 /** The acting manager. AccessGuard sets `request.auth` on every @Roles route. */
 function actorOf(request: AuthRequest): TemplateActor {
@@ -33,11 +37,52 @@ const EXAMPLES = [
   }),
 ];
 
+/** The same choices with a name and settings, for creating the round. */
+const CREATE_EXAMPLES = [
+  JSON.stringify({
+    name: 'חוזה שנתי 2027',
+    mode: 'single_template',
+    templateId: '<template id from GET /api/templates>',
+    recipients: { all: true },
+  }),
+  JSON.stringify({
+    name: 'חוזה שנתי 2027',
+    mode: 'by_department',
+    recipients: { departmentIds: ['<department id>'] },
+    alreadySigned: 'skip',
+    settings: { reminderIntervalDays: 5, maxReminders: null, linkExpiryDays: 30 },
+  }),
+];
+
 /** Send rounds (PRD §11). Each route sets its own roles. */
 @ApiTags('rounds')
 @Controller('rounds')
 export class RoundsController {
-  constructor(private readonly recipients: RoundRecipientsService) {}
+  constructor(
+    private readonly recipients: RoundRecipientsService,
+    private readonly rounds: RoundsService,
+  ) {}
+
+  @ApiOperation({
+    summary:
+      'Create a draft round (FR-RND-1 to FR-RND-5): the round, its templates and one ' +
+      'assignment per recipient (pending / no_email / missing_data). Nothing is sent',
+    description:
+      'The same choice as the recipient preview, plus a name and optional settings (left out ' +
+      '= the defaults of GET /api/settings; linkExpiryDays counts from the send). 409 ' +
+      'ROUND_CANNOT_BE_CREATED while the preview has blockers (in details). Examples:\n\n' +
+      `\`${CREATE_EXAMPLES[0] ?? ''}\`\n\n\`${CREATE_EXAMPLES[1] ?? ''}\``,
+  })
+  @ApiZodBody(roundCreateSchema)
+  @Roles('manager')
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(
+    @Body(new ZodValidationPipe(roundCreateSchema)) body: RoundCreateInput,
+    @Req() request: AuthRequest,
+  ): Promise<RoundCreated> {
+    return this.rounds.create(body, actorOf(request));
+  }
 
   @ApiOperation({
     summary:
