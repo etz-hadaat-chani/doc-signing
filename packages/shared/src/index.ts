@@ -9,6 +9,7 @@ export * from './errors.js';
 export * from './field-values.js';
 export * from './id-number.js';
 export * from './pagination.js';
+export * from './rounds.js';
 export * from './settings.js';
 export * from './signing.js';
 export * from './status.js';

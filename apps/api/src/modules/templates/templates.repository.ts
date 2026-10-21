@@ -101,6 +101,48 @@ export class TemplatesRepository {
     });
   }
 
+  /**
+   * Active versions (not archived, no newer version) linked to at least one of these departments,
+   * with their relations. For the by-department template choice (3.8, 3.9).
+   */
+  async activeForDepartments(
+    departmentIds: readonly string[],
+    db: Db = this.prisma,
+  ): Promise<TemplateRow[]> {
+    if (departmentIds.length === 0) return [];
+    const rows = await db.template.findMany({
+      where: {
+        isArchived: false,
+        nextVersion: { is: null },
+        departments: { some: { departmentId: { in: [...departmentIds] } } },
+      },
+      select: templateColumns,
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+    return this.withRelations(rows, db);
+  }
+
+  /** These versions with their relations (any state); unknown ids are left out. */
+  async findMany(ids: readonly string[], db: Db = this.prisma): Promise<TemplateRow[]> {
+    if (ids.length === 0) return [];
+    const rows = await db.template.findMany({
+      where: { id: { in: [...ids] } },
+      select: templateColumns,
+      orderBy: { id: 'asc' },
+    });
+    return this.withRelations(rows, db);
+  }
+
+  /**
+   * Every version's id and its earlier version, to follow version chains: all versions of one
+   * template share the first version as their root ("the same document", 3.8).
+   */
+  async versionLinks(
+    db: Db = this.prisma,
+  ): Promise<{ id: string; parentTemplateId: string | null }[]> {
+    return db.template.findMany({ select: { id: true, parentTemplateId: true } });
+  }
+
   async find(id: string, db: Db = this.prisma): Promise<TemplateRow | null> {
     const row = await db.template.findUnique({ where: { id }, select: templateColumns });
     if (!row) return null;

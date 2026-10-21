@@ -1,4 +1,10 @@
-import type { EmailStatus, UserRole } from '@doc-signing/shared';
+import type {
+  AlreadySignedChoice,
+  EmailStatus,
+  RecipientsPreviewReport,
+  RoundMode,
+  UserRole,
+} from '@doc-signing/shared';
 
 /**
  * The only action names and entity types the activity log accepts (`audit_log.action` and
@@ -28,6 +34,7 @@ export const AUDIT_ACTIONS = [
   'template.archived',
   'template.previewed',
   'template.preview_checked',
+  'round.recipients_previewed',
   'settings.updated',
   'settings.employer_signature_uploaded',
   'settings.employer_signature_viewed',
@@ -39,6 +46,7 @@ export const AUDIT_ENTITY_TYPES = [
   'employee',
   'import_batch',
   'template',
+  'round',
   'settings',
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
@@ -139,6 +147,20 @@ export interface AuditDetailsMap {
   'template.previewed': { employeeId: string | null };
   /** What a real employee is missing on this template was checked (field names only shown). */
   'template.preview_checked': { employeeId: string };
+  // Rounds (3.8): the manager is the actor.
+  /**
+   * The recipient preview was shown (FR-RND-4). No round exists yet (entity id NULL). Counts and
+   * ids of the choice only: never names, employee ids or values (the answer showed names).
+   */
+  'round.recipients_previewed': {
+    mode: RoundMode;
+    all: boolean;
+    departmentCount: number;
+    employeeIdCount: number;
+    templateIds: string[];
+    alreadySigned: AlreadySignedChoice;
+    counts: RecipientsPreviewReport['counts'];
+  };
   // Settings (3.18): the manager is the actor; the entity is `settings` with no id (text keys).
   /** One line per changed value, "field: old → new" (`null` = no limit). */
   'settings.updated': { changes: string[] };

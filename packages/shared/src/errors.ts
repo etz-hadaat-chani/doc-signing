@@ -59,6 +59,12 @@ export const ERROR_MESSAGES = {
   TEMPLATE_ARCHIVED: 'התבנית הועברה לארכיון ולא ניתן לשנות אותה',
   TEMPLATE_HAS_NEWER_VERSION:
     'קיימת גרסה חדשה יותר של התבנית. יש לרענן את הדף ולערוך את הגרסה האחרונה',
+  TEMPLATE_NOT_FOUND: 'התבנית לא נמצאה',
+  ROUND_RECIPIENTS_REQUIRED: 'יש לבחור לפחות נמען אחד: כל העובדים, מחלקות או עובדים',
+  ROUND_TEMPLATE_REQUIRED: 'יש לבחור תבנית לסבב',
+  ROUND_TEMPLATE_NOT_ALLOWED: 'בסבב לפי מחלקות התבנית נקבעת לכל מחלקה, ולא תבנית אחת לכולם',
+  ROUND_DEPARTMENT_TEMPLATES_NOT_ALLOWED: 'בסבב עם תבנית אחת אין לבחור תבנית לכל מחלקה',
+  DEPARTMENT_TEMPLATE_DUPLICATE: 'נבחרה יותר מתבנית אחת לאותה מחלקה',
   EMPLOYER_SIGNATURE_IMAGE_MISMATCH:
     'תמונת חתימת המעסיק השמורה במסמך אינה תואמת לקובץ באחסון. המסמך לא נוצר; יש לפנות לתמיכה',
   EMPLOYER_SIGNATURE_NOT_SAVED: 'חתימת המעסיק לא נשמרה במסמך. המסמך לא נוצר; יש לפנות לתמיכה',

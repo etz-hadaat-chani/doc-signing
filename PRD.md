@@ -188,7 +188,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | FR-RND-1 | A manager creates a round with a name and a mode: one template, or by department. |
 | FR-RND-2 | Recipients can be chosen and combined: all employees, chosen departments, hand-picked employees, or one employee (also from the employee card). |
 | FR-RND-3 | In by-department mode, the system picks each department's template and warns if a department in the round has none. |
-| FR-RND-4 | Before sending, the system shows counts: will get email, no email, already signed this template in another round (skip or send again), and **missing data**, with a list of who is missing what (for example "address, mobile"). Only required values filled in by the system only count as missing; an empty value the employee may fill in (FR-TPL-10) is not. Employees with missing data are added to the round in status "Missing data" and nothing is sent to them until the manager fills in the employee card (FR-MAN-1). |
+| FR-RND-4 | Before sending, the system shows counts: will get email, no email, already signed this template in another round (skip or send again), and **missing data**, with a list of who is missing what (for example "address, mobile"). Only required values filled in by the system only count as missing; an empty value the employee may fill in (FR-TPL-10) is not. Employees with missing data are added to the round in status "Missing data" and nothing is sent to them until the manager fills in the employee card (FR-MAN-1). "Already signed" counts any version of the same template, signed digitally or on paper. Employees who still have the same document open in another round that can be signed (link not expired) are counted apart and left out, so nobody gets two emails for one document. Inactive employees are never added, even when picked by hand (they are counted and named). |
 | FR-RND-5 | Per round: reminders on/off, reminder interval (default 3 days), link expiry (default 60 days). Reminders continue until the employee signs; an optional maximum can be set. |
 | FR-RND-6 | Sending runs in the background in batches; the round screen shows progress. |
 | FR-RND-7 | A manager can cancel a round or a single recipient. |
@@ -449,7 +449,7 @@ All management endpoints need a staff session; the role column says who may call
 | Method | Path | Purpose | Role |
 | --- | --- | --- | --- |
 | GET | `/api/rounds` | List rounds with % signed | M, O |
-| POST | `/api/rounds/recipients-preview` | Counts for a recipient choice: will send, no email, already signed, missing data (who is missing what) | M |
+| POST | `/api/rounds/recipients-preview` | Counts for a recipient choice (mode, templates, recipients, skip or send again to those who signed): will send, no email, already signed, already open in another round, missing data (who is missing what), inactive; each department with its template, "no template" or the templates to choose from; text that won't fit (box names only); what still blocks creating the round. Field names only, nothing created | M |
 | POST | `/api/rounds` | Create a round (name, mode, templates, recipients, settings) | M |
 | POST | `/api/rounds/:id/send` | Start sending | M |
 | GET | `/api/rounds/:id` | Round details and status counts | M, O |

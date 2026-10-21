@@ -285,15 +285,41 @@ export function checkTextFit(
   fields: readonly (TemplateFieldSettings & BoxSize)[],
   fieldValues: FieldValues,
   font: TextFont,
+  cache?: TextFitCache,
 ): TextFitReport {
   const tooLong = new Set<string>();
   const unsupported = new Set<string>();
   for (const field of fields) {
     const value = textValueOf(field, fieldValues);
     if (value === null) continue;
-    const prepared = prepareText(value, font);
-    if (prepared.unsupported) unsupported.add(field.key);
-    if (fitLine(prepared.text, font, textArea(field)).tooLong) tooLong.add(field.key);
+    const result = measureText(value, field, font, cache);
+    if (result.unsupported) unsupported.add(field.key);
+    if (result.tooLong) tooLong.add(field.key);
   }
   return { tooLong: [...tooLong], unsupported: [...unsupported] };
+}
+
+/**
+ * Results of `checkTextFit` by box size and text, for one font: many recipients share values
+ * (role, status, job %), so a round of 1,500 measures each text once (3.8). In memory only,
+ * for one request; never logged.
+ */
+export type TextFitCache = Map<string, { tooLong: boolean; unsupported: boolean }>;
+
+function measureText(
+  value: string,
+  box: BoxSize,
+  font: TextFont,
+  cache: TextFitCache | undefined,
+): { tooLong: boolean; unsupported: boolean } {
+  const cacheKey = `${String(box.width)}x${String(box.height)}\u0000${value}`;
+  const cached = cache?.get(cacheKey);
+  if (cached) return cached;
+  const prepared = prepareText(value, font);
+  const result = {
+    tooLong: fitLine(prepared.text, font, textArea(box)).tooLong,
+    unsupported: prepared.unsupported,
+  };
+  cache?.set(cacheKey, result);
+  return result;
 }

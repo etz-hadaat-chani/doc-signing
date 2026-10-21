@@ -6,7 +6,9 @@ import {
   type TemplateCreateInput,
   type TemplateFieldInput,
   type TemplateItem,
+  type TemplateFieldSettings,
   type TemplateListQuery,
+  type TemplateNotReadyReason,
   templateReadiness,
   type TemplateUpdateInput,
 } from '@doc-signing/shared';
@@ -37,14 +39,40 @@ export interface TemplateActor {
 
 const PDF_CONTENT_TYPE = 'application/pdf';
 
-/** `employerSignatureImageUploaded`: whether the employer signature image exists (3.18). */
-function toItem(row: TemplateRow, employerSignatureImageUploaded: boolean): TemplateItem {
-  const fields = row.fields.map((field) => ({ id: field.id, ...toPosition(field) }));
+/** Whether a template version may be used in a new round (3.5 note, FR-TPL-8). */
+export interface TemplateUsability {
+  /** Not archived and no newer version. */
+  isActive: boolean;
+  /** Passes the "template ready" check, including the employer signature image (3.18). */
+  isReady: boolean;
+  notReadyReasons: TemplateNotReadyReason[];
+}
+
+/**
+ * The one usability check: the item (`isReady`), the recipient preview (3.8) and round creation
+ * (3.9) all call it. `fields` = the row's positions read with `toPosition`.
+ */
+export function templateUsability(
+  row: Pick<TemplateRow, 'isArchived' | 'isLatest' | 'employerSignatureMode'>,
+  fields: readonly TemplateFieldSettings[],
+  employerSignatureImageUploaded: boolean,
+): TemplateUsability {
   const notReadyReasons = templateReadiness({
     employerSignatureMode: row.employerSignatureMode,
     fields,
     employerSignatureImageUploaded,
   });
+  return {
+    isActive: !row.isArchived && row.isLatest,
+    isReady: notReadyReasons.length === 0,
+    notReadyReasons,
+  };
+}
+
+/** `employerSignatureImageUploaded`: whether the employer signature image exists (3.18). */
+function toItem(row: TemplateRow, employerSignatureImageUploaded: boolean): TemplateItem {
+  const fields = row.fields.map((field) => ({ id: field.id, ...toPosition(field) }));
+  const { notReadyReasons } = templateUsability(row, fields, employerSignatureImageUploaded);
   return {
     id: row.id,
     name: row.name,
