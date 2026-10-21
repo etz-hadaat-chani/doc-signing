@@ -14,6 +14,7 @@ import { HealthModule } from './modules/health/health.module.js';
 import { RoundsModule } from './modules/rounds/rounds.module.js';
 import { SettingsApiModule } from './modules/settings/settings.module.js';
 import { TemplatesModule } from './modules/templates/templates.module.js';
+import { TrackingModule } from './modules/tracking/tracking.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
 @Module({
@@ -31,6 +32,7 @@ import { UsersModule } from './modules/users/users.module.js';
     EmployeesModule,
     TemplatesModule,
     RoundsModule,
+    TrackingModule,
     SettingsApiModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],

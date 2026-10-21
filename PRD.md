@@ -140,10 +140,11 @@ Everything is tracked per **assignment**: one employee in one send round. That i
 | Invalid email (מייל שגוי) | The email provider refused the address or the email bounced; needs manual handling. |
 | Cancelled (בוטל) | A manager cancelled the round or this employee, or returned the signed document for correction (FR-TRK-6; shown and counted as "Returned for correction" (הוחזר לתיקון), apart from ordinary cancellations). |
 
-Three more conditions show on screen but are **flags, not statuses**, so the status isn't lost when they clear:
+Four more conditions show on screen but are **flags, not statuses**, so the status isn't lost when they clear:
 
 - **Locked (נעול):** 5 wrong ID attempts. A manager can unlock it, and the employee returns to their previous status.
 - **Expired (פג תוקף):** the link expiry date passed before signing. Worked out from the date, not stored.
+- **Send failed (שליחה נכשלה):** a "Waiting to send" row in a sent round whose newest invitation failed; it clears when the email is resent. Counted and filtered like a status.
 - **Waiting for approval (נחתם, ממתין לאישור):** the document is signed and at least one answer is in a box marked "needs manager approval", and no manager has approved it yet (FR-TRK-6). Worked out from the data; the status stays "Signed".
 
 "Opened" means the employee entered their ID, not that the email was opened. Email-open tracking is unreliable, and filtered email makes it worse.
@@ -224,7 +225,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | ID | Requirement |
 | --- | --- |
 | FR-TRK-1 | The dashboard shows totals across active rounds: signed, waiting, opened, no email, and signed documents waiting for approval (FR-TRK-6). |
-| FR-TRK-2 | The round screen lists every recipient with status, last update and reminders sent; filters by status (including "waiting for approval" and "returned for correction") and department (at send time); search by name, employee number or ID. For signed employees it also shows the email-section answer: "email" or "at the office", the email given, and whether it differs from the system email; and an answers panel with every box she filled in (text, chosen option, checkbox, date; a drawing through a short-lived link). Opening the panel is logged. |
+| FR-TRK-2 | The round screen lists every recipient with status, last update and reminders sent; filters by status (including "waiting for approval" and "returned for correction") and department (at send time); search by name, employee number or ID (the search text is sent in the request body, never in a URL). For signed employees it also shows the email-section answer: "email" or "at the office", the email given, and whether it differs from the system email; and an answers panel with every box she filled in (text, chosen option, checkbox, date; a drawing through a short-lived link). Opening the panel is logged, and so is a page of the list that shows email addresses employees gave. |
 | FR-TRK-3 | Managers and officers can open any signed document. Each view is logged. |
 | FR-TRK-4 | Export a round's statuses to Excel, including the email-section answer (choice, email given, differs from the system email) and one column per box the employee fills in (header = the box label): the text, chosen option, "כן" / "לא" for a checkbox, the date as DD/MM/YYYY, and "צויר" (drawn) for a drawing. Boxes that come from a system value ("system, and the employee when empty" or "employee only" on a system value) show only "מולא ע"י העובד" (filled in by the employee), never the value (NFR-PRV-6). Every cell is formula-safe (NFR-SEC-10). Also download all signed files as a ZIP in department folders (department at send time). |
 | FR-TRK-5 | The employee card shows the employee's history across all rounds. |
@@ -425,7 +426,7 @@ All management endpoints need a staff session; the role column says who may call
 | --- | --- | --- | --- |
 | GET | `/api/employees?dept=&q=&emailStatus=&page=` | List with search, filters, paging | M, O |
 | GET | `/api/employees/:id` | Employee card | M, O |
-| GET | `/api/employees/:id/assignments` | History across rounds | M, O |
+| GET | `/api/employees/:id/assignments?page=` | History across rounds, newest first: round, document, department at the time, status, dates, whether a signed file exists | M, O |
 | POST | `/api/employees` | Add one employee | M |
 | PATCH | `/api/employees/:id` | Edit an employee | M |
 | POST | `/api/employees/import/preview` | Upload Excel; returns the check report, saves nothing | M |
@@ -448,12 +449,13 @@ All management endpoints need a staff session; the role column says who may call
 
 | Method | Path | Purpose | Role |
 | --- | --- | --- | --- |
-| GET | `/api/rounds` | List rounds with % signed | M, O |
+| GET | `/api/rounds?status=&page=` | List rounds, newest first, with % signed; a draft shows "טיוטה" and how long ago it was created | M, O |
 | POST | `/api/rounds/recipients-preview` | Counts for a recipient choice (mode, templates, recipients, skip or send again to those who signed): will send, no email, already signed, already open in another round, missing data (who is missing what), inactive; each department with its template, "no template" or the templates to choose from; text that won't fit (box names only); what still blocks creating the round. Field names only, nothing created | M |
 | POST | `/api/rounds` | Create a draft round (name, mode, templates, recipients, settings): the round, its templates and one assignment per recipient; nothing is sent; 409 while the preview has blockers | M |
 | POST | `/api/rounds/:id/send` | Send a draft round: body `{ confirmOutdatedTemplateIds? }`. Saves the values, checks every status again, sets the link expiry and queues one invitation per employee with an email; 202 with the counts. 409 if not a draft, if a template isn't ready, or if a template was archived or has a newer version and its id isn't in `confirmOutdatedTemplateIds` (the round still sends its own version) | M |
-| GET | `/api/rounds/:id` | Round details and status counts | M, O |
-| GET | `/api/rounds/:id/assignments?status=&dept=&q=&page=` | Per-employee table | M, O |
+| GET | `/api/rounds/:id` | Round details: settings, dates, templates, send progress, counts by status and by department (at send time), and the original round of a correction round | M, O |
+| GET | `/api/rounds/:id/assignments?status=&dept=&approval=&returned=&page=` | Per-employee table: filters (display statuses, department at send time, waiting for approval, returned) and paging; no search text | M, O |
+| POST | `/api/rounds/:id/assignments/search` | The same table searched by name, employee number or full ID number: body `{ q, status?, dept?, approval?, returned?, page?, pageSize? }`. Search text is never put in a URL (an ID number would reach server and proxy logs) | M, O |
 | GET | `/api/rounds/:id/export` | Status export to Excel | M, O |
 | GET | `/api/rounds/:id/download` | ZIP of signed files in department folders | M, O |
 | POST | `/api/rounds/:id/remind` | Remind everyone who hasn't signed, now | M |
@@ -486,7 +488,7 @@ All management endpoints need a staff session; the role column says who may call
 
 | Method | Path | Purpose | Role |
 | --- | --- | --- | --- |
-| GET | `/api/dashboard/summary` | Totals across active rounds | M, O |
+| GET | `/api/dashboard/summary` | Totals across sending and active rounds, each such round with the rows needing attention, and the open drafts | M, O |
 | GET | `/api/settings` | Read settings | M |
 | PATCH | `/api/settings` | Update settings | M |
 | POST | `/api/settings/employer-signature` | Upload the employer signature and stamp image (PNG); logged | M |

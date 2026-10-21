@@ -3,13 +3,12 @@ import {
   type EmailStatus,
   type EmployeeExtras,
   type EmployeeListQuery,
-  normalizeEmployeeNumber,
-  normalizeIdNumber,
 } from '@doc-signing/shared';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { Db } from '../../common/prisma/prisma.types.js';
+import { searchCondition } from './employee-search.js';
 
 /** The phones and extra details (FR-EMP-1, FR-EMP-9): card, edit and import. Never the list. */
 export const employeeDetailsSelect = {
@@ -143,33 +142,6 @@ export interface EmployeeListRow {
   departmentId: string;
   departmentCode: number;
   departmentName: string;
-}
-
-/** `%`, `_` and `\` in the search are plain characters, not LIKE wildcards. */
-function escapeLike(text: string): string {
-  return text.replace(/[\\%_]/g, (char) => `\\${char}`);
-}
-
-function contains(text: string): string {
-  return `%${escapeLike(text)}%`;
-}
-
-/**
- * The search (q arrives trimmed, with runs of spaces made one): part of the first name, last name,
- * "first last" or "last first"; part of the employee number (leading zeros ignored); or, when q is
- * 1–9 digits, exactly the ID number with its leading zeros put back. The ID is never matched
- * partially, so digits can't be used to fish for IDs.
- */
-function searchCondition(q: string): Prisma.Sql {
-  const pattern = contains(q);
-  const parts = [
-    Prisma.sql`(e.first_name || ' ' || e.last_name) ILIKE ${pattern} ESCAPE '\\'`,
-    Prisma.sql`(e.last_name || ' ' || e.first_name) ILIKE ${pattern} ESCAPE '\\'`,
-    Prisma.sql`e.employee_number LIKE ${contains(normalizeEmployeeNumber(q) ?? q)} ESCAPE '\\'`,
-  ];
-  const idNumber = normalizeIdNumber(q);
-  if (idNumber !== null) parts.push(Prisma.sql`e.id_number = ${idNumber}`);
-  return Prisma.sql`(${Prisma.join(parts, ' OR ')})`;
 }
 
 function whereClause({ q, dept, emailStatus }: EmployeeListQuery): Prisma.Sql {

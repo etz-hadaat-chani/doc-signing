@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import type { AssignmentStatus } from './enums.js';
-import { displayStatus, STATUS_LABELS } from './status.js';
+import {
+  DISPLAY_STATUSES,
+  displayStatus,
+  emptyDisplayCounts,
+  percentSigned,
+  ROUND_STATUS_LABELS,
+  STATUS_LABELS,
+} from './status.js';
 
 const now = new Date('2026-10-13T09:00:00.000Z');
 const past = new Date('2026-10-12T09:00:00.000Z');
 const future = new Date('2026-10-14T09:00:00.000Z');
-/** No approval flags: the flags of PRD §5 that 3.9 added stay off. */
-const noApproval = { needsApproval: false, approvedAt: null, returnedAt: null };
+/** No approval flags (3.9) and no failed invitation (3.11): those flags stay off. */
+const noApproval = {
+  needsApproval: false,
+  approvedAt: null,
+  returnedAt: null,
+  lastInviteFailed: false,
+};
 
 describe('displayStatus', () => {
   it.each<AssignmentStatus>([
@@ -123,6 +135,78 @@ describe('STATUS_LABELS', () => {
       expired: 'פג תוקף',
       waiting_for_approval: 'נחתם, ממתין לאישור',
       returned_for_correction: 'הוחזר לתיקון',
+      send_failed: 'שליחה נכשלה',
     });
+  });
+});
+
+describe('send failed', () => {
+  const pending = {
+    ...noApproval,
+    status: 'pending' as const,
+    lockedAt: null,
+    linkExpiresAt: future,
+    lastInviteFailed: true,
+  };
+
+  it('shows a pending row whose newest invitation failed as send failed', () => {
+    expect(displayStatus(pending, now)).toBe('send_failed');
+    expect(displayStatus({ ...pending, lastInviteFailed: false }, now)).toBe('pending');
+  });
+
+  it('applies to pending only', () => {
+    for (const status of ['sent', 'opened', 'invalid_email', 'cancelled'] as const) {
+      expect(displayStatus({ ...pending, status }, now)).toBe(status);
+    }
+  });
+
+  it('loses to expired', () => {
+    expect(displayStatus({ ...pending, linkExpiresAt: past }, now)).toBe('expired');
+  });
+});
+
+describe('DISPLAY_STATUSES', () => {
+  it('lists every labelled value once', () => {
+    expect([...DISPLAY_STATUSES].sort()).toEqual(Object.keys(STATUS_LABELS).sort());
+  });
+});
+
+describe('ROUND_STATUS_LABELS', () => {
+  it('names a draft "טיוטה"', () => {
+    expect(ROUND_STATUS_LABELS).toEqual({
+      draft: 'טיוטה',
+      sending: 'בשליחה',
+      active: 'פעיל',
+      closed: 'סגור',
+      cancelled: 'בוטל',
+    });
+  });
+});
+
+describe('percentSigned', () => {
+  it('is null when nobody counts', () => {
+    expect(percentSigned(emptyDisplayCounts())).toBeNull();
+    expect(percentSigned({ ...emptyDisplayCounts(), cancelled: 2 })).toBeNull();
+  });
+
+  it('counts signed, paper and waiting for approval; leaves out cancelled and returned', () => {
+    const counts = {
+      ...emptyDisplayCounts(),
+      signed: 1,
+      signed_manual: 1,
+      waiting_for_approval: 1,
+      sent: 3,
+      send_failed: 1,
+      expired: 1,
+      cancelled: 5,
+      returned_for_correction: 1,
+    };
+    // 3 signed of 8 counted = 37.5 → 37.
+    expect(percentSigned(counts)).toBe(37);
+  });
+
+  it('rounds down, so 100 means everyone', () => {
+    expect(percentSigned({ ...emptyDisplayCounts(), signed: 199, sent: 1 })).toBe(99);
+    expect(percentSigned({ ...emptyDisplayCounts(), signed: 3 })).toBe(100);
   });
 });

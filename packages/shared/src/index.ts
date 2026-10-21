@@ -16,4 +16,5 @@ export * from './status.js';
 export * from './template-answers.js';
 export * from './template-fields.js';
 export * from './templates.js';
+export * from './tracking.js';
 export * from './users.js';

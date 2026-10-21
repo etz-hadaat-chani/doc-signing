@@ -40,6 +40,7 @@ export const AUDIT_ACTIONS = [
   'round.created',
   'round.sent',
   'round.sending_finished',
+  'round.assignments_viewed',
   'assignment.invite_sent',
   'assignment.invite_failed',
   'settings.updated',
@@ -201,6 +202,17 @@ export interface AuditDetailsMap {
   };
   /** Every invitation of the round is settled (system actor): `sending` → `active`. */
   'round.sending_finished': { sent: number; failed: number };
+  /**
+   * A page of the employee table (3.11) showed email addresses the employees gave (NFR-PRV-7:
+   * answers are viewed with a log). Counts only: never the search text, names or addresses.
+   */
+  'round.assignments_viewed': {
+    page: number;
+    pageSize: number;
+    rowCount: number;
+    emailAnswersShown: number;
+    searched: boolean;
+  };
   /**
    * One invitation went out (system actor, entity = the assignment). `unconfirmed`: it may have
    * gone out, but the provider never confirmed it (a crash or a timeout); it is not sent again.

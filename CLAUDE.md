@@ -68,7 +68,7 @@ docker-compose.yml      # postgres, minio, mailpit
 - **No SMS anywhere.** Employees are Orthodox — no smartphones. Design signing for **desktop + mouse**; touch is a bonus.
 - **Signing auth:** unique link + employee types their **ID number**. 5 wrong attempts → `lockedAt` set; manager unlocks. Rate-limit per IP. 15-min signing session cookie.
 - **Tokens:** 256-bit random, store only SHA-256. **New token per email** (invite and each reminder); all valid until signed, cancelled or expired. After signing every link shows "already signed".
-- **No personal data in URLs or email bodies** beyond name and document name. `GET /sign/:token` returns state only.
+- **No personal data in URLs or email bodies** beyond name and document name. `GET /sign/:token` returns state only. Search text (it may be an ID number) goes in a POST body, never in a query string.
 - **"Opened" = correct ID entered**, not email open tracking.
 - **Locked / expired are flags, not statuses** — compute display status with `displayStatus()`.
 - **PDF personalization:** draw name, ID number and date at `TemplateField` positions on the department's original PDF (do NOT use AcroForm fields). Embedded Hebrew font + bidi ordering.

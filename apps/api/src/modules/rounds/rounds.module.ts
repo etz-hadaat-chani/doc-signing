@@ -26,6 +26,6 @@ import { RoundsService } from './rounds.service.js';
     RoundSendService,
     RoundSendRepository,
   ],
-  exports: [RoundRecipientsService],
+  exports: [RoundRecipientsService, RoundSendRepository],
 })
 export class RoundsModule {}

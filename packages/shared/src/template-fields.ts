@@ -80,10 +80,16 @@ export const hasOwnKey = (type: TemplateFieldType) => TEMPLATE_FIELD_GROUPS[type
 export const EMAIL_CHOICE_KEY = 'email_choice';
 export const EMAIL_CHOICES = ['email', 'office'] as const;
 export type EmailChoice = (typeof EMAIL_CHOICES)[number];
+/** The address the employee gave in the email section (`assignment_responses.key`, PRD §12). */
+export const EMAIL_ANSWER_KEY = 'email';
 
-/** A key no box may take: a type's own name or the email choice. */
+/** A key no box may take: a type's own name or one of the email section's two answers. */
 export function isReservedKey(key: string): boolean {
-  return key === EMAIL_CHOICE_KEY || (TEMPLATE_FIELD_TYPES as readonly string[]).includes(key);
+  return (
+    key === EMAIL_CHOICE_KEY ||
+    key === EMAIL_ANSWER_KEY ||
+    (TEMPLATE_FIELD_TYPES as readonly string[]).includes(key)
+  );
 }
 
 export const TEMPLATE_FIELD_KEY_MAX_LENGTH = 50;

@@ -52,9 +52,14 @@ describe('Swagger page outside production', () => {
     expect(operations.sort()).toEqual(
       [
         'GET /api/auth/me',
+        'GET /api/dashboard/summary',
         'GET /api/departments',
         'GET /api/employees',
         'GET /api/employees/{id}',
+        'GET /api/employees/{id}/assignments',
+        'GET /api/rounds',
+        'GET /api/rounds/{id}',
+        'GET /api/rounds/{id}/assignments',
         'GET /api/health',
         'GET /api/settings',
         'GET /api/settings/employer-signature',
@@ -74,6 +79,7 @@ describe('Swagger page outside production', () => {
         'POST /api/employees/import/preview',
         'POST /api/rounds',
         'POST /api/rounds/recipients-preview',
+        'POST /api/rounds/{id}/assignments/search',
         'POST /api/rounds/{id}/send',
         'POST /api/settings/employer-signature',
         'POST /api/templates',
