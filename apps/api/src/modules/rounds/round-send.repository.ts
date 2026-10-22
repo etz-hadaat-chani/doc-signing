@@ -26,17 +26,26 @@ export interface SendableRow {
   employee: RecipientRow;
 }
 
-/** One invitation row as its job sees it (locked). */
+/** An email that carries a signing link: the invitation (3.10) or a reminder (3.12, 3.14). */
+export type SigningEmailType = 'invite' | 'reminder';
+
+/** One invitation or reminder row as its job sees it (locked). */
 export interface LockedInvite {
   id: string;
+  type: SigningEmailType;
   status: 'queued' | 'sent' | 'delivered' | 'bounced' | 'failed';
   /** A token hash is stored: an earlier attempt handed the email over (or may have). */
   hasToken: boolean;
   toEmail: string;
   assignmentId: string;
   assignmentStatus: string;
+  /** Wrong ID attempts locked the assignment. */
+  locked: boolean;
   roundId: string;
+  roundStatus: RoundStatus;
   linkExpiresAt: Date | null;
+  /** The link expiry has passed (database clock). */
+  expired: boolean;
   correction: boolean;
   firstName: string;
   lastName: string;
@@ -131,10 +140,11 @@ export class RoundSendRepository {
   }
 
   /**
-   * One `queued` invitation row per assignment to email, with the address as stored at the send
-   * and no token yet (the job adds its hash). Returns their ids by assignment.
+   * One `queued` invitation or reminder row per assignment, with the address as stored now and
+   * no token yet (the job adds its hash). Returns their ids by assignment.
    */
-  async createInvites(
+  async createSigningEmails(
+    type: SigningEmailType,
     rows: readonly { assignmentId: string; toEmail: string }[],
     db: Db,
   ): Promise<{ id: string; assignmentId: string }[]> {
@@ -143,7 +153,7 @@ export class RoundSendRepository {
       const batch = await db.emailMessage.createManyAndReturn({
         data: rows.slice(start, start + INVITE_BATCH).map(({ assignmentId, toEmail }) => ({
           assignmentId,
-          type: 'invite' as const,
+          type,
           toEmail,
           status: 'queued' as const,
         })),
@@ -166,28 +176,32 @@ export class RoundSendRepository {
     });
   }
 
-  // ---- The invitation job ----
+  // ---- The invitation and reminder job ----
 
-  /** The round of an invitation row, or null when there is no such invitation. */
+  /** The round of an invitation or reminder row, or null when there is no such row. */
   async roundOfInvite(emailMessageId: string, db: Db = this.prisma): Promise<string | null> {
     const rows = await db.$queryRaw<{ roundId: string }[]>`
       SELECT a.round_id AS "roundId"
       FROM email_messages em JOIN assignments a ON a.id = em.assignment_id
-      WHERE em.id = ${emailMessageId}::uuid AND em.type = 'invite'`;
+      WHERE em.id = ${emailMessageId}::uuid AND em.type IN ('invite', 'reminder')`;
     return rows[0]?.roundId ?? null;
   }
 
   /**
-   * Locks an invitation row and its assignment (FOR UPDATE) and reads what the email needs: the
-   * address used, the link expiry, whether it is a correction round, the name and the document
-   * name. Null when there is no such invitation.
+   * Locks an invitation or reminder row and its assignment (FOR UPDATE) and reads what the email
+   * needs: the address used, the link expiry, whether it is a correction round, the name and the
+   * document name; and, for a reminder, whether it may still go (status, lock, round, expiry).
+   * Null when there is no such row.
    */
   async lockInvite(emailMessageId: string, db: Db): Promise<LockedInvite | null> {
     const rows = await db.$queryRaw<LockedInvite[]>`
-      SELECT em.id, em.status::text AS status, em.token_hash IS NOT NULL AS "hasToken",
+      SELECT em.id, em.type::text AS type, em.status::text AS status,
+             em.token_hash IS NOT NULL AS "hasToken",
              em.to_email AS "toEmail", a.id AS "assignmentId",
-             a.status::text AS "assignmentStatus", a.round_id AS "roundId",
+             a.status::text AS "assignmentStatus", a.locked_at IS NOT NULL AS locked,
+             a.round_id AS "roundId", r.status::text AS "roundStatus",
              r.link_expires_at AS "linkExpiresAt",
+             coalesce(r.link_expires_at <= now(), false) AS expired,
              r.correction_of_assignment_id IS NOT NULL AS correction,
              e.first_name AS "firstName", e.last_name AS "lastName", t.name AS "documentName"
       FROM email_messages em
@@ -195,7 +209,7 @@ export class RoundSendRepository {
       JOIN rounds r ON r.id = a.round_id
       JOIN employees e ON e.id = a.employee_id
       JOIN templates t ON t.id = a.template_id
-      WHERE em.id = ${emailMessageId}::uuid AND em.type = 'invite'
+      WHERE em.id = ${emailMessageId}::uuid AND em.type IN ('invite', 'reminder')
       FOR UPDATE OF em, a`;
     return rows[0] ?? null;
   }
@@ -216,12 +230,14 @@ export class RoundSendRepository {
   }
 
   /**
-   * The invitation went out (or may have: `error` = `UNCONFIRMED:…`, provider id NULL), and its
-   * assignment `pending` → `sent`, only if both are still as expected. Returns false when the row
-   * was settled already (a second run): nothing changes.
+   * The email went out (or may have: `error` = `UNCONFIRMED:…`, provider id NULL), only if the
+   * row is still `queued`. An invitation: its assignment `pending` → `sent`. A reminder: the
+   * assignment's `reminder_count` + 1 and `last_reminder_at` (the 3.11 table reads them), while
+   * it is still `sent` / `opened`. Returns false when the row was settled already (a second
+   * run): nothing changes.
    */
   async settleSent(
-    invite: { id: string; assignmentId: string },
+    invite: { id: string; assignmentId: string; type: SigningEmailType },
     data: { providerMessageId: string | null; error: string | null },
     db: Db,
   ): Promise<boolean> {
@@ -235,6 +251,13 @@ export class RoundSendRepository {
       },
     });
     if (changed.count === 0) return false;
+    if (invite.type === 'reminder') {
+      await db.$executeRaw`
+        UPDATE assignments
+        SET reminder_count = reminder_count + 1, last_reminder_at = now(), updated_at = now()
+        WHERE id = ${invite.assignmentId}::uuid AND status IN ('sent', 'opened')`;
+      return true;
+    }
     await db.assignment.updateMany({
       where: { id: invite.assignmentId, status: 'pending' },
       data: { status: 'sent', sentAt: new Date() },
@@ -243,12 +266,14 @@ export class RoundSendRepository {
   }
 
   /**
-   * The invitation failed for good: status `failed`, no token (it never left), the error code.
-   * `invalidEmail` (a permanent refusal): the assignment `pending` → `invalid_email`; otherwise
-   * it stays `pending` ("send failed", resend in 3.12). Returns false when already settled.
+   * The email failed for good: status `failed`, no token (it never left), the error code.
+   * `invalidEmail` (a permanent refusal): the assignment → `invalid_email` (an invitation from
+   * `pending`, a reminder from `sent` / `opened`); otherwise an invitation's row stays `pending`
+   * ("send failed", resend in 3.12) and a reminder's stays as it was. Returns false when already
+   * settled.
    */
   async settleFailed(
-    invite: { id: string; assignmentId: string },
+    invite: { id: string; assignmentId: string; type: SigningEmailType },
     data: { error: string; invalidEmail: boolean },
     db: Db,
   ): Promise<boolean> {
@@ -259,7 +284,10 @@ export class RoundSendRepository {
     if (changed.count === 0) return false;
     if (data.invalidEmail) {
       await db.assignment.updateMany({
-        where: { id: invite.assignmentId, status: 'pending' },
+        where: {
+          id: invite.assignmentId,
+          status: invite.type === 'reminder' ? { in: ['sent', 'opened'] } : 'pending',
+        },
         data: { status: 'invalid_email' },
       });
     }

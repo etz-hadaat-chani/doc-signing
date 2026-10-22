@@ -142,7 +142,7 @@ Everything is tracked per **assignment**: one employee in one send round. That i
 
 Four more conditions show on screen but are **flags, not statuses**, so the status isn't lost when they clear:
 
-- **Locked (נעול):** 5 wrong ID attempts. A manager can unlock it, and the employee returns to their previous status.
+- **Locked (נעול):** 5 wrong ID attempts. A manager can unlock it (at most twice per assignment, FR-SGN-2), and the employee returns to their previous status.
 - **Expired (פג תוקף):** the link expiry date passed before signing. Worked out from the date, not stored.
 - **Send failed (שליחה נכשלה):** a "Waiting to send" row in a sent round whose newest invitation failed; it clears when the email is resent. Counted and filtered like a status.
 - **Waiting for approval (נחתם, ממתין לאישור):** the document is signed and at least one answer is in a box marked "needs manager approval", and no manager has approved it yet (FR-TRK-6). Worked out from the data; the status stays "Signed".
@@ -192,7 +192,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | FR-RND-4 | Before sending, the system shows counts: will get email, no email, already signed this template in another round (skip or send again), and **missing data**, with a list of who is missing what (for example "address, mobile"). Only required values filled in by the system only count as missing; an empty value the employee may fill in (FR-TPL-10) is not. Employees with missing data are added to the round in status "Missing data" and nothing is sent to them until the manager fills in the employee card (FR-MAN-1). "Already signed" counts any version of the same template, signed digitally or on paper. Employees who still have the same document open in another round that can be signed (link not expired) are counted apart and left out, so nobody gets two emails for one document. Inactive employees are never added, even when picked by hand (they are counted and named). |
 | FR-RND-5 | Per round: reminders on/off, reminder interval (default 3 days), link expiry (default 60 days, counted from the day the round is sent). Reminders continue until the employee signs; an optional maximum can be set. |
 | FR-RND-6 | Sending runs in the background in batches; the round screen shows progress ("sent 640 of 1,220", from the round's invitations: queued, sent, failed). The round is "sending" until every invitation is sent or failed, then "active". |
-| FR-RND-7 | A manager can cancel a round or a single recipient. |
+| FR-RND-7 | A manager can cancel a round (also a draft) or a single recipient. Every open assignment becomes "Cancelled" and every link of it shows "cancelled" at once; signed documents stay as they are; emails still in the queue are not sent. The employees can get the same document in a new round right away. A signed document is returned for correction instead (FR-TRK-6). |
 | FR-RND-8 | **Values are saved at send.** When an assignment is sent (also for "No email" assignments, so they can be printed), the system checks the required values again and saves the filled-in values with the assignment (`assignments.field_values`), including the age on that day and which employer-signature image is used. A required system-only value missing at that moment sets "Missing data" instead (no values are saved for it until it is sent from manual handling). An employee who became inactive after the round was created is cancelled at the send. Everything else is checked again too: details filled in since the round was created, or an email added or removed, count as they are at the send. An empty value of a "system, and the employee when empty" box is saved as empty, and the employee fills it in on the signing screen. The view, the print and the signed PDF all use the saved values; a later import or card edit doesn't change a document already sent. To change one, cancel it and send again. |
 
 ### Signing (employee)
@@ -200,7 +200,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | ID | Requirement |
 | --- | --- |
 | FR-SGN-1 | Each employee gets a unique link. The link shows no personal details until the ID number is entered. |
-| FR-SGN-2 | The employee enters their ID number. 5 wrong attempts lock the assignment until a manager unlocks it. |
+| FR-SGN-2 | The employee enters their ID number. 5 wrong attempts lock the assignment until a manager unlocks it. Unlocking clears the attempts; a manager can unlock one assignment at most twice (each unlock gives whoever is typing 5 more tries), and not after the link expired. After that the employee is handled at the office: cancel, then print or the office signing station. A locked assignment gets no reminder or resend until it is unlocked. |
 | FR-SGN-3 | The employee sees their personalized PDF (the saved values filled in, FR-RND-8; the employer signature if the template has it "already on the document") and must scroll to the end before signing. |
 | FR-SGN-4 | Before the signature pad, the employee fills in a short form: the boxes she fills in (FR-TPL-9, FR-TPL-10) and the email section (FR-SGN-9), in the template's order, each with a clear Hebrew label. Boxes with a condition appear and disappear as she answers. Each mistake shows a Hebrew error next to its box (required box empty, text too long, date out of range); she can't submit with a required box empty. A drawing box has its own small pad with Clear. Then she draws a signature with the mouse (touch also works), can clear and redraw, and confirms a reading statement. The form and the pad are on one screen (B3), so the flow stays within 4 screens (NFR-USE-3). If the document was returned for correction (FR-TRK-6), a short box at the top of this screen shows "תיקון נדרש: <the manager's note>", only after the ID check. |
 | FR-SGN-5 | On confirm, the system checks every answer again with the same rules (FR-TPL-10), then places the signature (FR-SGN-10), the date, the employee's answers (FR-TPL-9, FR-SGN-9) and, if set, the employer signature ("added after the employee signs") in the PDF, locks the file against edits, and adds a small line with the signing date, time and reference number. |
@@ -216,9 +216,9 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | --- | --- |
 | FR-REM-1 | A daily job sends reminders to recipients in Sent or Opened status whose last email was at least the reminder interval ago. |
 | FR-REM-2 | Reminders stop only when the employee signs, the link expires or the manager cancels. There is no maximum by default. |
-| FR-REM-3 | A manager can send a reminder now, to one employee or to everyone who hasn't signed in a round. |
+| FR-REM-3 | A manager can send a reminder now, to one employee or to everyone who hasn't signed in a round. Only employees in Sent or Opened status get one, at their current valid email, with a new link (the older links keep working). Against flooding: one employee can't be reminded while an email to her is still on its way, or within 1 hour of the last one; "remind everyone" skips the locked, those with no valid email, those with an email on its way and those emailed in the last 24 hours, and shows how many were skipped and why. A manual reminder ignores the round's "reminders on/off" and maximum (they are for the daily job) but counts in the reminders sent. |
 | FR-REM-4 | Bounced emails change the status to "Invalid email". |
-| FR-REM-5 | Every link sent (invitation or reminder) keeps working until the employee signs or the link expires. |
+| FR-REM-5 | Every link sent (invitation or reminder) keeps working until the employee signs, the link expires or the manager cancels (then every link of that assignment shows "cancelled"). |
 
 ### Tracking
 
@@ -458,8 +458,8 @@ All management endpoints need a staff session; the role column says who may call
 | POST | `/api/rounds/:id/assignments/search` | The same table searched by name, employee number or full ID number: body `{ q, status?, dept?, approval?, returned?, page?, pageSize? }`. Search text is never put in a URL (an ID number would reach server and proxy logs) | M, O |
 | GET | `/api/rounds/:id/export` | Status export to Excel | M, O |
 | GET | `/api/rounds/:id/download` | ZIP of signed files in department folders | M, O |
-| POST | `/api/rounds/:id/remind` | Remind everyone who hasn't signed, now | M |
-| POST | `/api/rounds/:id/cancel` | Cancel the round | M |
+| POST | `/api/rounds/:id/remind` | Remind everyone in Sent or Opened status, now (FR-REM-3); 202 with how many were queued and how many were skipped (locked, no valid email, an email on its way, emailed in the last 24 hours). 409 for a draft, a closed or cancelled round, or an expired link | M |
+| POST | `/api/rounds/:id/cancel` | Cancel the round, also a draft (FR-RND-7): every open assignment is cancelled, signed ones stay; 409 if already closed or cancelled | M |
 
 ### Assignments (one employee in one round)
 
@@ -467,10 +467,10 @@ All management endpoints need a staff session; the role column says who may call
 | --- | --- | --- | --- |
 | GET | `/api/assignments/:id/document` | Redirect to a short-lived link to the signed PDF; logged | M, O |
 | GET | `/api/assignments/:id/print` | Personalized PDF for paper signing | M |
-| POST | `/api/assignments/:id/remind` | Remind this employee now | M |
-| POST | `/api/assignments/:id/resend` | Resend, for example after fixing the email | M |
-| POST | `/api/assignments/:id/unlock` | Unlock after 5 wrong ID attempts | M |
-| POST | `/api/assignments/:id/cancel` | Cancel for this employee | M |
+| POST | `/api/assignments/:id/remind` | Remind this employee now (Sent or Opened; not locked; not within 1 hour of the last email); 202 | M |
+| POST | `/api/assignments/:id/resend` | A new invitation after a failed send, or after a wrong email was fixed (the address must differ from the one that failed); 202. Sent or Opened rows get a reminder instead; no email or missing data rows are sent from manual handling | M |
+| POST | `/api/assignments/:id/unlock` | Unlock after 5 wrong ID attempts (at most twice per assignment; not after expiry); returns the unlocks left | M |
+| POST | `/api/assignments/:id/cancel` | Cancel for this employee (any open status, also in a draft); every link of hers shows "cancelled" | M |
 | POST | `/api/assignments/:id/manual-sign` | Upload a scanned paper signature | M |
 | POST | `/api/assignments/:id/kiosk` | Open a one-time signing session at the office signing station | M |
 | GET | `/api/assignments/:id/responses` | What the employee filled in (drawings as short-lived links); logged | M, O |

@@ -13,7 +13,9 @@ import { type LockedInvite, RoundSendRepository } from './round-send.repository.
 /** Stored in `email_messages.error` when the email may have gone out but wasn't confirmed. */
 export const UNCONFIRMED = 'UNCONFIRMED';
 
-type InviteAudit = AuditEntry<'assignment.invite_sent'> | AuditEntry<'assignment.invite_failed'>;
+type SentAction = 'assignment.invite_sent' | 'assignment.reminder_sent';
+type FailedAction = 'assignment.invite_failed' | 'assignment.reminder_failed';
+type InviteAudit = AuditEntry<SentAction> | AuditEntry<FailedAction>;
 
 /** What the first short transaction found. */
 type Start =
@@ -23,15 +25,17 @@ type Start =
   | { kind: 'send'; invite: LockedInvite; token: string };
 
 /**
- * One invitation (3.10): runs in the worker for each `INVITATION_QUEUE` job. Safe to run twice
- * and never sends one link twice:
- * 1. A short transaction locks the row. Already settled → nothing. Assignment no longer
- *    `pending` (cancelled or signed meanwhile) → `failed`, nothing sent. A token hash already
+ * One invitation (3.10) or reminder (3.12, 3.14): runs in the worker for each
+ * `INVITATION_QUEUE` and `REMINDER_QUEUE` job. Safe to run twice and never sends one link twice:
+ * 1. A short transaction locks the row. Already settled → nothing. The email may no longer go
+ *    (`mayStillGo`: an invitation needs a `pending` assignment; a reminder a `sent` / `opened`
+ *    one, not locked, in a sending or active round whose link hasn't expired) → `failed`
+ *    `ASSIGNMENT_CLOSED`, nothing sent. A token hash already
  *    stored → an earlier attempt handed the email over (or may have) and then stopped → `sent`,
  *    `UNCONFIRMED`, not sent again. Otherwise a new token: only its hash is stored, then commit.
  * 2. The email, with the raw token (only ever in this variable and the email itself).
- * 3. Settling (round row locked first): `sent`; the assignment `pending` → `sent`; the round
- *    `active` once nothing is queued.
+ * 3. Settling (round row locked first): `sent`; an invitation's assignment `pending` → `sent`,
+ *    a reminder's `reminder_count` + 1; the round `active` once nothing is queued.
  * Errors: permanent → `failed`, assignment `invalid_email`. Temporary, maybe sent → `sent`,
  * `UNCONFIRMED:<code>` (no retry; the reminder is the backstop). Temporary, clearly not sent, or
  * any error before the provider was called → the hash is cleared and the job retried; on its
@@ -39,8 +43,8 @@ type Start =
  * email went out (saving the result) → retried, and the retry finds the hash: `UNCONFIRMED`.
  */
 @Injectable()
-export class InvitationSender {
-  private readonly logger = new Logger(InvitationSender.name);
+export class SigningEmailSender {
+  private readonly logger = new Logger(SigningEmailSender.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -74,14 +78,17 @@ export class InvitationSender {
 
     let providerMessageId: string;
     try {
-      const result = await this.email.sendInvitation({
+      const input = {
         to: invite.toEmail,
         employeeName: `${invite.firstName.trim()} ${invite.lastName.trim()}`.trim(),
         documentName: invite.documentName,
         token: start.token,
         ...(invite.linkExpiresAt && { expiresAt: invite.linkExpiresAt }),
-        correction: invite.correction,
-      });
+      };
+      const result =
+        invite.type === 'reminder'
+          ? await this.email.sendReminder(input)
+          : await this.email.sendInvitation({ ...input, correction: invite.correction });
       providerMessageId = result.providerMessageId;
     } catch (error) {
       await this.onSendError(invite, error);
@@ -95,7 +102,7 @@ export class InvitationSender {
   private async start(emailMessageId: string, tx: Db): Promise<Start> {
     const invite = await this.repository.lockInvite(emailMessageId, tx);
     if (!invite || invite.status !== 'queued') return { kind: 'skip' };
-    if (invite.assignmentStatus !== 'pending') return { kind: 'closed', invite };
+    if (!mayStillGo(invite)) return { kind: 'closed', invite };
     if (invite.hasToken) return { kind: 'unconfirmed', invite };
     const token = newSigningToken();
     await this.repository.setTokenHash(invite.id, hashSigningToken(token), null, tx);
@@ -169,7 +176,7 @@ export class InvitationSender {
     if (!(await this.repository.settleSent(invite, { providerMessageId, error }, tx))) return null;
     return {
       actor: { type: 'system' },
-      action: 'assignment.invite_sent',
+      action: invite.type === 'reminder' ? 'assignment.reminder_sent' : 'assignment.invite_sent',
       entity: { type: 'assignment', id: invite.assignmentId },
       ip: null,
       details: {
@@ -193,7 +200,8 @@ export class InvitationSender {
     if (!(await this.repository.settleFailed(invite, { error, invalidEmail }, tx))) return null;
     return {
       actor: { type: 'system' },
-      action: 'assignment.invite_failed',
+      action:
+        invite.type === 'reminder' ? 'assignment.reminder_failed' : 'assignment.invite_failed',
       entity: { type: 'assignment', id: invite.assignmentId },
       ip: null,
       details: {
@@ -243,4 +251,19 @@ export class InvitationSender {
       );
     }
   }
+}
+
+/**
+ * Whether the email may still go when its job runs. An invitation: the assignment is still
+ * `pending` (not cancelled or signed meanwhile). A reminder: still `sent` / `opened`, not
+ * locked, its round sending or active, and the link not expired (it would carry a dead link).
+ */
+function mayStillGo(invite: LockedInvite): boolean {
+  if (invite.type === 'invite') return invite.assignmentStatus === 'pending';
+  return (
+    (invite.assignmentStatus === 'sent' || invite.assignmentStatus === 'opened') &&
+    !invite.locked &&
+    (invite.roundStatus === 'sending' || invite.roundStatus === 'active') &&
+    !invite.expired
+  );
 }

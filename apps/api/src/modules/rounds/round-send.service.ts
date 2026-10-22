@@ -31,7 +31,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * Sending a draft round (3.10, FR-RND-5, FR-RND-6, FR-RND-8): one transaction checks the round's
  * templates again, saves each document's values, sets the statuses and the link expiry, and
  * queues one invitation job per employee with an email (pg-boss `fromPrisma`, so the jobs commit
- * with everything else or not at all). The emails go out in the worker (`InvitationSender`).
+ * with everything else or not at all). The emails go out in the worker (`SigningEmailSender`).
  */
 @Injectable()
 export class RoundSendService {
@@ -101,7 +101,7 @@ export class RoundSendService {
       const toEmail = plan.decisions.flatMap(({ assignmentId, status, toEmail: address }) =>
         status === 'pending' && address ? [{ assignmentId, toEmail: address }] : [],
       );
-      const invites = await this.repository.createInvites(toEmail, tx);
+      const invites = await this.repository.createSigningEmails('invite', toEmail, tx);
       const added = await this.queue.sendMany(
         INVITATION_QUEUE,
         invites.map(({ id, assignmentId }) => ({

@@ -12,7 +12,7 @@ import {
   QUEUE_SCHEMA,
 } from '../../src/common/queue/queue.definitions.js';
 import type { JobContext } from '../../src/common/queue/queue.service.js';
-import { InvitationSender } from '../../src/modules/rounds/invitation-sender.service.js';
+import { SigningEmailSender } from '../../src/modules/rounds/signing-email-sender.service.js';
 import { RoundSendRepository } from '../../src/modules/rounds/round-send.repository.js';
 import { createTestApp } from '../setup/app.js';
 import { messagesTo } from '../setup/mailpit.js';
@@ -93,7 +93,7 @@ function stubEmail(answer?: (call: number) => Promise<SendResult>) {
         : Promise.resolve({ providerMessageId: `<m${String(calls.length)}@test>` });
     },
   };
-  const sender = new InvitationSender(
+  const sender = new SigningEmailSender(
     prisma,
     repository,
     service as unknown as EmailService,
@@ -109,7 +109,7 @@ const roundStatus = async (id: string) =>
   (await prisma.round.findUniqueOrThrow({ where: { id } })).status;
 const audits = (action: string) => prisma.auditLog.findMany({ where: { action } });
 
-describe('InvitationSender: the happy path', () => {
+describe('SigningEmailSender: the happy path', () => {
   it('sends with a token whose hash is stored, settles the row and finishes the round', async () => {
     const { roundId, invites } = await sentRound();
     const { calls, sender } = stubEmail();
@@ -170,7 +170,7 @@ describe('InvitationSender: the happy path', () => {
   });
 });
 
-describe('InvitationSender: never one link twice', () => {
+describe('SigningEmailSender: never one link twice', () => {
   it('a crash after the hand-over (hash stored, still queued) → sent UNCONFIRMED, not sent again', async () => {
     const { invites } = await sentRound(['1001']);
     const [invite] = invites as [Invite];
@@ -250,7 +250,7 @@ describe('InvitationSender: never one link twice', () => {
   });
 });
 
-describe('InvitationSender: failures', () => {
+describe('SigningEmailSender: failures', () => {
   it('a permanent refusal → failed, the assignment invalid_email, no retry', async () => {
     const { roundId, invites } = await sentRound(['1001']);
     const [invite] = invites as [Invite];
@@ -429,7 +429,7 @@ describe('the worker, end to end (Mailpit)', () => {
     });
     if (!invite) throw new Error('no invitation');
 
-    const sender = new InvitationSender(
+    const sender = new SigningEmailSender(
       prisma,
       repository,
       app.get(EmailService),

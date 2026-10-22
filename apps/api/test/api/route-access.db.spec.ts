@@ -78,6 +78,8 @@ describe('every route declares who may call it', () => {
     expect(names).toContain('DepartmentsController.list (GET /departments)');
     expect(names).toContain('ImportController.preview (POST /employees/import/preview)');
     expect(names).toContain('ImportController.commit (POST /employees/import/:batchId/commit)');
+    expect(names).toContain('AssignmentsController.unlock (POST /assignments/:id/unlock)');
+    expect(names).toContain('RoundsController.cancel (POST /rounds/:id/cancel)');
   });
 
   it('has @Public or @Roles on every route', () => {

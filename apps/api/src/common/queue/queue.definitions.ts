@@ -64,7 +64,10 @@ export const CLEANUP_QUEUE: QueueDefinition<Record<string, never>> = Object.free
   schedule: Object.freeze({ cron: '0 3 * * *', description: 'daily 03:00' }),
 });
 
-/** IDs only (3.10): never the token, the address or anything about the employee. */
+/**
+ * IDs only (3.10): never the token, the address or anything about the employee. The reminder
+ * queue uses the same data.
+ */
 export interface InvitationJobData {
   readonly assignmentId: string;
   readonly emailMessageId: string;
@@ -81,5 +84,20 @@ export const INVITATION_QUEUE: QueueDefinition<InvitationJobData> = Object.freez
   retry: DEFAULT_RETRY,
 });
 
+/**
+ * One reminder email per job: a manager's reminder now (3.12) and the daily reminders (3.14).
+ * Same data and steps as the invitation (`SigningEmailSender`). Exclusive with `singletonKey` =
+ * the assignment id: one waiting or running reminder per assignment.
+ */
+export const REMINDER_QUEUE: QueueDefinition<InvitationJobData> = Object.freeze({
+  name: 'round-reminder',
+  policy: 'exclusive',
+  retry: DEFAULT_RETRY,
+});
+
 /** Every queue of the app. Both processes create (or update) them at start. */
-export const QUEUES: readonly QueueDefinition[] = Object.freeze([CLEANUP_QUEUE, INVITATION_QUEUE]);
+export const QUEUES: readonly QueueDefinition[] = Object.freeze([
+  CLEANUP_QUEUE,
+  INVITATION_QUEUE,
+  REMINDER_QUEUE,
+]);

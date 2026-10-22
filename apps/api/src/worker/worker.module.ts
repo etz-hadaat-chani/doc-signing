@@ -6,10 +6,11 @@ import { PrismaModule } from '../common/prisma/prisma.module.js';
 import { QueueModule } from '../common/queue/queue.module.js';
 import { SettingsModule } from '../common/settings/settings.module.js';
 import { AuthCleanupService } from '../modules/auth/auth-cleanup.service.js';
-import { InvitationSender } from '../modules/rounds/invitation-sender.service.js';
 import { RoundSendRepository } from '../modules/rounds/round-send.repository.js';
+import { SigningEmailSender } from '../modules/rounds/signing-email-sender.service.js';
 import { CleanupJob } from './jobs/cleanup.job.js';
 import { InvitationJob } from './jobs/invitation.job.js';
+import { ReminderJob } from './jobs/reminder.job.js';
 
 /**
  * The worker process: no HTTP, runs the jobs the API adds. Each job class registers its handler
@@ -24,6 +25,13 @@ import { InvitationJob } from './jobs/invitation.job.js';
     SettingsModule,
     EmailModule,
   ],
-  providers: [AuthCleanupService, CleanupJob, RoundSendRepository, InvitationSender, InvitationJob],
+  providers: [
+    AuthCleanupService,
+    CleanupJob,
+    RoundSendRepository,
+    SigningEmailSender,
+    InvitationJob,
+    ReminderJob,
+  ],
 })
 export class WorkerModule {}

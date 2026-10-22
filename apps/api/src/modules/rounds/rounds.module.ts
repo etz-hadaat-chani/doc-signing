@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
 import { PdfFillerModule } from '../pdf-filler/pdf-filler.module.js';
 import { TemplatesModule } from '../templates/templates.module.js';
+import { AssignmentsController } from './assignments.controller.js';
+import { RoundActionsRepository } from './round-actions.repository.js';
+import { RoundActionsService } from './round-actions.service.js';
 import { RoundRecipientsRepository } from './round-recipients.repository.js';
 import { RoundRecipientsService } from './round-recipients.service.js';
 import { RoundSendRepository } from './round-send.repository.js';
@@ -13,11 +16,12 @@ import { RoundsService } from './rounds.service.js';
 /**
  * Send rounds (FR-RND): the recipient preview (3.8) and round creation (3.9), which resolves the
  * same choice with `RoundRecipientsService.resolve` inside its own transaction, and the send
- * (3.10), which queues the invitations the worker sends (`InvitationSender`, worker module).
+ * (3.10), which queues the invitations the worker sends (`SigningEmailSender`, worker module),
+ * and the manager's actions (3.12): remind, resend, unlock and cancel.
  */
 @Module({
   imports: [AuthModule, TemplatesModule, PdfFillerModule],
-  controllers: [RoundsController],
+  controllers: [RoundsController, AssignmentsController],
   providers: [
     RoundRecipientsService,
     RoundRecipientsRepository,
@@ -25,6 +29,8 @@ import { RoundsService } from './rounds.service.js';
     RoundsRepository,
     RoundSendService,
     RoundSendRepository,
+    RoundActionsService,
+    RoundActionsRepository,
   ],
   exports: [RoundRecipientsService, RoundSendRepository],
 })

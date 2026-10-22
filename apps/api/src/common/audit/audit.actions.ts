@@ -1,10 +1,13 @@
 import type {
   AlreadySignedChoice,
+  AssignmentStatus,
   EmailStatus,
   RecipientsPreviewReport,
+  RemindSkipReason,
   RoundMode,
   RoundSent,
   RoundSettings,
+  RoundStatus,
   UserRole,
 } from '@doc-signing/shared';
 
@@ -41,8 +44,16 @@ export const AUDIT_ACTIONS = [
   'round.sent',
   'round.sending_finished',
   'round.assignments_viewed',
+  'round.remind_queued',
+  'round.cancelled',
   'assignment.invite_sent',
   'assignment.invite_failed',
+  'assignment.reminder_sent',
+  'assignment.reminder_failed',
+  'assignment.remind_queued',
+  'assignment.resend_queued',
+  'assignment.unlocked',
+  'assignment.cancelled',
   'settings.updated',
   'settings.employer_signature_uploaded',
   'settings.employer_signature_viewed',
@@ -214,6 +225,24 @@ export interface AuditDetailsMap {
     searched: boolean;
   };
   /**
+   * The manager reminded the whole round now (3.12, FR-REM-3): how many reminders were queued
+   * and why the others were skipped. Counts only.
+   */
+  'round.remind_queued': {
+    queued: number;
+    skipped: Record<RemindSkipReason, number>;
+  };
+  /**
+   * The manager cancelled the round (3.12, FR-RND-7): its open assignments, counted by the
+   * status they had; signed ones stay. Counts only.
+   */
+  'round.cancelled': {
+    fromStatus: RoundStatus;
+    cancelled: number;
+    byStatus: Partial<Record<AssignmentStatus, number>>;
+    signedUntouched: number;
+  };
+  /**
    * One invitation went out (system actor, entity = the assignment). `unconfirmed`: it may have
    * gone out, but the provider never confirmed it (a crash or a timeout); it is not sent again.
    */
@@ -231,6 +260,43 @@ export interface AuditDetailsMap {
       'permanent' | 'temporary_last_attempt' | 'unexpected_last_attempt' | 'assignment_closed';
     providerCode: string | null;
   };
+  /** One reminder went out (system actor); the same details as the invitation's. */
+  'assignment.reminder_sent': {
+    roundId: string;
+    emailMessageId: string;
+    unconfirmed: boolean;
+    providerCode: string | null;
+  };
+  /** One reminder failed for good, or could no longer go (`assignment_closed`). */
+  'assignment.reminder_failed': {
+    roundId: string;
+    emailMessageId: string;
+    reason:
+      'permanent' | 'temporary_last_attempt' | 'unexpected_last_attempt' | 'assignment_closed';
+    providerCode: string | null;
+  };
+  // Round actions (3.12): the manager is the actor, the entity is the assignment. Ids only:
+  // never the address, the name or the link.
+  /** A reminder to one employee was queued (the worker sends it). */
+  'assignment.remind_queued': { roundId: string; emailMessageId: string };
+  /** A new invitation was queued after a failed send or a fixed wrong email. */
+  'assignment.resend_queued': {
+    roundId: string;
+    emailMessageId: string;
+    fromStatus: AssignmentStatus;
+  };
+  /**
+   * The lock after wrong ID attempts was lifted (`failed_attempts` back to 0). The number of
+   * attempts and earlier unlocks only; the numbers typed are never stored.
+   */
+  'assignment.unlocked': {
+    roundId: string;
+    lockedAt: string;
+    failedAttempts: number;
+    previousUnlocks: number;
+  };
+  /** One employee's assignment was cancelled; every link of it now shows "cancelled". */
+  'assignment.cancelled': { roundId: string; fromStatus: AssignmentStatus };
   // Settings (3.18): the manager is the actor; the entity is `settings` with no id (text keys).
   /** One line per changed value, "field: old → new" (`null` = no limit). */
   'settings.updated': { changes: string[] };
