@@ -5,12 +5,16 @@ import { EmailModule } from '../common/email/email.module.js';
 import { PrismaModule } from '../common/prisma/prisma.module.js';
 import { QueueModule } from '../common/queue/queue.module.js';
 import { SettingsModule } from '../common/settings/settings.module.js';
+import { StorageModule } from '../common/storage/storage.module.js';
 import { AuthCleanupService } from '../modules/auth/auth-cleanup.service.js';
 import { RoundSendRepository } from '../modules/rounds/round-send.repository.js';
 import { SigningEmailSender } from '../modules/rounds/signing-email-sender.service.js';
+import { SignedCopyRepository } from '../modules/signing/signed-copy.repository.js';
+import { SignedCopySender } from '../modules/signing/signed-copy-sender.service.js';
 import { CleanupJob } from './jobs/cleanup.job.js';
 import { InvitationJob } from './jobs/invitation.job.js';
 import { ReminderJob } from './jobs/reminder.job.js';
+import { SignedCopyJob } from './jobs/signed-copy.job.js';
 
 /**
  * The worker process: no HTTP, runs the jobs the API adds. Each job class registers its handler
@@ -24,6 +28,7 @@ import { ReminderJob } from './jobs/reminder.job.js';
     AuditModule,
     SettingsModule,
     EmailModule,
+    StorageModule,
   ],
   providers: [
     AuthCleanupService,
@@ -32,6 +37,9 @@ import { ReminderJob } from './jobs/reminder.job.js';
     SigningEmailSender,
     InvitationJob,
     ReminderJob,
+    SignedCopyRepository,
+    SignedCopySender,
+    SignedCopyJob,
   ],
 })
 export class WorkerModule {}

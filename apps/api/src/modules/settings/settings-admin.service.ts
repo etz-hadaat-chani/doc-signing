@@ -4,6 +4,7 @@ import {
   EMPLOYER_SIGNATURE_MIN_PIXELS,
   type EmployerSignatureLink,
   type EmployerSignatureSummary,
+  type HrContactSetting,
   type SettingsItem,
   type SettingsUpdateInput,
 } from '@doc-signing/shared';
@@ -16,6 +17,7 @@ import type { SettingKey } from '../../common/settings/settings.defaults.js';
 import {
   EMPLOYER_SIGNATURE_KEY,
   type EmployerSignatureValue,
+  HR_CONTACT_KEY,
   type SettingValues,
   SettingsService,
 } from '../../common/settings/settings.service.js';
@@ -59,6 +61,14 @@ function summaryOf(value: EmployerSignatureValue | null): EmployerSignatureSumma
 
 const show = (value: string | number | null) => (value === null ? 'null' : String(value));
 
+/** "hrContact.phone: old → new" for each changed part (the organisation's details, 3.13). */
+function hrContactChanges(before: HrContactSetting, after: HrContactSetting): string[] {
+  const parts = ['name', 'phone', 'email'] as const;
+  return parts
+    .filter((part) => before[part] !== after[part])
+    .map((part) => `hrContact.${part}: ${show(before[part])} → ${show(after[part])}`);
+}
+
 /**
  * Settings a manager changes (FR-ADM-2): the four defaults and the employer signature and stamp
  * image (FR-TPL-7). Reading for other modules is `SettingsService`.
@@ -73,11 +83,12 @@ export class SettingsAdminService {
   ) {}
 
   async get(): Promise<SettingsItem> {
-    const [values, image] = await Promise.all([
+    const [values, hrContact, image] = await Promise.all([
       this.settings.getAll(),
+      this.settings.getHrContact(),
       this.settings.getEmployerSignature(),
     ]);
-    return { ...values, employerSignature: summaryOf(image) };
+    return { ...values, hrContact, employerSignature: summaryOf(image) };
   }
 
   /**
@@ -94,6 +105,16 @@ export class SettingsAdminService {
         if (value === undefined || value === before[field]) continue;
         await this.write(SETTING_KEYS[field], value, actor.userId, tx);
         changes.push(`${field}: ${show(before[field])} → ${show(value)}`);
+      }
+      if (input.hrContact) {
+        const contactChanges = hrContactChanges(
+          await this.settings.getHrContact(tx),
+          input.hrContact,
+        );
+        if (contactChanges.length > 0) {
+          await this.write(HR_CONTACT_KEY, input.hrContact, actor.userId, tx);
+          changes.push(...contactChanges);
+        }
       }
       if (changes.length === 0) return;
       await this.audit.record(

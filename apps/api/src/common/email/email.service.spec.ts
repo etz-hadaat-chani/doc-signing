@@ -37,7 +37,12 @@ describe('EmailService', () => {
 
   beforeEach(() => {
     adapter = new FakeAdapter();
-    const settings = { getSenderName: () => Promise.resolve('משאבי אנוש') };
+    const settings = {
+      getSenderName: () => Promise.resolve('משאבי אנוש'),
+      // The hr_contact setting, not the environment's 02-1234567 (3.13).
+      getHrContact: () =>
+        Promise.resolve({ name: 'צוות משאבי אנוש', phone: null, email: 'hr@example.org' }),
+    };
     service = new EmailService(
       adapter,
       config,
@@ -74,6 +79,17 @@ describe('EmailService', () => {
     expect(message?.html).toContain(`https://sign.example.org/sign/${token}`);
     expect(message?.text).toContain(`https://sign.example.org/sign/${token}`);
     expect(message?.attachments).toEqual([]);
+  });
+
+  it('puts the hr_contact setting in every footer', async () => {
+    await service.sendInvitation(request);
+    await service.sendReminder(request);
+    await service.sendSignedCopy({ ...request, pdf: Buffer.from('%PDF'), fileName: 'מסמך' });
+    for (const message of adapter.sent) {
+      expect(message.text).toContain('צוות משאבי אנוש');
+      expect(message.text).toContain('hr@example.org');
+      expect(message.text).not.toContain('02-1234567');
+    }
   });
 
   it('sends the reminder with its own subject and the expiry date', async () => {

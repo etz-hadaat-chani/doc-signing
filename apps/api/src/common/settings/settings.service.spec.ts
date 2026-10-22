@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { type AppConfig, loadConfig } from '../config/config.schema.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
 import { SETTING_DEFAULTS } from './settings.defaults.js';
 import { SettingsService } from './settings.service.js';
+
+const config: AppConfig = loadConfig({
+  DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
+  S3_BUCKET: 'documents',
+  SMTP_HOST: 'localhost',
+  EMAIL_FROM_ADDRESS: 'no-reply@doc-signing.local',
+  APP_PUBLIC_URL: 'https://sign.example.org',
+  HR_CONTACT_NAME: 'משאבי אנוש',
+  HR_CONTACT_PHONE: '02-1234567',
+});
 
 /** A fake client whose `settings` table holds these rows (key → value). */
 function serviceWithRows(rows: Record<string, unknown>): SettingsService {
@@ -14,7 +25,7 @@ function serviceWithRows(rows: Record<string, unknown>): SettingsService {
         Promise.resolve(list.filter(({ key }) => where.key.in.includes(key))),
     },
   };
-  return new SettingsService(prisma as unknown as PrismaService);
+  return new SettingsService(prisma as unknown as PrismaService, config);
 }
 
 /** Only a `sender_name` row with this value (undefined = no row). */
@@ -112,5 +123,32 @@ describe('SettingsService.getEmployerSignature', () => {
   it('treats a broken value as no image', async () => {
     const service = serviceWithRows({ employer_signature: { fileKey: stored.fileKey } });
     expect(await service.hasEmployerSignatureImage()).toBe(false);
+  });
+});
+
+describe('SettingsService.getHrContact', () => {
+  it('uses the environment values when no row is stored', async () => {
+    expect(await serviceWithRows({}).getHrContact()).toEqual({
+      name: 'משאבי אנוש',
+      phone: '02-1234567',
+      email: null,
+    });
+  });
+
+  it('reads the stored contact, trimmed and with the email lowercased', async () => {
+    const stored = { name: ' צוות משאבי אנוש ', phone: null, email: 'HR@Example.org' };
+    expect(await serviceWithRows({ hr_contact: stored }).getHrContact()).toEqual({
+      name: 'צוות משאבי אנוש',
+      phone: null,
+      email: 'hr@example.org',
+    });
+  });
+
+  it.each([
+    ['neither phone nor email', { name: 'א', phone: null, email: null }],
+    ['a broken phone', { name: 'א', phone: 'abc', email: null }],
+    ['not an object', 'משאבי אנוש'],
+  ])('falls back to the environment for %s', async (_case, value) => {
+    expect((await serviceWithRows({ hr_contact: value }).getHrContact()).phone).toBe('02-1234567');
   });
 });

@@ -95,9 +95,21 @@ export const REMINDER_QUEUE: QueueDefinition<InvitationJobData> = Object.freeze(
   retry: DEFAULT_RETRY,
 });
 
+/**
+ * The signed copy (3.13, FR-SGN-6): one email per signed assignment, with the signed PDF. Queued
+ * in the signing transaction. Exclusive with `singletonKey` = the assignment id; the same IDs-only
+ * data as the invitation. Default retries.
+ */
+export const SIGNED_COPY_QUEUE: QueueDefinition<InvitationJobData> = Object.freeze({
+  name: 'signed-copy',
+  policy: 'exclusive',
+  retry: DEFAULT_RETRY,
+});
+
 /** Every queue of the app. Both processes create (or update) them at start. */
 export const QUEUES: readonly QueueDefinition[] = Object.freeze([
   CLEANUP_QUEUE,
   INVITATION_QUEUE,
   REMINDER_QUEUE,
+  SIGNED_COPY_QUEUE,
 ]);

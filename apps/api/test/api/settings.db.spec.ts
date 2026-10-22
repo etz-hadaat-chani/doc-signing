@@ -10,10 +10,12 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runSeed } from '../../prisma/run-seed.js';
+import { AppConfig } from '../../src/common/config/config.schema.js';
 import { PrismaService } from '../../src/common/prisma/prisma.service.js';
 import {
   EMPLOYER_SIGNATURE_KEY,
   employerSignatureValueSchema,
+  SettingsService,
 } from '../../src/common/settings/settings.service.js';
 import { StorageAdapter } from '../../src/common/storage/storage.adapter.js';
 import { testJpegBytes, testPng } from '../fixtures/png.js';
@@ -91,8 +93,65 @@ describe('GET /api/settings', () => {
       maxReminders: null,
       linkExpiryDays: 60,
       senderName: 'מערכת חתימות',
+      hrContact: envHrContact(),
       employerSignature: null,
     });
+  });
+});
+
+/** The HR contact from the environment (the built-in default, 3.13). */
+function envHrContact() {
+  const { name, phone, email } = app.get(AppConfig).email.hrContact;
+  return { name, phone: phone ?? null, email: email ?? null };
+}
+
+describe('the HR contact (3.13)', () => {
+  it('saves it, logs each changed part, and the signing pages and emails read it', async () => {
+    const before = envHrContact();
+    const hrContact = { name: ' צוות משאבי אנוש ', phone: '03-7654321', email: 'HR@Example.org' };
+    const response = await patchSettings({ hrContact });
+    expect(response.status).toBe(200);
+    const saved = { name: 'צוות משאבי אנוש', phone: '03-7654321', email: 'hr@example.org' };
+    expect(itemOf(response).hrContact).toEqual(saved);
+    expect(await app.get(SettingsService).getHrContact()).toEqual(saved);
+
+    const [row] = await auditOf('settings.updated');
+    const changes = (row?.details as { changes: string[] }).changes;
+    expect(changes).toContain(`hrContact.name: ${before.name} → צוות משאבי אנוש`);
+    expect(changes).toContain(`hrContact.phone: ${String(before.phone)} → 03-7654321`);
+    expect(changes.filter((line) => line.startsWith('hrContact.'))).toHaveLength(
+      ['name', 'phone', 'email'].filter(
+        (part) => before[part as keyof typeof before] !== saved[part as keyof typeof saved],
+      ).length,
+    );
+  });
+
+  it('the same contact again → no audit row', async () => {
+    await patchSettings({ hrContact: envHrContact() });
+    expect(await auditOf('settings.updated')).toEqual([]);
+  });
+
+  it.each([
+    ['neither phone nor email', { name: 'משאבי אנוש', phone: null, email: null }],
+    ['a broken phone', { name: 'משאבי אנוש', phone: 'abc', email: null }],
+    ['a broken email', { name: 'משאבי אנוש', phone: null, email: 'not-an-email' }],
+    ['an empty name', { name: ' ', phone: '02-1234567', email: null }],
+    ['a name on two lines', { name: 'א\nב', phone: '02-1234567', email: null }],
+    ['a missing part', { name: 'משאבי אנוש', phone: '02-1234567' }],
+  ])('%s → 400, nothing saved', async (_label, hrContact) => {
+    const response = await patchSettings({ hrContact });
+    expect(response.status).toBe(400);
+    expect(errorOf(response).code).toBe('VALIDATION_FAILED');
+    expect(itemOf(await getSettings()).hrContact).toEqual(envHrContact());
+  });
+
+  it('an officer cannot change it', async () => {
+    const response = await server()
+      .patch('/api/settings')
+      .set('Cookie', officerCookie)
+      .send({ hrContact: { name: 'א', phone: '02-1234567', email: null } });
+    expect(response.status).toBe(403);
+    expect(itemOf(await getSettings()).hrContact).toEqual(envHrContact());
   });
 });
 

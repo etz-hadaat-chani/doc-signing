@@ -42,7 +42,7 @@ async function main(): Promise<void> {
 
   const prisma = new PrismaService(config);
   const adapter = new SmtpEmailAdapter(config);
-  const email = new EmailService(adapter, config, new SettingsService(prisma), prisma);
+  const email = new EmailService(adapter, config, new SettingsService(prisma, config), prisma);
   await prisma.onModuleInit();
   try {
     const sample = {

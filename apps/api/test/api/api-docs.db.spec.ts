@@ -91,8 +91,23 @@ describe('Swagger page outside production', () => {
         'POST /api/templates',
         'POST /api/templates/{id}/archive',
         'POST /api/users',
+        'GET /api/sign/{token}',
+        'GET /api/sign/{token}/document',
+        'GET /api/sign/{token}/form',
+        'POST /api/sign/{token}/fit',
+        'POST /api/sign/{token}/submit',
+        'POST /api/sign/{token}/verify',
       ].sort(),
     );
+  });
+
+  it('never shows an example of a signing-link token (it would be a real-looking secret)', () => {
+    const operation = document.paths['/api/sign/{token}/verify']?.post;
+    const token = operation?.parameters?.find(
+      (parameter) => 'name' in parameter && parameter.name === 'token',
+    );
+    expect(token).toBeDefined();
+    expect(JSON.stringify(token)).not.toMatch(/example/i);
   });
 
   it('shows the login body from the zod schema', () => {

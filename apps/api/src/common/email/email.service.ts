@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { EmailMessageType } from '@doc-signing/shared';
 import { z } from 'zod';
-import { AppConfig } from '../config/config.schema.js';
+import { AppConfig, type HrContact } from '../config/config.schema.js';
 import { redactForLog } from '../errors/redact.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { Db } from '../prisma/prisma.types.js';
@@ -67,23 +67,24 @@ export class EmailService {
     this.rate = new SendRate(config.email.sendRatePerSecond);
   }
 
-  sendInvitation(input: InvitationEmailInput, db: Db = this.prisma): Promise<SendResult> {
+  async sendInvitation(input: InvitationEmailInput, db: Db = this.prisma): Promise<SendResult> {
     const rendered = renderInvitation({
-      ...this.requestData(input),
+      ...(await this.requestData(input, db)),
       correction: input.correction === true,
     });
     return this.send('invite', input.to, rendered, [], db);
   }
 
-  sendReminder(input: SigningEmailInput, db: Db = this.prisma): Promise<SendResult> {
-    return this.send('reminder', input.to, renderReminder(this.requestData(input)), [], db);
+  async sendReminder(input: SigningEmailInput, db: Db = this.prisma): Promise<SendResult> {
+    const rendered = renderReminder(await this.requestData(input, db));
+    return this.send('reminder', input.to, rendered, [], db);
   }
 
-  sendSignedCopy(input: SignedCopyEmailInput, db: Db = this.prisma): Promise<SendResult> {
+  async sendSignedCopy(input: SignedCopyEmailInput, db: Db = this.prisma): Promise<SendResult> {
     const rendered = renderSignedCopy({
       employeeName: input.employeeName,
       documentName: input.documentName,
-      hrContact: this.config.email.hrContact,
+      hrContact: await this.hrContact(db),
     });
     const attachment: EmailAttachment = {
       fileName: attachmentName(input.fileName),
@@ -93,14 +94,20 @@ export class EmailService {
     return this.send('signed_copy', input.to, rendered, [attachment], db);
   }
 
-  private requestData(input: SigningEmailInput) {
+  private async requestData(input: SigningEmailInput, db: Db) {
     return {
       employeeName: input.employeeName,
       documentName: input.documentName,
       link: signingLink(this.config.email.publicUrl, input.token),
       expiresAt: input.expiresAt,
-      hrContact: this.config.email.hrContact,
+      hrContact: await this.hrContact(db),
     };
+  }
+
+  /** The footer's contact: the `hr_contact` setting, so the emails match the signing pages. */
+  private async hrContact(db: Db): Promise<HrContact> {
+    const { name, phone, email } = await this.settings.getHrContact(db);
+    return { name, phone: phone ?? undefined, email: email ?? undefined };
   }
 
   private async send(

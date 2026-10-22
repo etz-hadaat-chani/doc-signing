@@ -72,13 +72,28 @@ async function seedRows(now: Date): Promise<{ freshSession: string; freshAttempt
   const fresh = await prisma.loginAttempt.create({
     data: { email: 'c@x.local', createdAt: ago(HOUR) },
   });
+  // Per-IP signing counters (3.13): kept 1 day, like login attempts.
+  for (const [hoursAgo, ip] of [
+    [48, '10.0.0.1'],
+    [25, '10.0.0.2'],
+    [1, '10.0.0.3'],
+  ] as const) {
+    await prisma.signingRateHit.create({
+      data: { scope: 'all', ip, windowStart: ago(hoursAgo * HOUR), hits: 3 },
+    });
+  }
   return { freshSession, freshAttempt: fresh.id };
 }
 
 async function remaining() {
   const sessions = await prisma.session.findMany({ select: { id: true } });
   const attempts = await prisma.loginAttempt.findMany({ select: { id: true } });
-  return { sessions: sessions.map(({ id }) => id), attempts: attempts.map(({ id }) => id) };
+  const rateHits = await prisma.signingRateHit.findMany({ select: { ip: true } });
+  return {
+    sessions: sessions.map(({ id }) => id),
+    attempts: attempts.map(({ id }) => id),
+    rateHits: rateHits.map(({ ip }) => ip),
+  };
 }
 
 describe('daily cleanup job', () => {
@@ -92,7 +107,11 @@ describe('daily cleanup job', () => {
       (await api.findJob(CLEANUP_QUEUE, id))?.state === 'completed' ? true : undefined,
     );
 
-    expect(await remaining()).toEqual({ sessions: [freshSession], attempts: [freshAttempt] });
+    expect(await remaining()).toEqual({
+      sessions: [freshSession],
+      attempts: [freshAttempt],
+      rateHits: ['10.0.0.3'],
+    });
   });
 
   it('is safe to run twice', async () => {
@@ -100,8 +119,18 @@ describe('daily cleanup job', () => {
     await seedRows(now);
     const cleanup = new AuthCleanupService(prisma);
 
-    expect(await cleanup.deleteExpired(now)).toEqual({ sessions: 2, loginAttempts: 2 });
-    expect(await cleanup.deleteExpired(now)).toEqual({ sessions: 0, loginAttempts: 0 });
+    expect(await cleanup.deleteExpired(now)).toEqual({
+      sessions: 2,
+      loginAttempts: 2,
+      signingSessions: 0,
+      signingRateHits: 2,
+    });
+    expect(await cleanup.deleteExpired(now)).toEqual({
+      sessions: 0,
+      loginAttempts: 0,
+      signingSessions: 0,
+      signingRateHits: 0,
+    });
   });
 
   it('is scheduled daily at 03:00 Israel time when the worker starts', async () => {

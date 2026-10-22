@@ -122,14 +122,23 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ...(mapped.details && { details: mapped.details }),
       },
     };
+    const retryAfter = mapped.details?.retryAfter;
+    if (mapped.status === 429 && typeof retryAfter === 'number') {
+      response.setHeader('Retry-After', String(retryAfter));
+    }
     response.status(mapped.status).json(body);
   }
 
   private logServerError(referenceId: string, request: Request, exception: unknown): void {
     // Only name, message and stack: the raw object (pg `detail`, Prisma `meta`) can hold values.
-    // The path without its query string: `?q=` can hold a name or an ID number typed without
-    // its leading zero, which redactForLog would not catch.
-    const path = request.originalUrl.split('?')[0] ?? '';
+    // The route's pattern when it matched (`/api/sign/:token/submit`): never the link token or
+    // an id. Else the path without its query string: `?q=` can hold a name or an ID number typed
+    // without its leading zero, which redactForLog would not catch. redactForLog stays as a net.
+    const pattern = (request.route as { path?: unknown } | undefined)?.path;
+    const path =
+      typeof pattern === 'string'
+        ? `${request.baseUrl}${pattern}`
+        : (request.originalUrl.split('?')[0] ?? '');
     const description =
       exception instanceof Error
         ? (exception.stack ?? `${exception.name}: ${exception.message}`)

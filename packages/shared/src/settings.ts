@@ -25,13 +25,41 @@ export const senderNameSchema = z
   .max(SENDER_NAME_MAX_LENGTH)
   .regex(/^[^\r\n]*$/);
 
-/** `PATCH /api/settings`: any of the four values, at least one; unknown fields are refused. */
+/** HR contact name: one line, at most 100 characters. */
+export const HR_CONTACT_NAME_MAX_LENGTH = 100;
+/** A phone as people write it: digits, spaces, `+`, `-`, brackets; 6 to 20 characters. */
+export const HR_CONTACT_PHONE_PATTERN = /^[0-9+\-\s()]{6,20}$/;
+
+/**
+ * `hr_contact`: who employees call or write to, on the signing pages (FR-SGN-7, B5) and in every
+ * email's footer. The organisation's details, not an employee's. Phone, email or both; `null` =
+ * not shown.
+ */
+export const hrContactSchema = z
+  .strictObject({
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(HR_CONTACT_NAME_MAX_LENGTH)
+      .regex(/^[^\r\n]*$/),
+    phone: z.string().trim().regex(HR_CONTACT_PHONE_PATTERN).nullable(),
+    email: z.string().trim().toLowerCase().max(254).pipe(z.email()).nullable(),
+  })
+  .refine(({ phone, email }) => phone !== null || email !== null, {
+    message: 'HR_CONTACT_PHONE_OR_EMAIL',
+    path: ['phone'],
+  });
+export type HrContactSetting = z.infer<typeof hrContactSchema>;
+
+/** `PATCH /api/settings`: any of the values, at least one; unknown fields are refused. */
 export const settingsUpdateSchema = z
   .strictObject({
     reminderIntervalDays: reminderIntervalDaysSchema.optional(),
     maxReminders: maxRemindersSchema.optional(),
     linkExpiryDays: linkExpiryDaysSchema.optional(),
     senderName: senderNameSchema.optional(),
+    hrContact: hrContactSchema.optional(),
   })
   .refine((value) => Object.values(value).some((item) => item !== undefined));
 export type SettingsUpdateInput = z.infer<typeof settingsUpdateSchema>;
@@ -60,6 +88,11 @@ export const settingsItemSchema = z.object({
   maxReminders: z.int().nullable(),
   linkExpiryDays: z.int(),
   senderName: z.string(),
+  hrContact: z.object({
+    name: z.string(),
+    phone: z.string().nullable(),
+    email: z.string().nullable(),
+  }),
   /** null until the manager uploads the image. */
   employerSignature: employerSignatureSummarySchema.nullable(),
 });

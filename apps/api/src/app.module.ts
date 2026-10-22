@@ -13,6 +13,7 @@ import { EmployeesModule } from './modules/employees/employees.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { RoundsModule } from './modules/rounds/rounds.module.js';
 import { SettingsApiModule } from './modules/settings/settings.module.js';
+import { SigningModule } from './modules/signing/signing.module.js';
 import { TemplatesModule } from './modules/templates/templates.module.js';
 import { TrackingModule } from './modules/tracking/tracking.module.js';
 import { UsersModule } from './modules/users/users.module.js';
@@ -34,6 +35,7 @@ import { UsersModule } from './modules/users/users.module.js';
     RoundsModule,
     TrackingModule,
     SettingsApiModule,
+    SigningModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })

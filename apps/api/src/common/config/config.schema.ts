@@ -1,3 +1,4 @@
+import { SIGN_RATE_LIMITS, SIGN_RATE_SCOPES, type SignRateScope } from '@doc-signing/shared';
 import { z } from 'zod';
 
 /** An empty variable (`PORT=`) counts as missing. */
@@ -52,6 +53,10 @@ const envSchema = z
     HR_CONTACT_EMAIL: optional(z.email().optional()),
     // Emails a second, at most, per worker process (the provider's limit; AWS SES starts at 14).
     EMAIL_SEND_RATE_PER_SECOND: optional(z.coerce.number().int().min(1).max(100).default(10)),
+    // Proxies in front of the API (load balancer = 1), so req.ip is the employee's IP (signer_ip,
+    // the per-IP limits). Never "trust all": X-Forwarded-For could then be forged. Required in
+    // production, where a wrong count would make every employee share the balancer's IP.
+    TRUST_PROXY_HOPS: optional(z.coerce.number().int().min(0).max(5).optional()),
   })
   .superRefine((env, ctx) => {
     if ((env.S3_ACCESS_KEY === undefined) !== (env.S3_SECRET_KEY === undefined)) {
@@ -64,6 +69,9 @@ const envSchema = z
     }
     if (env.NODE_ENV === 'production' && !env.APP_PUBLIC_URL.startsWith('https://')) {
       ctx.addIssue({ code: 'custom', path: ['APP_PUBLIC_URL'], message: 'https in production' });
+    }
+    if (env.NODE_ENV === 'production' && env.TRUST_PROXY_HOPS === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['TRUST_PROXY_HOPS'], message: 'Required' });
     }
     if (env.HR_CONTACT_PHONE === undefined && env.HR_CONTACT_EMAIL === undefined) {
       ctx.addIssue({ code: 'custom', path: ['HR_CONTACT_PHONE'], message: 'Phone or email' });
@@ -100,6 +108,25 @@ export interface EmailConfig {
   readonly sendRatePerSecond: number;
 }
 
+/** The env variable of one per-IP signing limit, e.g. `SIGN_RATE_LIMIT_VERIFY_WRONG`. */
+export function signRateLimitEnvName(scope: SignRateScope): string {
+  return `SIGN_RATE_LIMIT_${scope.toUpperCase()}`;
+}
+
+/** One variable per scope (3.13): at least the scope's minimum, at most 100,000. */
+const signRateEnvSchema = z.object(
+  Object.fromEntries(
+    SIGN_RATE_SCOPES.map((scope) => {
+      const { min, default: fallback } = SIGN_RATE_LIMITS[scope];
+      const rule = z.coerce.number().int().min(min).max(100_000).default(fallback);
+      return [signRateLimitEnvName(scope), optional(rule)];
+    }),
+  ),
+);
+
+/** Requests per IP per 15-minute window, per signing scope (3.13). */
+export type SignRateLimitConfig = Readonly<Record<SignRateScope, number>>;
+
 /** Validated settings. Injected by class: `constructor(private readonly config: AppConfig)`. */
 export class AppConfig {
   readonly nodeEnv!: 'development' | 'test' | 'production';
@@ -107,6 +134,9 @@ export class AppConfig {
   readonly databaseUrl!: string;
   readonly storage!: StorageConfig;
   readonly email!: EmailConfig;
+  /** Express "trust proxy" hop count (0 = the socket's address). */
+  readonly trustProxyHops!: number;
+  readonly signRateLimits!: SignRateLimitConfig;
 }
 
 /**
@@ -115,10 +145,12 @@ export class AppConfig {
  */
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const result = envSchema.safeParse(env);
-  if (!result.success) {
+  const rates = signRateEnvSchema.safeParse(env);
+  if (!result.success || !rates.success) {
+    const issues = [...(result.error?.issues ?? []), ...(rates.error?.issues ?? [])];
     const problems = [
       ...new Set(
-        result.error.issues.map(({ path }) => {
+        issues.map(({ path }) => {
           const name = String(path[0]);
           const value = env[name];
           return `${name} (${value === undefined || value === '' ? 'missing' : 'invalid'})`;
@@ -161,5 +193,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       }),
       sendRatePerSecond: data.EMAIL_SEND_RATE_PER_SECOND,
     }),
+    trustProxyHops: data.TRUST_PROXY_HOPS ?? 0,
+    signRateLimits: Object.freeze(
+      Object.fromEntries(
+        SIGN_RATE_SCOPES.map((scope) => [scope, rates.data[signRateLimitEnvName(scope)]]),
+      ) as Record<SignRateScope, number>,
+    ),
   });
 }

@@ -440,16 +440,16 @@ describe('email_messages', () => {
     ).resolves.toMatchObject({ tokenHash: null });
   });
 
-  it('accepts two signed copies without tokens, with default status queued', async () => {
+  it('accepts a signed copy without a token, status queued; only one per assignment (3.13)', async () => {
     const base = await createBase();
     const assignment = await createAssignment(base);
     const signedCopy = { type: 'signed_copy', tokenHash: null } as const;
-    await createEmail(assignment.id, signedCopy);
-
     await expect(createEmail(assignment.id, signedCopy)).resolves.toMatchObject({
       tokenHash: null,
       status: 'queued',
     });
+
+    await expect(createEmail(assignment.id, signedCopy)).rejects.toThrow();
   });
 });
 

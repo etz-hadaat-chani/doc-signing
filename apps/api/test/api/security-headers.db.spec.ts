@@ -68,6 +68,29 @@ describe('security headers on every answer', () => {
     expectSecurityHeaders(noRoute);
   });
 
+  it('signing routes (3.13): no referrer and no framing, on errors too; not on other routes', async () => {
+    const token = 'A'.repeat(43);
+    const answers = [
+      await server().get(`/api/sign/${token}`),
+      await server().post(`/api/sign/${token}/verify`).send({ idNumber: '012345674' }),
+      await server().get(`/api/sign/${token}/document`),
+      await server().get('/api/sign/no/such/route'),
+      await server()
+        .post(`/api/sign/${token}/submit`)
+        .set('Content-Type', 'application/json')
+        .send('{"broken'),
+    ];
+    expect(answers.map(({ status }) => status)).toEqual([404, 404, 404, 404, 400]);
+    for (const response of answers) {
+      expectSecurityHeaders(response);
+      expect(response.headers['referrer-policy']).toBe('no-referrer');
+      expect(response.headers['x-frame-options']).toBe('DENY');
+      expect(response.headers['content-security-policy']).toBe("frame-ancestors 'none'");
+    }
+    const other = await server().get('/api/rounds').set('Cookie', managerCookie);
+    expect(other.headers['x-frame-options']).toBeUndefined();
+  });
+
   it('the PDF preview', async () => {
     const created = await server()
       .post('/api/templates')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { senderNameSchema, settingsUpdateSchema } from './settings.js';
+import { hrContactSchema, senderNameSchema, settingsUpdateSchema } from './settings.js';
 
 describe('settingsUpdateSchema', () => {
   it('accepts each value at its limits', () => {
@@ -46,5 +46,35 @@ describe('settingsUpdateSchema', () => {
 describe('senderNameSchema', () => {
   it('allows 100 characters', () => {
     expect(senderNameSchema.safeParse('א'.repeat(100)).success).toBe(true);
+  });
+});
+
+describe('hrContactSchema', () => {
+  it('trims, lowercases the email and accepts phone, email or both', () => {
+    expect(
+      hrContactSchema.parse({ name: ' משאבי אנוש ', phone: '02-6543210', email: null }),
+    ).toEqual({
+      name: 'משאבי אנוש',
+      phone: '02-6543210',
+      email: null,
+    });
+    expect(hrContactSchema.parse({ name: 'א', phone: null, email: ' HR@X.org ' }).email).toBe(
+      'hr@x.org',
+    );
+  });
+
+  it('refuses neither phone nor email, with its own code', () => {
+    const result = hrContactSchema.safeParse({ name: 'א', phone: null, email: null });
+    expect(result.error?.issues[0]?.message).toBe('HR_CONTACT_PHONE_OR_EMAIL');
+  });
+
+  it.each([
+    { name: '', phone: '02-6543210', email: null },
+    { name: 'א\nב', phone: '02-6543210', email: null },
+    { name: 'א', phone: 'call me', email: null },
+    { name: 'א', phone: null, email: 'not-an-email' },
+    { name: 'א', phone: '02-6543210' },
+  ])('refuses %j', (value) => {
+    expect(hrContactSchema.safeParse(value).success).toBe(false);
   });
 });

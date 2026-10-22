@@ -1,4 +1,6 @@
 import {
+  type HrContactSetting,
+  hrContactSchema,
   linkExpiryDaysSchema,
   maxRemindersSchema,
   reminderIntervalDaysSchema,
@@ -6,12 +8,15 @@ import {
 } from '@doc-signing/shared';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
+import { AppConfig } from '../config/config.schema.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { Db } from '../prisma/prisma.types.js';
 import { SETTING_DEFAULTS, type SettingKey } from './settings.defaults.js';
 
 /** The `settings` key of the employer signature and stamp image (FR-ADM-2). */
 export const EMPLOYER_SIGNATURE_KEY = 'employer_signature';
+/** The `settings` key of the HR contact (3.13): signing pages and email footers. */
+export const HR_CONTACT_KEY = 'hr_contact';
 
 /** The four default values, by their API names. */
 export interface SettingValues {
@@ -45,7 +50,10 @@ export type EmployerSignatureValue = z.infer<typeof employerSignatureValueSchema
  */
 @Injectable()
 export class SettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: AppConfig,
+  ) {}
 
   /** The four default values. */
   async getAll(db: Db = this.prisma): Promise<SettingValues> {
@@ -84,6 +92,18 @@ export class SettingsService {
     const row = await db.setting.findUnique({ where: { key: 'sender_name' } });
     const parsed = senderNameSchema.safeParse(row?.value);
     return parsed.success ? parsed.data : SETTING_DEFAULTS.sender_name;
+  }
+
+  /**
+   * Who employees contact (FR-SGN-7, email footers). A missing or bad row gives the built-in
+   * default: the `HR_CONTACT_*` environment values, so a new install always has one.
+   */
+  async getHrContact(db: Db = this.prisma): Promise<HrContactSetting> {
+    const row = await db.setting.findUnique({ where: { key: HR_CONTACT_KEY } });
+    const parsed = hrContactSchema.safeParse(row?.value);
+    if (parsed.success) return parsed.data;
+    const { name, phone, email } = this.config.email.hrContact;
+    return { name, phone: phone ?? null, email: email ?? null };
   }
 
   /**

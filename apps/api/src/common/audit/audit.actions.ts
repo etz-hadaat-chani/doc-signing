@@ -1,6 +1,7 @@
 import type {
   AlreadySignedChoice,
   AssignmentStatus,
+  EmailChoice,
   EmailStatus,
   RecipientsPreviewReport,
   RemindSkipReason,
@@ -8,6 +9,8 @@ import type {
   RoundSent,
   RoundSettings,
   RoundStatus,
+  SignLinkState,
+  SignRateScope,
   UserRole,
 } from '@doc-signing/shared';
 
@@ -54,6 +57,16 @@ export const AUDIT_ACTIONS = [
   'assignment.resend_queued',
   'assignment.unlocked',
   'assignment.cancelled',
+  'assignment.signed',
+  'assignment.signed_copy_sent',
+  'assignment.signed_copy_failed',
+  'sign.verified',
+  'sign.verify_failed',
+  'sign.locked',
+  'sign.verify_refused',
+  'sign.document_viewed',
+  'sign.form_viewed',
+  'sign.rate_limited',
   'settings.updated',
   'settings.employer_signature_uploaded',
   'settings.employer_signature_viewed',
@@ -297,6 +310,60 @@ export interface AuditDetailsMap {
   };
   /** One employee's assignment was cancelled; every link of it now shows "cancelled". */
   'assignment.cancelled': { roundId: string; fromStatus: AssignmentStatus };
+  // Employee signing (3.13): the employee is the actor (her IP in `ip`), the assignment the
+  // entity, `emailMessageId` the link used. Never the typed ID number, the link token, an
+  // address, an answer or a saved value (NFR-PRV-7).
+  /** A correct ID number: a 15-minute signing session started. */
+  'sign.verified': { roundId: string; emailMessageId: string; fromStatus: AssignmentStatus };
+  /** A wrong ID number; `failedAttempts` counts it. */
+  'sign.verify_failed': { roundId: string; emailMessageId: string; failedAttempts: number };
+  /** The 5th wrong ID number locked the assignment (FR-SGN-2). */
+  'sign.locked': { roundId: string; emailMessageId: string; failedAttempts: number };
+  /** An ID number sent to a link that is signed, cancelled, expired or locked; not compared. */
+  'sign.verify_refused': { roundId: string; emailMessageId: string; state: SignLinkState };
+  /** The personalized document was viewed (B2). */
+  'sign.document_viewed': { roundId: string; emailMessageId: string };
+  /** The form was read (B3); `correction`: a correction round, so the note was shown. */
+  'sign.form_viewed': { roundId: string; emailMessageId: string; correction: boolean };
+  /**
+   * One IP first went over a per-IP limit in a 15-minute window (entity id NULL; the IP is in
+   * `ip`). Logged once per IP, scope and window, to tune the limits.
+   */
+  'sign.rate_limited': { scope: SignRateScope; limit: number };
+  /**
+   * Signed (NFR-SIG-2, NFR-SIG-4): the stored file's SHA-256 and size, the email choice and the
+   * keys answered, never the values or the address. `fileReused`: a retry found the file
+   * already stored. `strayFileKeys`: files of earlier attempts that are not the final ones.
+   */
+  'assignment.signed': {
+    roundId: string;
+    emailMessageId: string;
+    signMethod: 'digital';
+    fileSha256: string;
+    fileSize: number;
+    fileReused: boolean;
+    reference: string;
+    emailChoice: EmailChoice | null;
+    answeredKeys: string[];
+    drawingKeys: string[];
+    needsApproval: boolean;
+    strayFileKeys: string[];
+    userAgent: string | null;
+  };
+  /** The signed copy went out (system actor); the same details as an invitation's. */
+  'assignment.signed_copy_sent': {
+    roundId: string;
+    emailMessageId: string;
+    unconfirmed: boolean;
+    providerCode: string | null;
+  };
+  /** The signed copy failed for good (system actor). The assignment stays signed. */
+  'assignment.signed_copy_failed': {
+    roundId: string;
+    emailMessageId: string;
+    reason: 'permanent' | 'temporary_last_attempt' | 'unexpected_last_attempt';
+    providerCode: string | null;
+  };
   // Settings (3.18): the manager is the actor; the entity is `settings` with no id (text keys).
   /** One line per changed value, "field: old → new" (`null` = no limit). */
   'settings.updated': { changes: string[] };

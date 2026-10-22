@@ -1,5 +1,6 @@
+import { SIGN_RATE_LIMITS, SIGN_RATE_SCOPES } from '@doc-signing/shared';
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from './config.schema.js';
+import { loadConfig, signRateLimitEnvName } from './config.schema.js';
 
 const secretUrl = 'postgresql://docsign:s3cret-pass@localhost:5432/docsign';
 const email = {
@@ -30,6 +31,10 @@ describe('loadConfig', () => {
         hrContact: { name: 'מחלקת משאבי אנוש', phone: '02-1234567', email: undefined },
         sendRatePerSecond: 10,
       },
+      trustProxyHops: 0,
+      signRateLimits: Object.fromEntries(
+        SIGN_RATE_SCOPES.map((scope) => [scope, SIGN_RATE_LIMITS[scope].default]),
+      ),
     });
     expect(loadConfig({ ...base, PORT: '8080', NODE_ENV: 'test' })).toMatchObject({
       nodeEnv: 'test',
@@ -159,10 +164,45 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...base, NODE_ENV: 'production' })).toThrow(
       'APP_PUBLIC_URL (invalid)',
     );
-    expect(
-      loadConfig({ ...base, NODE_ENV: 'production', APP_PUBLIC_URL: 'https://sign.example.org' })
-        .email.publicUrl,
-    ).toBe('https://sign.example.org');
+    const production = {
+      ...base,
+      NODE_ENV: 'production',
+      APP_PUBLIC_URL: 'https://sign.example.org',
+      TRUST_PROXY_HOPS: '1',
+    };
+    expect(loadConfig(production).email.publicUrl).toBe('https://sign.example.org');
+  });
+
+  it('reads the proxy hop count (3.13); production must set it, and never "trust all"', () => {
+    expect(loadConfig(base).trustProxyHops).toBe(0);
+    expect(loadConfig({ ...base, TRUST_PROXY_HOPS: '2' }).trustProxyHops).toBe(2);
+    const production = { ...base, NODE_ENV: 'production', APP_PUBLIC_URL: 'https://x.org' };
+    expect(() => loadConfig(production)).toThrow('TRUST_PROXY_HOPS (missing)');
+    expect(loadConfig({ ...production, TRUST_PROXY_HOPS: '0' }).trustProxyHops).toBe(0);
+    for (const value of ['true', '-1', '6', '1.5']) {
+      expect(() => loadConfig({ ...base, TRUST_PROXY_HOPS: value })).toThrow(
+        'TRUST_PROXY_HOPS (invalid)',
+      );
+    }
+  });
+
+  it('reads the per-IP signing limits: defaults, raised, never below the minimum', () => {
+    const limits = loadConfig(base).signRateLimits;
+    for (const scope of SIGN_RATE_SCOPES) {
+      expect(limits[scope]).toBe(SIGN_RATE_LIMITS[scope].default);
+    }
+    const raised = loadConfig({ ...base, SIGN_RATE_LIMIT_VERIFY_WRONG: '1000' });
+    expect(raised.signRateLimits.verify_wrong).toBe(1000);
+    expect(signRateLimitEnvName('verify_wrong')).toBe('SIGN_RATE_LIMIT_VERIFY_WRONG');
+    for (const value of ['29', '100001', 'many']) {
+      expect(() => loadConfig({ ...base, SIGN_RATE_LIMIT_VERIFY_WRONG: value })).toThrow(
+        'SIGN_RATE_LIMIT_VERIFY_WRONG (invalid)',
+      );
+    }
+    expect(loadConfig({ ...base, SIGN_RATE_LIMIT_VERIFY_WRONG: '30' }).signRateLimits).toEqual({
+      ...limits,
+      verify_wrong: 30,
+    });
   });
 
   it('refuses a public URL with a query, hash or user info', () => {

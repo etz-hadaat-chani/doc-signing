@@ -204,9 +204,9 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | FR-SGN-3 | The employee sees their personalized PDF (the saved values filled in, FR-RND-8; the employer signature if the template has it "already on the document") and must scroll to the end before signing. |
 | FR-SGN-4 | Before the signature pad, the employee fills in a short form: the boxes she fills in (FR-TPL-9, FR-TPL-10) and the email section (FR-SGN-9), in the template's order, each with a clear Hebrew label. Boxes with a condition appear and disappear as she answers. Each mistake shows a Hebrew error next to its box (required box empty, text too long, date out of range); she can't submit with a required box empty. A drawing box has its own small pad with Clear. Then she draws a signature with the mouse (touch also works), can clear and redraw, and confirms a reading statement. The form and the pad are on one screen (B3), so the flow stays within 4 screens (NFR-USE-3). If the document was returned for correction (FR-TRK-6), a short box at the top of this screen shows "תיקון נדרש: <the manager's note>", only after the ID check. |
 | FR-SGN-5 | On confirm, the system checks every answer again with the same rules (FR-TPL-10), then places the signature (FR-SGN-10), the date, the employee's answers (FR-TPL-9, FR-SGN-9) and, if set, the employer signature ("added after the employee signs") in the PDF, locks the file against edits, and adds a small line with the signing date, time and reference number. |
-| FR-SGN-6 | The signed PDF is saved under round / department (at send time, `assignments.department_id`) / employee, and a copy is emailed to the employee at the address the link was sent to (never to an address the employee typed in the email section). |
+| FR-SGN-6 | The signed PDF is saved under round / department (at send time, `assignments.department_id`) / employee, and a copy is emailed to the employee at the address the link was sent to (never to an address the employee typed in the email section, and also when she chose "no email, at the office": the link proves she reads that mailbox). |
 | FR-SGN-7 | After signing, the link only shows "Already signed". Expired, cancelled and locked links show a clear Hebrew message with HR contact details. |
-| FR-SGN-8 | The signing session ends after 15 minutes or when the browser closes. |
+| FR-SGN-8 | The signing session ends 15 minutes after the correct ID number (fixed, not extended by use) or when the browser closes. It opens only the link it was started on. If it ends while she is still filling in the form, the screen keeps her answers and signature, asks for the ID number again and sends them; nothing is saved before. |
 | FR-SGN-9 | **Email section** (the same in every contract). The employee must choose exactly one: (a) **an email**: the box is pre-filled with the email the system has; she can keep or correct it; or (b) tick **"I have no email and want my payslip and notices at the institution's office in my city"**. She can't sign without choosing one. Checks: valid email format, at most 254 characters, exactly one option. The answer is saved with the assignment (`assignment_responses`), drawn into the signed PDF, shown to managers and officers, and included in the Excel export. A corrected email **never** overwrites the employee's stored email; it shows in manual handling (FR-MAN-1) so it can be fixed in Har Gal. |
 | FR-SGN-10 | **One drawn signature, several positions.** The employee draws once; the system places that drawing at every employee-signature position of the template. Each position is shown **always** (the main signature, the employee declaration) or only under a condition (FR-TPL-10), for example **"only if (b) no email was chosen"** (the signature line under that option). Drawing boxes (FR-TPL-9) are separate drawings, not this signature. |
 
@@ -245,7 +245,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | ID | Requirement |
 | --- | --- |
 | FR-ADM-1 | A manager can add, disable and change the role of staff users. |
-| FR-ADM-2 | A manager can change the default settings: reminder interval, maximum reminders, link expiry, sender name. A manager uploads the **employer signature and stamp image** (עץ הדעת) once: PNG only, content checked, size limit, private storage. Replacing it stores a new file (never an overwrite); assignments already sent keep the image saved with them (FR-RND-8). Uploads and views are logged; officers can't see it. |
+| FR-ADM-2 | A manager can change the default settings: reminder interval, maximum reminders, link expiry, sender name, and the HR contact (name, phone, email; phone or email at least) shown on the signing pages and in every email footer (built-in default: the deployment's values). A manager uploads the **employer signature and stamp image** (עץ הדעת) once: PNG only, content checked, size limit, private storage. Replacing it stores a new file (never an overwrite); assignments already sent keep the image saved with them (FR-RND-8). Uploads and views are logged; officers can't see it. |
 | FR-ADM-3 | Every important action is written to an activity log that can't be edited. |
 
 ## 7. Screens
@@ -498,11 +498,14 @@ All management endpoints need a staff session; the role column says who may call
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/sign/:token` | Link state only: valid, expired, signed, locked, cancelled. No personal details. |
-| POST | `/api/sign/:token/verify` | Body `{ idNumber }`. Correct: opens a 15-minute signing session and sets "Opened". Wrong: counts the attempt; locks at 5. |
+| GET | `/api/sign/:token` | Link state only: `{ state: valid \| signed \| cancelled \| expired \| locked, hrContact }`. No personal details. Unknown or malformed token → 404. |
+| POST | `/api/sign/:token/verify` | Body `{ idNumber }`. Correct: opens a 15-minute signing session (cookie `sign_sid`) and sets "Opened". Wrong: counts the attempt (401 with the attempts left); locks at 5 (423). A typo in the format or check digit → 400, not counted. |
 | GET | `/api/sign/:token/document` | The personalized PDF; needs the signing session |
 | GET | `/api/sign/:token/form` | The form for B3: the boxes she fills in (key, type, label, required, condition, limits, order), the pre-filled email, and the correction note if this is a correction round. Needs the signing session; no box values from the employee card except the email |
+| POST | `/api/sign/:token/fit` | Body `{ answers: { [key]: string } }` → `{ tooLong: [key] }`: the typed texts that would not fit their place in the document (FR-TPL-9), measured like the signed PDF. Needs the signing session |
 | POST | `/api/sign/:token/submit` | Body `{ signatureImage, acknowledged: true, emailChoice: "email" \| "office", email?, answers: { [key]: string \| boolean }, drawings: { [key]: "<PNG, base64>" } }` (`email` required for `"email"`, FR-SGN-9; `answers` and `drawings` checked with the template's rules, FR-TPL-10). Saves the answers, builds and saves the signed PDF, emails the copy, closes all links of the assignment. |
+
+A link that isn't valid is refused on every route after the state: signed / cancelled / expired → 409 (`SIGN_ALREADY_SIGNED`, `SIGN_CANCELLED`, `SIGN_LINK_EXPIRED`), locked → 423 `SIGN_LOCKED`; no session, an expired one or another link's → 401 `SIGN_SESSION_EXPIRED`; over a per-IP limit → 429 `SIGN_TOO_MANY_REQUESTS` with `Retry-After`. These routes send `Referrer-Policy: no-referrer` and may not be shown in another site's frame.
 
 ### System
 
@@ -682,7 +685,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | sent\_at, first\_opened\_at, last\_reminder\_at, signed\_at | timestamptz NULL |  |
 | reminder\_count | smallint |  |
 | sign\_method | enum `digital` / `manual` / `kiosk` NULL |  |
-| signed\_file\_key | text NULL | `rounds/<round_id>/<department_code>/<employee_number>.pdf`; department = `department_id` above (at send time). Storage keys are ASCII only (ids and numbers); the Hebrew name appears only in the download file name and in the ZIP |
+| signed\_file\_key | text NULL | `rounds/<round_id>/<department_code>/<employee_number>.pdf`; department = `department_id` above (at send time). Files are never overwritten: if an earlier, unfinished signing attempt with different answers left a file there, the signature is stored as `<employee_number>-2.pdf` (then `-3` …) and the earlier file stays unused (logged). Only this key is the signed document. Storage keys are ASCII only (ids and numbers); the Hebrew name appears only in the download file name and in the ZIP |
 | signed\_file\_sha256 | char(64) NULL | Proves the file hasn't changed |
 | signer\_ip | inet NULL |  |
 | signer\_user\_agent | text NULL |  |
@@ -740,7 +743,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| key | varchar(100) PK | e.g. `reminder_interval_days`, `max_reminders` (null = no limit), `link_expiry_days`, `sender_name`, `employer_signature` (`{ fileKey, uploadedAt, width, height, sha256 }`, FR-ADM-2) |
+| key | varchar(100) PK | e.g. `reminder_interval_days`, `max_reminders` (null = no limit), `link_expiry_days`, `sender_name`, `hr_contact` (`{ name, phone, email }`, FR-ADM-2), `employer_signature` (`{ fileKey, uploadedAt, width, height, sha256 }`, FR-ADM-2) |
 | value | jsonb |  |
 | updated\_by | uuid FK → users NULL |  |
 
@@ -765,7 +768,30 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | ip | inet NULL |  |
 | created\_at | timestamptz |  |
 
-Rows of `sessions` and `login_attempts` are short-lived and deleted (logout, expiry, successful login, daily cleanup); nothing references them.
+**`signing_sessions`**: employee signing sessions (FR-SGN-8)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | uuid PK |  |
+| token\_hash | char(64) UNIQUE | SHA-256 of the `sign_sid` cookie token; the token itself is never stored |
+| assignment\_id | uuid FK → assignments |  |
+| email\_message\_id | uuid FK → email\_messages | The link the ID check was made on; the session opens only that link, and the signed copy goes to its `to_email` |
+| expires\_at | timestamptz | ID check + 15 minutes, fixed |
+| ip | inet NULL |  |
+| user\_agent | text NULL |  |
+| created\_at | timestamptz |  |
+
+**`signing_rate_hits`**: per-IP counters of the public signing routes (NFR-SEC-3)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| scope | varchar(20) | `all`, `state`, `verify`, `verify_wrong`, `document`, `form`, `fit`, `submit` |
+| ip | inet |  |
+| window\_start | timestamptz | Fixed 15-minute windows |
+| hits | int |  |
+|  | PK (scope, ip, window\_start) |  |
+
+Rows of `sessions`, `login_attempts`, `signing_sessions` and `signing_rate_hits` are short-lived and deleted (logout, expiry, successful login, signing, daily cleanup; rate counters after 1 day); nothing references them except `signing_sessions` → assignments / email messages. `email_messages` has at most one `signed_copy` row per assignment (a partial unique index).
 
 ### Relationships
 
@@ -806,8 +832,8 @@ The data includes ID numbers and signed employment documents, so security and pr
 
 - NFR-SEC-1: Link tokens are random, 256 bits. Only their SHA-256 hash is stored.
 - NFR-SEC-2: URLs and emails carry no ID numbers. The email shows only the employee's name, the document name, the link and its expiry date.
-- NFR-SEC-3: ID check uses a constant-time comparison, locks at 5 wrong attempts per assignment, has a rate limit per IP address, and logs every attempt.
-- NFR-SEC-4: The signing session is a short-lived cookie (15 minutes, `httpOnly`, `Secure`), cleared when the browser closes.
+- NFR-SEC-3: ID check uses a constant-time comparison, locks at 5 wrong attempts per assignment, has a rate limit per IP address, and logs every attempt. The 5-attempt lock per link is the real guard (link tokens can't be guessed). The per-IP limits cover every public signing route and only stop floods and link scans: the filters (NetFree, Etrog, Nativ, Rimon) send many employees through a few shared IP addresses, so the limits are high and set per environment. Per IP per 15 minutes, default (minimum): all signing routes 6,000 (600), link state 2,000 (200), ID checks 1,000 (100), wrong ID numbers 300 (30), document 1,000 (60), form 1,000 (100), text-fit check 4,000 (300), submit 300 (30). The defaults let about 200 employees sign from one IP in one window. The first request over a limit in a window is logged, to tune them.
+- NFR-SEC-4: The signing session is a short-lived cookie (15 minutes, `httpOnly`, `Secure`, `SameSite=Strict`, path `/api/sign`), cleared when the browser closes.
 - NFR-SEC-5: After signing, every link of the assignment shows only "Already signed".
 
 ### Security: proof of signing

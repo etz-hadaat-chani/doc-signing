@@ -226,15 +226,15 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  importBatches      ImportBatch[]
-  templates          Template[]
-  rounds             Round[]
-  handledAssignments  Assignment[] @relation("AssignmentHandledBy")
-  approvedAssignments Assignment[] @relation("AssignmentApprovedBy")
-  returnedAssignments Assignment[] @relation("AssignmentReturnedBy")
-  auditLogs          AuditLog[]
-  updatedSettings    Setting[]
-  sessions           Session[]
+  importBatches       ImportBatch[]
+  templates           Template[]
+  rounds              Round[]
+  handledAssignments  Assignment[]  @relation("AssignmentHandledBy")
+  approvedAssignments Assignment[]  @relation("AssignmentApprovedBy")
+  returnedAssignments Assignment[]  @relation("AssignmentReturnedBy")
+  auditLogs           AuditLog[]
+  updatedSettings     Setting[]
+  sessions            Session[]
 
   @@map("users")
 }
@@ -399,28 +399,28 @@ model TemplateField {
 // is kept as a number of days until the send (3.10), which sets link_expires_at = send + days;
 // a draft has link_expires_at NULL.
 model Round {
-  id                   String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                 String      @db.VarChar(150)
-  mode                 RoundMode
-  requiresSignature    Boolean     @default(true) @map("requires_signature") // False = delivery-only round (later)
-  status               RoundStatus @default(draft)
-  remindersEnabled     Boolean     @default(true) @map("reminders_enabled")
-  reminderIntervalDays Int         @default(3) @map("reminder_interval_days")
-  maxReminders         Int?        @map("max_reminders") // NULL = no limit
-  linkExpiryDays       Int         @map("link_expiry_days") @db.SmallInt // 1–365, counted from the send
-  linkExpiresAt        DateTime?   @map("link_expires_at") @db.Timestamptz(3) // Set at send
+  id                       String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                     String      @db.VarChar(150)
+  mode                     RoundMode
+  requiresSignature        Boolean     @default(true) @map("requires_signature") // False = delivery-only round (later)
+  status                   RoundStatus @default(draft)
+  remindersEnabled         Boolean     @default(true) @map("reminders_enabled")
+  reminderIntervalDays     Int         @default(3) @map("reminder_interval_days")
+  maxReminders             Int?        @map("max_reminders") // NULL = no limit
+  linkExpiryDays           Int         @map("link_expiry_days") @db.SmallInt // 1–365, counted from the send
+  linkExpiresAt            DateTime?   @map("link_expires_at") @db.Timestamptz(3) // Set at send
   // A correction round (FR-TRK-6): the returned assignment it replaces. One per assignment.
-  correctionOfAssignmentId String?  @unique @map("correction_of_assignment_id") @db.Uuid
-  createdById          String      @map("created_by") @db.Uuid
-  sentAt               DateTime?   @map("sent_at") @db.Timestamptz(3)
-  closedAt             DateTime?   @map("closed_at") @db.Timestamptz(3)
-  createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  correctionOfAssignmentId String?     @unique @map("correction_of_assignment_id") @db.Uuid
+  createdById              String      @map("created_by") @db.Uuid
+  sentAt                   DateTime?   @map("sent_at") @db.Timestamptz(3)
+  closedAt                 DateTime?   @map("closed_at") @db.Timestamptz(3)
+  createdAt                DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  createdBy          User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  correctionOf       Assignment?     @relation("CorrectionRound", fields: [correctionOfAssignmentId], references: [id], onDelete: Restrict)
-  templates          RoundTemplate[]
-  assignments        Assignment[]    @relation("RoundAssignments")
+  createdBy    User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  correctionOf Assignment?     @relation("CorrectionRound", fields: [correctionOfAssignmentId], references: [id], onDelete: Restrict)
+  templates    RoundTemplate[]
+  assignments  Assignment[]    @relation("RoundAssignments")
 
   @@map("rounds")
 }
@@ -477,16 +477,17 @@ model Assignment {
   createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  round      Round                @relation("RoundAssignments", fields: [roundId], references: [id], onDelete: Restrict)
-  employee   Employee             @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  department Department           @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  template   Template?            @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  handledBy  User?                @relation("AssignmentHandledBy", fields: [handledById], references: [id], onDelete: Restrict)
-  approvedBy User?                @relation("AssignmentApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  returnedBy User?                @relation("AssignmentReturnedBy", fields: [returnedById], references: [id], onDelete: Restrict)
-  emails     EmailMessage[]
-  responses  AssignmentResponse[]
-  correctionRound Round?          @relation("CorrectionRound")
+  round           Round                @relation("RoundAssignments", fields: [roundId], references: [id], onDelete: Restrict)
+  employee        Employee             @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  department      Department           @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  template        Template?            @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  handledBy       User?                @relation("AssignmentHandledBy", fields: [handledById], references: [id], onDelete: Restrict)
+  approvedBy      User?                @relation("AssignmentApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  returnedBy      User?                @relation("AssignmentReturnedBy", fields: [returnedById], references: [id], onDelete: Restrict)
+  emails          EmailMessage[]
+  responses       AssignmentResponse[]
+  correctionRound Round?               @relation("CorrectionRound")
+  signingSessions SigningSession[]
 
   @@unique([roundId, employeeId])
   @@index([roundId, status]) // Round counts
@@ -510,7 +511,8 @@ model EmailMessage {
   createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  assignment      Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  signingSessions SigningSession[]
 
   @@index([assignmentId])
   @@index([providerMessageId]) // Bounce lookup
@@ -529,7 +531,7 @@ model AssignmentResponse {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  assignment    Assignment    @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  assignment    Assignment     @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   templateField TemplateField? @relation(fields: [templateFieldId], references: [id], onDelete: Restrict)
 
   @@unique([assignmentId, key])
@@ -607,4 +609,38 @@ model LoginAttempt {
   @@index([email, createdAt])
   @@index([ip, createdAt])
   @@map("login_attempts")
+}
+
+// Employee signing sessions (3.13): one per correct ID check, 15 minutes fixed (FR-SGN-8). The
+// cookie token is stored only as SHA-256. Bound to the assignment AND the exact link (email row)
+// used, whose to_email gets the signed copy. Deleted at signing and by the daily cleanup.
+model SigningSession {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tokenHash      String   @unique @map("token_hash") @db.Char(64)
+  assignmentId   String   @map("assignment_id") @db.Uuid
+  emailMessageId String   @map("email_message_id") @db.Uuid
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz(3)
+  ip             String?  @db.Inet
+  userAgent      String?  @map("user_agent")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  assignment   Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  emailMessage EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Restrict)
+
+  @@index([assignmentId])
+  @@index([expiresAt]) // Cleanup
+  @@map("signing_sessions")
+}
+
+// Per-IP counters of the public signing routes (3.13): one row per scope, IP and 15-minute
+// window. Kept 1 day (to tune the limits), then deleted by the daily cleanup.
+model SigningRateHit {
+  scope       String   @db.VarChar(20)
+  ip          String   @db.Inet
+  windowStart DateTime @map("window_start") @db.Timestamptz(3)
+  hits        Int
+
+  @@id([scope, ip, windowStart])
+  @@index([windowStart]) // Cleanup
+  @@map("signing_rate_hits")
 }

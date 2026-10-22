@@ -22,7 +22,11 @@ export class CleanupJob implements OnApplicationBootstrap {
   }
 
   async run(now = new Date()): Promise<void> {
-    const { sessions, loginAttempts } = await this.cleanup.deleteExpired(now);
-    this.logger.log(`Cleanup: deleted ${sessions} sessions, ${loginAttempts} login attempts`);
+    const { sessions, loginAttempts, signingSessions, signingRateHits } =
+      await this.cleanup.deleteExpired(now);
+    this.logger.log(
+      `Cleanup: deleted ${sessions} sessions, ${loginAttempts} login attempts, ` +
+        `${signingSessions} signing sessions, ${signingRateHits} signing rate counters`,
+    );
   }
 }

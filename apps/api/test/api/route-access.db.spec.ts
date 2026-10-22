@@ -82,6 +82,23 @@ describe('every route declares who may call it', () => {
     expect(names).toContain('RoundsController.cancel (POST /rounds/:id/cancel)');
   });
 
+  it('public routes are only health, login and the employee signing routes (3.13)', () => {
+    const open = routes
+      .filter(({ method, controller }) => resolveAccess(method, controller).kind === 'public')
+      .map(({ name }) => name)
+      .sort();
+    expect(open).toEqual([
+      'AuthController.login (POST /auth/login)',
+      'HealthController.check (GET /health)',
+      'SigningController.document (GET /sign/:token/document)',
+      'SigningController.fit (POST /sign/:token/fit)',
+      'SigningController.form (GET /sign/:token/form)',
+      'SigningController.state (GET /sign/:token)',
+      'SigningController.submit (POST /sign/:token/submit)',
+      'SigningController.verify (POST /sign/:token/verify)',
+    ]);
+  });
+
   it('has @Public or @Roles on every route', () => {
     const bad = routes.flatMap((route) => {
       const reason = problem(route);

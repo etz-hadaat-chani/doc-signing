@@ -11,6 +11,11 @@ describe('redactForLog', () => {
     );
   });
 
+  it('keeps a route pattern readable: `:token` is a name, not a token', () => {
+    expect(redactForLog('GET /api/sign/:token/submit')).toBe('GET /api/sign/:token/submit');
+    expect(redactForLog(`GET /api/sign/${token}/submit`)).toBe('GET /api/sign/[redacted]/submit');
+  });
+
   it('hides bare tokens and token hashes', () => {
     const hash = 'a'.repeat(64);
     expect(redactForLog(`token ${token} hash ${hash}`)).toBe('token [redacted] hash [redacted]');

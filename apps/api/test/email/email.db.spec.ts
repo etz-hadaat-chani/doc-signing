@@ -27,7 +27,7 @@ describe('EmailService through SMTP (Mailpit)', () => {
   const config = loadConfig(process.env);
   const prisma = new PrismaService(config);
   const adapter = new SmtpEmailAdapter(config);
-  const service = new EmailService(adapter, config, new SettingsService(prisma), prisma);
+  const service = new EmailService(adapter, config, new SettingsService(prisma, config), prisma);
   let to: string;
 
   beforeAll(async () => {
