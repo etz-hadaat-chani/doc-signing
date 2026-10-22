@@ -23,13 +23,11 @@ import {
   Post,
   Query,
   Req,
-  Res,
   StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
 import { z } from 'zod';
 import { ApiFileUpload, ApiZodBody, ApiZodQuery } from '../../common/api-docs/api-docs.js';
 import {
@@ -124,12 +122,9 @@ export class TemplatesController {
     @Param('id', new ZodValidationPipe(z.uuid())) id: string,
     @Query(new ZodValidationPipe(templatePreviewQuerySchema)) query: TemplatePreviewQuery,
     @Req() request: AuthRequest,
-    @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
     const { pdf, fileName } = await this.previews.preview(id, query.employeeId, actorOf(request));
-    // The PDF holds personal data: never kept by the browser or a proxy.
-    response.setHeader('Cache-Control', 'no-store');
-    response.setHeader('X-Content-Type-Options', 'nosniff');
+    // The PDF holds personal data: `no-store` and `nosniff` come from configureApp (every answer).
     return new StreamableFile(pdf, {
       type: 'application/pdf',
       disposition: contentDisposition(fileName, 'inline'),
