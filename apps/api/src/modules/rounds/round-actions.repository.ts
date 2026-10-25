@@ -20,6 +20,13 @@ export interface ActionRow extends ActionTarget {
   roundId: string;
   lockedAt: Date | null;
   failedAttempts: number;
+  /** Reminders that went out (manual and daily), as the 3.11 table shows them. */
+  reminderCount: number;
+  /**
+   * When she was last emailed a link: the newest of the invitation's `sent_at`, the last
+   * reminder and the `sent_at` of every invitation or reminder that didn't fail. Null when none.
+   */
+  lastSentAt: Date | null;
 }
 
 /** Which assignments to lock: one, or a round's rows in some statuses. */
@@ -56,7 +63,8 @@ export class RoundActionsRepository {
   /**
    * Locks the assignments (FOR UPDATE, id order), then reads what the rules need: the
    * employee's valid email, whether an invitation or reminder is queued, when the last one that
-   * didn't fail was created, whether the newest one failed, and the address that failed last.
+   * didn't fail was created, whether the newest one failed, the address that failed last, the
+   * reminders counted and when she was last emailed (the daily job, 3.14).
    * Two queries; one lookup per row on `email_messages(assignment_id)`.
    */
   async lockRows(where: ActionRowsWhere, db: Db): Promise<ActionRow[]> {
@@ -74,7 +82,8 @@ export class RoundActionsRepository {
     return db.$queryRaw<ActionRow[]>`
       SELECT a.id, a.round_id AS "roundId", a.status::text AS status,
              a.locked_at IS NOT NULL AS locked, a.locked_at AS "lockedAt",
-             a.failed_attempts AS "failedAttempts",
+             a.failed_attempts AS "failedAttempts", a.reminder_count AS "reminderCount",
+             greatest(a.sent_at, a.last_reminder_at, m.last_sent_at) AS "lastSentAt",
              CASE WHEN e.email_status = 'valid' AND btrim(coalesce(e.email, '')) <> ''
                   THEN e.email END AS "validEmail",
              coalesce(m.queued, false) AS "emailQueued", m.last_email_at AS "lastEmailAt",
@@ -83,7 +92,8 @@ export class RoundActionsRepository {
       JOIN employees e ON e.id = a.employee_id
       LEFT JOIN LATERAL (
         SELECT bool_or(em.status = 'queued') AS queued,
-               max(em.created_at) FILTER (WHERE em.status <> 'failed') AS last_email_at
+               max(em.created_at) FILTER (WHERE em.status <> 'failed') AS last_email_at,
+               max(em.sent_at) FILTER (WHERE em.status <> 'failed') AS last_sent_at
         FROM email_messages em
         WHERE em.assignment_id = a.id AND em.type IN ('invite', 'reminder')
       ) m ON true

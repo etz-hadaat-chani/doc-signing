@@ -4,6 +4,7 @@ import {
   linkExpiryDaysSchema,
   maxRemindersSchema,
   reminderIntervalDaysSchema,
+  reminderSkipDatesSchema,
   senderNameSchema,
 } from '@doc-signing/shared';
 import { Injectable } from '@nestjs/common';
@@ -17,6 +18,8 @@ import { SETTING_DEFAULTS, type SettingKey } from './settings.defaults.js';
 export const EMPLOYER_SIGNATURE_KEY = 'employer_signature';
 /** The `settings` key of the HR contact (3.13): signing pages and email footers. */
 export const HR_CONTACT_KEY = 'hr_contact';
+/** The `settings` key of the no-reminder dates (3.14); none stored = no such date. */
+export const REMINDER_SKIP_DATES_KEY = 'reminder_skip_dates';
 
 /** The four default values, by their API names. */
 export interface SettingValues {
@@ -104,6 +107,16 @@ export class SettingsService {
     if (parsed.success) return parsed.data;
     const { name, phone, email } = this.config.email.hrContact;
     return { name, phone: phone ?? null, email: email ?? null };
+  }
+
+  /**
+   * Days in Israel (`YYYY-MM-DD`, sorted) on which the daily reminder job sends nothing (3.14). A
+   * missing or bad row gives the built-in default: no such day.
+   */
+  async getReminderSkipDates(db: Db = this.prisma): Promise<string[]> {
+    const row = await db.setting.findUnique({ where: { key: REMINDER_SKIP_DATES_KEY } });
+    const parsed = reminderSkipDatesSchema.safeParse(row?.value);
+    return parsed.success ? parsed.data : [];
   }
 
   /**

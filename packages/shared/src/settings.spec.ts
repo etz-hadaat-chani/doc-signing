@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { hrContactSchema, senderNameSchema, settingsUpdateSchema } from './settings.js';
+import {
+  hrContactSchema,
+  REMINDER_SKIP_DATES_MAX,
+  reminderSkipDatesSchema,
+  senderNameSchema,
+  settingsUpdateSchema,
+} from './settings.js';
 
 describe('settingsUpdateSchema', () => {
   it('accepts each value at its limits', () => {
@@ -76,5 +82,46 @@ describe('hrContactSchema', () => {
     { name: 'א', phone: '02-6543210' },
   ])('refuses %j', (value) => {
     expect(hrContactSchema.safeParse(value).success).toBe(false);
+  });
+});
+
+describe('reminderSkipDatesSchema', () => {
+  it('accepts real dates and returns them sorted', () => {
+    expect(reminderSkipDatesSchema.parse(['2026-10-14', '2026-09-23', '2028-02-29'])).toEqual([
+      '2026-09-23',
+      '2026-10-14',
+      '2028-02-29',
+    ]);
+    expect(reminderSkipDatesSchema.parse([])).toEqual([]);
+  });
+
+  it('accepts at most the limit', () => {
+    const start = Date.UTC(2027, 0, 1);
+    const days = (count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        new Date(start + i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      );
+    expect(reminderSkipDatesSchema.safeParse(days(REMINDER_SKIP_DATES_MAX)).success).toBe(true);
+    expect(reminderSkipDatesSchema.safeParse(days(REMINDER_SKIP_DATES_MAX + 1)).success).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    ['a day that does not exist', ['2026-02-30']],
+    ['not a leap year', ['2027-02-29']],
+    ['month 13', ['2026-13-01']],
+    ['another format', ['14/10/2026']],
+    ['a time', ['2026-10-14T00:00:00Z']],
+    ['a duplicate', ['2026-10-14', '2026-10-14']],
+    ['not a list', '2026-10-14'],
+  ])('refuses %s', (_, value) => {
+    expect(reminderSkipDatesSchema.safeParse(value).success).toBe(false);
+  });
+
+  it('is part of the settings update', () => {
+    expect(settingsUpdateSchema.parse({ reminderSkipDates: ['2026-10-14'] })).toEqual({
+      reminderSkipDates: ['2026-10-14'],
+    });
   });
 });

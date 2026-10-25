@@ -18,6 +18,7 @@ import {
   EMPLOYER_SIGNATURE_KEY,
   type EmployerSignatureValue,
   HR_CONTACT_KEY,
+  REMINDER_SKIP_DATES_KEY,
   type SettingValues,
   SettingsService,
 } from '../../common/settings/settings.service.js';
@@ -69,6 +70,9 @@ function hrContactChanges(before: HrContactSetting, after: HrContactSetting): st
     .map((part) => `hrContact.${part}: ${show(before[part])} → ${show(after[part])}`);
 }
 
+/** The no-reminder dates in an audit line: dates only, no personal data. */
+const showDays = (days: readonly string[]) => (days.length === 0 ? '[]' : days.join(', '));
+
 /**
  * Settings a manager changes (FR-ADM-2): the four defaults and the employer signature and stamp
  * image (FR-TPL-7). Reading for other modules is `SettingsService`.
@@ -83,12 +87,13 @@ export class SettingsAdminService {
   ) {}
 
   async get(): Promise<SettingsItem> {
-    const [values, hrContact, image] = await Promise.all([
+    const [values, hrContact, reminderSkipDates, image] = await Promise.all([
       this.settings.getAll(),
       this.settings.getHrContact(),
+      this.settings.getReminderSkipDates(),
       this.settings.getEmployerSignature(),
     ]);
-    return { ...values, hrContact, employerSignature: summaryOf(image) };
+    return { ...values, hrContact, reminderSkipDates, employerSignature: summaryOf(image) };
   }
 
   /**
@@ -114,6 +119,14 @@ export class SettingsAdminService {
         if (contactChanges.length > 0) {
           await this.write(HR_CONTACT_KEY, input.hrContact, actor.userId, tx);
           changes.push(...contactChanges);
+        }
+      }
+      if (input.reminderSkipDates) {
+        const before = await this.settings.getReminderSkipDates(tx);
+        const after = input.reminderSkipDates;
+        if (before.join() !== after.join()) {
+          await this.write(REMINDER_SKIP_DATES_KEY, after, actor.userId, tx);
+          changes.push(`reminderSkipDates: ${showDays(before)} → ${showDays(after)}`);
         }
       }
       if (changes.length === 0) return;

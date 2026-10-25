@@ -71,6 +71,9 @@ export interface JobState {
   readonly retryCount: number;
 }
 
+/** States in which a job may still run. */
+const LIVE_STATES: ReadonlySet<string> = new Set(['created', 'retry', 'active']);
+
 /** The text of an error pg-boss emits: an Error, or a plain object with a `message`. */
 function errorText(error: unknown): string {
   if (error instanceof Error) return describeError(error);
@@ -297,6 +300,19 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
   async findJob(queue: QueueDefinition, id: string): Promise<JobState | null> {
     const [job] = await this.boss.findJobs(queue.name, { id });
     return job ? { state: job.state, retryCount: job.retryCount } : null;
+  }
+
+  /**
+   * Whether a job of the queue whose data contains `data` is still waiting, waiting for a retry
+   * or running: it may still do its work. A job that completed, failed for good or was deleted
+   * never runs again (3.14 sweep).
+   */
+  async hasLiveJob<TData extends object>(
+    queue: QueueDefinition<TData>,
+    data: Partial<TData>,
+  ): Promise<boolean> {
+    const jobs = await this.boss.findJobs(queue.name, { data });
+    return jobs.some(({ state }) => LIVE_STATES.has(state));
   }
 
   /** The stored schedule of a queue (cron and time zone), or null. */

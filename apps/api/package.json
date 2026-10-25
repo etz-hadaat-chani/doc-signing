@@ -24,6 +24,7 @@
     "db:seed": "prisma db seed",
     "email:preview": "tsx scripts/email-preview.ts",
     "job:cleanup": "tsx scripts/run-cleanup.ts",
+    "job:reminders": "tsx scripts/run-reminders.ts",
     "import:sample": "tsx scripts/import-sample.ts",
     "pdf:sample": "tsx scripts/pdf-sample.ts"
   },

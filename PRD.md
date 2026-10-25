@@ -214,7 +214,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 
 | ID | Requirement |
 | --- | --- |
-| FR-REM-1 | A daily job sends reminders to recipients in Sent or Opened status whose last email was at least the reminder interval ago. |
+| FR-REM-1 | A daily job sends reminders to recipients in Sent or Opened status whose last email was at least the reminder interval ago, counted in calendar days in Israel (an email on Sunday at any hour is due again on Wednesday with a 3-day interval). It runs at 09:00 Sunday to Thursday and sends nothing on the no-reminder dates a manager sets (for example Yom Tov, FR-ADM-2); those reminders go on the next run. A manager's own reminders (FR-REM-3) are not affected. |
 | FR-REM-2 | Reminders stop only when the employee signs, the link expires or the manager cancels. There is no maximum by default. |
 | FR-REM-3 | A manager can send a reminder now, to one employee or to everyone who hasn't signed in a round. Only employees in Sent or Opened status get one, at their current valid email, with a new link (the older links keep working). Against flooding: one employee can't be reminded while an email to her is still on its way, or within 1 hour of the last one; "remind everyone" skips the locked, those with no valid email, those with an email on its way and those emailed in the last 24 hours, and shows how many were skipped and why. A manual reminder ignores the round's "reminders on/off" and maximum (they are for the daily job) but counts in the reminders sent. |
 | FR-REM-4 | Bounced emails change the status to "Invalid email". |
@@ -245,7 +245,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | ID | Requirement |
 | --- | --- |
 | FR-ADM-1 | A manager can add, disable and change the role of staff users. |
-| FR-ADM-2 | A manager can change the default settings: reminder interval, maximum reminders, link expiry, sender name, and the HR contact (name, phone, email; phone or email at least) shown on the signing pages and in every email footer (built-in default: the deployment's values). A manager uploads the **employer signature and stamp image** (עץ הדעת) once: PNG only, content checked, size limit, private storage. Replacing it stores a new file (never an overwrite); assignments already sent keep the image saved with them (FR-RND-8). Uploads and views are logged; officers can't see it. |
+| FR-ADM-2 | A manager can change the default settings: reminder interval, maximum reminders, link expiry, sender name, the no-reminder dates (up to 100 dates on which the daily reminders send nothing, FR-REM-1; none by default), and the HR contact (name, phone, email; phone or email at least) shown on the signing pages and in every email footer (built-in default: the deployment's values). A manager uploads the **employer signature and stamp image** (עץ הדעת) once: PNG only, content checked, size limit, private storage. Replacing it stores a new file (never an overwrite); assignments already sent keep the image saved with them (FR-RND-8). Uploads and views are logged; officers can't see it. |
 | FR-ADM-3 | Every important action is written to an activity log that can't be edited. |
 
 ## 7. Screens
@@ -268,7 +268,7 @@ Wherever a department is shown or picked (lists, filters, cards, wizard, exports
 | A8 | Excel import (ייבוא מאקסל) | Upload the Har Gal export, check report, preview (including new and renamed departments as "15 - name"), confirm | Manager |
 | A9 | Templates (תבניות) | Templates with departments ("15 - name"), version, field positions (type, key, Hebrew label, who fills it in, required or optional, "shown only when", limits, needs approval, pension source), employer-signature setting, the "ready" reasons, preview with missing values | Manager |
 | A10 | Manual handling (טיפול ידני) | Employees with no or bad email or missing data across rounds ("email added" / "details completed, ready to send"), and employees who corrected their email; print, upload scan, fix email. Tab **"Waiting for approval"**: signed documents waiting for approval, what the employee filled in, Approve / Return for correction (with a note) and "Send again" | Manager; the approval tab is read-only for officers |
-| A11 | Settings (הגדרות) | Reminder interval, maximum reminders, link expiry, sender name, employer signature and stamp image | Manager |
+| A11 | Settings (הגדרות) | Reminder interval, maximum reminders, link expiry, sender name, no-reminder dates, employer signature and stamp image | Manager |
 | A12 | Staff users (משתמשי מערכת) | Add, disable, change role | Manager |
 
 ### Employee area (signing, computer and mouse first)
@@ -331,7 +331,7 @@ Seven flows cover the MVP. The core is flow 3 (create a round) and flow 4 (signi
 
 ### Flow 5: Reminders (system, daily)
 
-1. The job runs every day at 09:00, Sunday to Thursday.
+1. The job runs every day at 09:00, Sunday to Thursday, except on the no-reminder dates. It first settles emails whose sending job was lost, so a round still "sending" can finish.
 2. For each active round, it finds recipients in Sent or Opened status whose last email is at least the interval old.
 3. It sends each one a reminder with its own link and counts it.
 4. Bounces from the email provider set the status to "Invalid email".
@@ -743,7 +743,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| key | varchar(100) PK | e.g. `reminder_interval_days`, `max_reminders` (null = no limit), `link_expiry_days`, `sender_name`, `hr_contact` (`{ name, phone, email }`, FR-ADM-2), `employer_signature` (`{ fileKey, uploadedAt, width, height, sha256 }`, FR-ADM-2) |
+| key | varchar(100) PK | e.g. `reminder_interval_days`, `max_reminders` (null = no limit), `link_expiry_days`, `sender_name`, `reminder_skip_dates` (list of `YYYY-MM-DD`), `hr_contact` (`{ name, phone, email }`, FR-ADM-2), `employer_signature` (`{ fileKey, uploadedAt, width, height, sha256 }`, FR-ADM-2) |
 | value | jsonb |  |
 | updated\_by | uuid FK → users NULL |  |
 

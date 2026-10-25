@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { SigningEmailFailReason } from '../../common/audit/audit.actions.js';
 import type { AuditEntry } from '../../common/audit/audit.service.js';
 import { AuditService } from '../../common/audit/audit.service.js';
 import { EmailSendError } from '../../common/email/email.errors.js';
@@ -12,10 +13,19 @@ import { type LockedInvite, RoundSendRepository } from './round-send.repository.
 
 /** Stored in `email_messages.error` when the email may have gone out but wasn't confirmed. */
 export const UNCONFIRMED = 'UNCONFIRMED';
+/** Stored in `email_messages.error` when the row's job died before the email left (3.14). */
+export const JOB_LOST = 'JOB_LOST';
 
 type SentAction = 'assignment.invite_sent' | 'assignment.reminder_sent';
 type FailedAction = 'assignment.invite_failed' | 'assignment.reminder_failed';
 type InviteAudit = AuditEntry<SentAction> | AuditEntry<FailedAction>;
+
+/** What a settle did: the row's new state (null = it was settled already) and the round's. */
+export interface SettleOutcome {
+  settled: 'sent' | 'failed' | null;
+  /** This was the round's last queued invitation: `sending` → `active`. */
+  roundFinished: boolean;
+}
 
 /** What the first short transaction found. */
 type Start =
@@ -60,6 +70,21 @@ export class SigningEmailSender {
       if (job.isLastAttempt) await this.settleLastAttempt(job, error);
       throw error;
     }
+  }
+
+  /**
+   * Settles a `queued` row whose job died without settling it (3.14 sweep; the caller checked
+   * that no job of it is waiting or running). A stored hash: the email may have gone out, so
+   * `sent` `UNCONFIRMED` (the link keeps working). No hash: it never left, so `failed`
+   * `JOB_LOST` (an invitation's assignment stays `pending`: "send failed"). Then the round becomes
+   * `active` if this was its last queued invitation.
+   */
+  settleLost(emailMessageId: string): Promise<SettleOutcome> {
+    return this.settle(emailMessageId, (invite, tx) =>
+      invite.hasToken
+        ? this.sentEntry(invite, null, UNCONFIRMED, tx)
+        : this.failedEntry(invite, JOB_LOST, 'job_lost', false, tx),
+    );
   }
 
   private async attempt(job: JobContext<InvitationJobData>): Promise<void> {
@@ -159,7 +184,7 @@ export class SigningEmailSender {
   private settleFailed(
     id: string,
     error: string,
-    reason: AuditEntry<'assignment.invite_failed'>['details']['reason'],
+    reason: SigningEmailFailReason,
     invalidEmail: boolean,
   ) {
     return this.settle(id, (invite, tx) =>
@@ -193,7 +218,7 @@ export class SigningEmailSender {
   private async failedEntry(
     invite: LockedInvite,
     error: string,
-    reason: AuditEntry<'assignment.invite_failed'>['details']['reason'],
+    reason: SigningEmailFailReason,
     invalidEmail: boolean,
     tx: Db,
   ): Promise<InviteAudit | null> {
@@ -221,15 +246,20 @@ export class SigningEmailSender {
   private async settle(
     emailMessageId: string,
     apply: (invite: LockedInvite, tx: Db) => Promise<InviteAudit | null>,
-  ): Promise<void> {
+  ): Promise<SettleOutcome> {
+    let settled: SettleOutcome['settled'] = null;
     const finished = await this.prisma.$transaction(async (tx) => {
+      settled = null;
       const roundId = await this.repository.roundOfInvite(emailMessageId, tx);
       if (!roundId) return null;
       await this.repository.lockRoundForSettle(roundId, tx);
       const invite = await this.repository.lockInvite(emailMessageId, tx);
       if (!invite || invite.status !== 'queued') return null;
       const entry = await apply(invite, tx);
-      if (entry) await this.audit.record(entry, tx);
+      if (entry) {
+        await this.audit.record(entry, tx);
+        settled = entry.action.endsWith('_sent') ? 'sent' : 'failed';
+      }
       const progress = await this.repository.finishIfDone(roundId, tx);
       if (!progress) return null;
       await this.audit.record(
@@ -250,6 +280,7 @@ export class SigningEmailSender {
           `failed ${String(finished.failed)}`,
       );
     }
+    return { settled, roundFinished: finished !== null };
   }
 }
 

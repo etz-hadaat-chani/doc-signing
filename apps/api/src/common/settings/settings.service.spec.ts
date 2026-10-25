@@ -152,3 +152,21 @@ describe('SettingsService.getHrContact', () => {
     expect((await serviceWithRows({ hr_contact: value }).getHrContact()).phone).toBe('02-1234567');
   });
 });
+
+describe('SettingsService.getReminderSkipDates', () => {
+  it('reads the stored dates, sorted', async () => {
+    const service = serviceWithRows({ reminder_skip_dates: ['2026-10-14', '2026-09-23'] });
+    expect(await service.getReminderSkipDates()).toEqual(['2026-09-23', '2026-10-14']);
+  });
+
+  it.each([
+    ['no row', undefined],
+    ['null', null],
+    ['a string', '2026-10-14'],
+    ['a date that does not exist', ['2026-02-30']],
+    ['a duplicate', ['2026-10-14', '2026-10-14']],
+  ])('no dates for %s', async (_label, value) => {
+    const rows = value === undefined ? {} : { reminder_skip_dates: value };
+    expect(await serviceWithRows(rows).getReminderSkipDates()).toEqual([]);
+  });
+});

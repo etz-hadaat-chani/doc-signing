@@ -38,6 +38,20 @@ export const REMIND_SKIP_REASONS = [
 ] as const;
 export type RemindSkipReason = (typeof REMIND_SKIP_REASONS)[number];
 
+/**
+ * Why the daily reminder job (3.14) left a `sent` / `opened` row out, in the order checked.
+ * `busy`: the employee's previous reminder job was still finishing.
+ */
+export const DAILY_REMIND_SKIP_REASONS = [
+  'locked',
+  'noValidEmail',
+  'emailQueued',
+  'maxReached',
+  'notDue',
+  'busy',
+] as const;
+export type DailyRemindSkipReason = (typeof DAILY_REMIND_SKIP_REASONS)[number];
+
 /** Remind or resend of one employee: 202, one new email queued (the worker sends it). */
 export const assignmentEmailQueuedSchema = z.object({
   assignmentId: z.uuid(),

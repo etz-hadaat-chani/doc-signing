@@ -1,6 +1,7 @@
 import type {
   AlreadySignedChoice,
   AssignmentStatus,
+  DailyRemindSkipReason,
   EmailChoice,
   EmailStatus,
   RecipientsPreviewReport,
@@ -49,6 +50,7 @@ export const AUDIT_ACTIONS = [
   'round.assignments_viewed',
   'round.remind_queued',
   'round.cancelled',
+  'reminders.daily_run',
   'assignment.invite_sent',
   'assignment.invite_failed',
   'assignment.reminder_sent',
@@ -81,8 +83,20 @@ export const AUDIT_ENTITY_TYPES = [
   'round',
   'assignment',
   'settings',
+  'job',
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
+
+/**
+ * Why an invitation or reminder failed for good. `job_lost`: its job died without settling it
+ * (3.14 sweep).
+ */
+export type SigningEmailFailReason =
+  | 'permanent'
+  | 'temporary_last_attempt'
+  | 'unexpected_last_attempt'
+  | 'assignment_closed'
+  | 'job_lost';
 
 /**
  * The details each action may carry. Never passwords, link tokens or ID numbers; AuditService
@@ -256,6 +270,21 @@ export interface AuditDetailsMap {
     signedUntouched: number;
   };
   /**
+   * One run of the daily reminder job (3.14; system actor, entity `job`, id NULL). Counts and
+   * round ids only, never a name, an address or a link. `skipped`: `skip_date` = today is a
+   * no-reminder date, nothing was queued. `swept`: queued emails whose job died, settled first.
+   */
+  'reminders.daily_run': {
+    trigger: 'schedule' | 'manual';
+    day: string;
+    skipped: 'skip_date' | null;
+    rounds: number;
+    queued: number;
+    notReminded: Record<DailyRemindSkipReason, number>;
+    byRound: { roundId: string; queued: number }[];
+    swept: { failed: number; unconfirmed: number; roundsFinished: number };
+  };
+  /**
    * One invitation went out (system actor, entity = the assignment). `unconfirmed`: it may have
    * gone out, but the provider never confirmed it (a crash or a timeout); it is not sent again.
    */
@@ -269,8 +298,7 @@ export interface AuditDetailsMap {
   'assignment.invite_failed': {
     roundId: string;
     emailMessageId: string;
-    reason:
-      'permanent' | 'temporary_last_attempt' | 'unexpected_last_attempt' | 'assignment_closed';
+    reason: SigningEmailFailReason;
     providerCode: string | null;
   };
   /** One reminder went out (system actor); the same details as the invitation's. */
@@ -284,8 +312,7 @@ export interface AuditDetailsMap {
   'assignment.reminder_failed': {
     roundId: string;
     emailMessageId: string;
-    reason:
-      'permanent' | 'temporary_last_attempt' | 'unexpected_last_attempt' | 'assignment_closed';
+    reason: SigningEmailFailReason;
     providerCode: string | null;
   };
   // Round actions (3.12): the manager is the actor, the entity is the assignment. Ids only:

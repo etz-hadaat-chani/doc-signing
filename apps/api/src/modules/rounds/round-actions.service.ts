@@ -14,13 +14,6 @@ import { AuditService } from '../../common/audit/audit.service.js';
 import { AppException } from '../../common/errors/app.exception.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { Db } from '../../common/prisma/prisma.types.js';
-import {
-  INVITATION_QUEUE,
-  type QueueDefinition,
-  type InvitationJobData,
-  REMINDER_QUEUE,
-} from '../../common/queue/queue.definitions.js';
-import { QueueService } from '../../common/queue/queue.service.js';
 import type { TemplateActor } from '../templates/templates.service.js';
 import {
   type ActionRoundRow,
@@ -37,7 +30,8 @@ import {
   roundRemindRefusal,
   unlockRefusal,
 } from './round-actions.rules.js';
-import { RoundSendRepository, type SigningEmailType } from './round-send.repository.js';
+import type { SigningEmailType } from './round-send.repository.js';
+import { SigningEmailQueue } from './signing-email-queue.js';
 
 /** Like the send (3.10): READ COMMITTED; the round row lock makes actions on a round run in turn. */
 const ACTION_TRANSACTION = { maxWait: 10_000, timeout: 30_000 } as const;
@@ -60,8 +54,7 @@ export class RoundActionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly repository: RoundActionsRepository,
-    private readonly emails: RoundSendRepository,
-    private readonly queue: QueueService,
+    private readonly emails: SigningEmailQueue,
     private readonly audit: AuditService,
   ) {}
 
@@ -266,36 +259,17 @@ export class RoundActionsService {
     return round;
   }
 
-  /**
-   * One `queued` row per assignment (to its employee's current valid email) and one job each,
-   * inside the transaction. The exclusive queue refusing a job (the previous job of the same
-   * employee is still finishing) rolls everything back: 409, never two emails at once.
-   */
-  private async queueEmails(
+  /** One `queued` row and job per assignment, to its employee's current valid email. */
+  private queueEmails(
     type: SigningEmailType,
     rows: readonly ActionRow[],
     tx: Db,
   ): Promise<string[]> {
-    if (rows.length === 0) return [];
-    const created = await this.emails.createSigningEmails(
+    return this.emails.queue(
       type,
       rows.map((row) => ({ assignmentId: row.id, toEmail: must(row.validEmail) })),
       tx,
     );
-    const queue: QueueDefinition<InvitationJobData> =
-      type === 'reminder' ? REMINDER_QUEUE : INVITATION_QUEUE;
-    const added = await this.queue.sendMany(
-      queue,
-      created.map(({ id, assignmentId }) => ({
-        data: { assignmentId, emailMessageId: id },
-        singletonKey: assignmentId,
-      })),
-      tx,
-    );
-    if (added !== created.length) {
-      throw new AppException('EMAIL_ALREADY_QUEUED', HttpStatus.CONFLICT);
-    }
-    return created.map(({ id }) => id);
   }
 }
 

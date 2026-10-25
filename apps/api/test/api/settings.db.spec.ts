@@ -94,6 +94,7 @@ describe('GET /api/settings', () => {
       linkExpiryDays: 60,
       senderName: 'מערכת חתימות',
       hrContact: envHrContact(),
+      reminderSkipDates: [],
       employerSignature: null,
     });
   });
@@ -152,6 +153,56 @@ describe('the HR contact (3.13)', () => {
       .send({ hrContact: { name: 'א', phone: '02-1234567', email: null } });
     expect(response.status).toBe(403);
     expect(itemOf(await getSettings()).hrContact).toEqual(envHrContact());
+  });
+});
+
+describe('no-reminder dates (3.14)', () => {
+  const changesOf = async () =>
+    (await auditOf('settings.updated')).map(
+      (row) => (row.details as { changes: string[] }).changes,
+    );
+
+  it('saves them sorted, logs old → new, and the same list again writes nothing', async () => {
+    const first = await patchSettings({ reminderSkipDates: ['2026-10-14', '2026-09-23'] });
+    expect(first.status).toBe(200);
+    expect(itemOf(first).reminderSkipDates).toEqual(['2026-09-23', '2026-10-14']);
+    const second = await patchSettings({ reminderSkipDates: ['2026-10-14'] });
+    expect(itemOf(second).reminderSkipDates).toEqual(['2026-10-14']);
+    await patchSettings({ reminderSkipDates: ['2026-10-14'] });
+    await patchSettings({ reminderSkipDates: [] });
+    expect(await changesOf()).toEqual([
+      ['reminderSkipDates: [] → 2026-09-23, 2026-10-14'],
+      ['reminderSkipDates: 2026-09-23, 2026-10-14 → 2026-10-14'],
+      ['reminderSkipDates: 2026-10-14 → []'],
+    ]);
+    expect(itemOf(await getSettings()).reminderSkipDates).toEqual([]);
+  });
+
+  it.each([
+    ['a day that does not exist', ['2026-02-30']],
+    ['another format', ['14/10/2026']],
+    ['a duplicate', ['2026-10-14', '2026-10-14']],
+    [
+      'more than 100',
+      Array.from({ length: 101 }, (_, i) =>
+        new Date(Date.UTC(2027, 0, 1 + i)).toISOString().slice(0, 10),
+      ),
+    ],
+    ['not a list', '2026-10-14'],
+  ])('%s → 400, nothing saved', async (_label, reminderSkipDates) => {
+    const response = await patchSettings({ reminderSkipDates });
+    expect(response.status).toBe(400);
+    expect(errorOf(response).code).toBe('VALIDATION_FAILED');
+    expect(itemOf(await getSettings()).reminderSkipDates).toEqual([]);
+  });
+
+  it('an officer cannot change them', async () => {
+    const response = await server()
+      .patch('/api/settings')
+      .set('Cookie', officerCookie)
+      .send({ reminderSkipDates: ['2026-10-14'] });
+    expect(response.status).toBe(403);
+    expect(itemOf(await getSettings()).reminderSkipDates).toEqual([]);
   });
 });
 

@@ -25,6 +25,31 @@ export const senderNameSchema = z
   .max(SENDER_NAME_MAX_LENGTH)
   .regex(/^[^\r\n]*$/);
 
+/** At most this many no-reminder dates. */
+export const REMINDER_SKIP_DATES_MAX = 100;
+
+/** `YYYY-MM-DD` that is a real calendar day (no 2026-02-30). */
+function isCalendarDay(value: string): boolean {
+  const day = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === value;
+}
+
+/**
+ * `reminder_skip_dates` (3.14): days in Israel (`YYYY-MM-DD`) on which the daily reminder job
+ * sends nothing, such as Yom Tov. Real dates, no duplicates, at most 100; read back sorted.
+ * Manual reminders ignore it.
+ */
+export const reminderSkipDatesSchema = z
+  .array(
+    z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .refine(isCalendarDay),
+  )
+  .max(REMINDER_SKIP_DATES_MAX)
+  .refine((days) => new Set(days).size === days.length, { message: 'DUPLICATE_DATE' })
+  .transform((days) => [...days].sort());
+
 /** HR contact name: one line, at most 100 characters. */
 export const HR_CONTACT_NAME_MAX_LENGTH = 100;
 /** A phone as people write it: digits, spaces, `+`, `-`, brackets; 6 to 20 characters. */
@@ -60,6 +85,7 @@ export const settingsUpdateSchema = z
     linkExpiryDays: linkExpiryDaysSchema.optional(),
     senderName: senderNameSchema.optional(),
     hrContact: hrContactSchema.optional(),
+    reminderSkipDates: reminderSkipDatesSchema.optional(),
   })
   .refine((value) => Object.values(value).some((item) => item !== undefined));
 export type SettingsUpdateInput = z.infer<typeof settingsUpdateSchema>;
@@ -93,6 +119,8 @@ export const settingsItemSchema = z.object({
     phone: z.string().nullable(),
     email: z.string().nullable(),
   }),
+  /** No-reminder dates, `YYYY-MM-DD`, sorted. */
+  reminderSkipDates: z.array(z.string()),
   /** null until the manager uploads the image. */
   employerSignature: employerSignatureSummarySchema.nullable(),
 });

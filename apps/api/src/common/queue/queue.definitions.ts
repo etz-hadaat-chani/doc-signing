@@ -96,6 +96,27 @@ export const REMINDER_QUEUE: QueueDefinition<InvitationJobData> = Object.freeze(
 });
 
 /**
+ * One run of the daily reminders (3.14). No personal data: who started it, and, in development
+ * only, how many days ahead "today" is for the due check (`pnpm job:reminders --days-ahead 3`).
+ */
+export interface DailyRemindersJobData {
+  readonly trigger?: 'schedule' | 'manual';
+  readonly daysAhead?: number;
+}
+
+/**
+ * The daily reminders (3.14, FR-REM-1): 09:00 Sunday to Thursday, Israel time. Exclusive, so one
+ * run waits or runs at a time however many workers there are; a retry is safe (whoever was
+ * reminded is no longer due).
+ */
+export const DAILY_REMINDERS_QUEUE: QueueDefinition<DailyRemindersJobData> = Object.freeze({
+  name: 'daily-reminders',
+  policy: 'exclusive',
+  retry: Object.freeze({ ...DEFAULT_RETRY, retryLimit: 3 }),
+  schedule: Object.freeze({ cron: '0 9 * * 0-4', description: 'Sunday to Thursday 09:00' }),
+});
+
+/**
  * The signed copy (3.13, FR-SGN-6): one email per signed assignment, with the signed PDF. Queued
  * in the signing transaction. Exclusive with `singletonKey` = the assignment id; the same IDs-only
  * data as the invitation. Default retries.
@@ -112,4 +133,5 @@ export const QUEUES: readonly QueueDefinition[] = Object.freeze([
   INVITATION_QUEUE,
   REMINDER_QUEUE,
   SIGNED_COPY_QUEUE,
+  DAILY_REMINDERS_QUEUE,
 ]);
