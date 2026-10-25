@@ -17,6 +17,10 @@ const publicUrl = z
   })
   .transform((value) => value.replace(/\/+$/, ''));
 
+/** Who signs the bounce notices (3.15). `test`: the development stub; 7.5 adds the real one. */
+export const EMAIL_WEBHOOK_PROVIDERS = ['test'] as const;
+export type EmailWebhookProvider = (typeof EMAIL_WEBHOOK_PROVIDERS)[number];
+
 // Only what the API needs today; later tasks add their own variables here.
 const envSchema = z
   .object({
@@ -57,6 +61,13 @@ const envSchema = z
     // the per-IP limits). Never "trust all": X-Forwarded-For could then be forged. Required in
     // production, where a wrong count would make every employee share the balancer's IP.
     TRUST_PROXY_HOPS: optional(z.coerce.number().int().min(0).max(5).optional()),
+    // Bounce notices (3.15): which provider signs them (empty = the webhook refuses everything)
+    // and its signing secret. `test` is the development stub, refused in production; 7.5 adds
+    // the real provider. The secret is never printed.
+    EMAIL_WEBHOOK_PROVIDER: optional(z.enum(EMAIL_WEBHOOK_PROVIDERS).optional()),
+    EMAIL_WEBHOOK_SECRET: optional(z.string().min(32).optional()),
+    // Webhook requests per IP per 15 minutes (a bounce burst after a big send stays well under).
+    EMAIL_WEBHOOK_RATE_LIMIT: optional(z.coerce.number().int().min(300).max(100_000).default(3000)),
   })
   .superRefine((env, ctx) => {
     if ((env.S3_ACCESS_KEY === undefined) !== (env.S3_SECRET_KEY === undefined)) {
@@ -73,6 +84,16 @@ const envSchema = z
     if (env.NODE_ENV === 'production' && env.TRUST_PROXY_HOPS === undefined) {
       ctx.addIssue({ code: 'custom', path: ['TRUST_PROXY_HOPS'], message: 'Required' });
     }
+    if (env.EMAIL_WEBHOOK_PROVIDER !== undefined && env.EMAIL_WEBHOOK_SECRET === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['EMAIL_WEBHOOK_SECRET'], message: 'Required' });
+    }
+    if (env.NODE_ENV === 'production' && env.EMAIL_WEBHOOK_PROVIDER === 'test') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['EMAIL_WEBHOOK_PROVIDER'],
+        message: 'Not in production',
+      });
+    }
     if (env.HR_CONTACT_PHONE === undefined && env.HR_CONTACT_EMAIL === undefined) {
       ctx.addIssue({ code: 'custom', path: ['HR_CONTACT_PHONE'], message: 'Phone or email' });
     }
@@ -85,6 +106,14 @@ export interface StorageConfig {
   readonly credentials:
     { readonly accessKeyId: string; readonly secretAccessKey: string } | undefined;
   readonly forcePathStyle: boolean;
+}
+
+export interface EmailWebhookConfig {
+  /** Undefined: no provider set up, every notice is refused (401). */
+  readonly provider: EmailWebhookProvider | undefined;
+  readonly secret: string | undefined;
+  /** Requests per IP per 15-minute window. */
+  readonly rateLimit: number;
 }
 
 export interface HrContact {
@@ -137,6 +166,7 @@ export class AppConfig {
   /** Express "trust proxy" hop count (0 = the socket's address). */
   readonly trustProxyHops!: number;
   readonly signRateLimits!: SignRateLimitConfig;
+  readonly emailWebhook!: EmailWebhookConfig;
 }
 
 /**
@@ -199,5 +229,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
         SIGN_RATE_SCOPES.map((scope) => [scope, rates.data[signRateLimitEnvName(scope)]]),
       ) as Record<SignRateScope, number>,
     ),
+    emailWebhook: Object.freeze({
+      provider: data.EMAIL_WEBHOOK_PROVIDER,
+      secret: data.EMAIL_WEBHOOK_SECRET,
+      rateLimit: data.EMAIL_WEBHOOK_RATE_LIMIT,
+    }),
   });
 }

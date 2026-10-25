@@ -17,6 +17,7 @@ import { SigningModule } from './modules/signing/signing.module.js';
 import { TemplatesModule } from './modules/templates/templates.module.js';
 import { TrackingModule } from './modules/tracking/tracking.module.js';
 import { UsersModule } from './modules/users/users.module.js';
+import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { UsersModule } from './modules/users/users.module.js';
     TrackingModule,
     SettingsApiModule,
     SigningModule,
+    WebhooksModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })

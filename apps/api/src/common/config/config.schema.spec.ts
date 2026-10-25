@@ -35,6 +35,7 @@ describe('loadConfig', () => {
       signRateLimits: Object.fromEntries(
         SIGN_RATE_SCOPES.map((scope) => [scope, SIGN_RATE_LIMITS[scope].default]),
       ),
+      emailWebhook: { provider: undefined, secret: undefined, rateLimit: 3000 },
     });
     expect(loadConfig({ ...base, PORT: '8080', NODE_ENV: 'test' })).toMatchObject({
       nodeEnv: 'test',
@@ -216,6 +217,47 @@ describe('loadConfig', () => {
   it('needs an HR phone or email', () => {
     expect(() => loadConfig({ ...base, HR_CONTACT_PHONE: '' })).toThrow(
       'HR_CONTACT_PHONE (missing)',
+    );
+  });
+
+  it('reads the email webhook settings (3.15) and never prints the secret', () => {
+    const secret = 'dev-webhook-secret-0123456789abcdef0123';
+    const webhook = { ...base, EMAIL_WEBHOOK_PROVIDER: 'test', EMAIL_WEBHOOK_SECRET: secret };
+    expect(loadConfig({ ...webhook, EMAIL_WEBHOOK_RATE_LIMIT: '500' }).emailWebhook).toEqual({
+      provider: 'test',
+      secret,
+      rateLimit: 500,
+    });
+    expect(() => loadConfig({ ...webhook, EMAIL_WEBHOOK_SECRET: '' })).toThrow(
+      'EMAIL_WEBHOOK_SECRET (missing)',
+    );
+    const short = 's'.repeat(31);
+    expect(() => loadConfig({ ...webhook, EMAIL_WEBHOOK_SECRET: short })).toThrow(
+      'EMAIL_WEBHOOK_SECRET (invalid)',
+    );
+    expect(() => loadConfig({ ...webhook, EMAIL_WEBHOOK_SECRET: short })).not.toThrow(short);
+    expect(() => loadConfig({ ...webhook, EMAIL_WEBHOOK_PROVIDER: 'ses' })).toThrow(
+      'EMAIL_WEBHOOK_PROVIDER (invalid)',
+    );
+    for (const value of ['299', '100001', 'many']) {
+      expect(() => loadConfig({ ...webhook, EMAIL_WEBHOOK_RATE_LIMIT: value })).toThrow(
+        'EMAIL_WEBHOOK_RATE_LIMIT (invalid)',
+      );
+    }
+  });
+
+  it('refuses the test webhook provider in production', () => {
+    const production = {
+      ...base,
+      NODE_ENV: 'production',
+      APP_PUBLIC_URL: 'https://sign.example.org',
+      TRUST_PROXY_HOPS: '1',
+      EMAIL_WEBHOOK_PROVIDER: 'test',
+      EMAIL_WEBHOOK_SECRET: 'dev-webhook-secret-0123456789abcdef0123',
+    };
+    expect(() => loadConfig(production)).toThrow('EMAIL_WEBHOOK_PROVIDER (invalid)');
+    expect(loadConfig({ ...production, EMAIL_WEBHOOK_PROVIDER: '' }).emailWebhook.provider).toBe(
+      undefined,
     );
   });
 

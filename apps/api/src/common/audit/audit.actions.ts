@@ -3,6 +3,7 @@ import type {
   AssignmentStatus,
   DailyRemindSkipReason,
   EmailChoice,
+  EmailMessageType,
   EmailStatus,
   RecipientsPreviewReport,
   RemindSkipReason,
@@ -62,6 +63,8 @@ export const AUDIT_ACTIONS = [
   'assignment.signed',
   'assignment.signed_copy_sent',
   'assignment.signed_copy_failed',
+  'email.bounced',
+  'email.soft_bounced',
   'sign.verified',
   'sign.verify_failed',
   'sign.locked',
@@ -391,6 +394,22 @@ export interface AuditDetailsMap {
     reason: 'permanent' | 'temporary_last_attempt' | 'unexpected_last_attempt';
     providerCode: string | null;
   };
+  // Bounce notices (3.15): system actor, entity = the assignment of the email that bounced. Ids
+  // and counts only: never the address, a name or the provider's text.
+  /**
+   * A hard bounce. `employeeMarkedBounced`: her stored email was that address, now `bounced`.
+   * `invalidatedAssignmentIds`: her open assignments whose newest link went to that address,
+   * now `invalid_email` (a signed one never changes).
+   */
+  'email.bounced': {
+    roundId: string;
+    emailMessageId: string;
+    emailType: EmailMessageType;
+    employeeMarkedBounced: boolean;
+    invalidatedAssignmentIds: string[];
+  };
+  /** A soft bounce (mailbox full, server busy): logged only, nothing changes. */
+  'email.soft_bounced': { roundId: string; emailMessageId: string; emailType: EmailMessageType };
   // Settings (3.18): the manager is the actor; the entity is `settings` with no id (text keys).
   /** One line per changed value, "field: old → new" (`null` = no limit). */
   'settings.updated': { changes: string[] };

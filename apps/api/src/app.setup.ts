@@ -1,9 +1,10 @@
 import { SIGN_SUBMIT_MAX_BYTES } from '@doc-signing/shared';
 import type { INestApplication } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
-import { type Express, json, type NextFunction, type Request, type Response } from 'express';
+import { type Express, json, type NextFunction, raw, type Request, type Response } from 'express';
 import { AppConfig } from './common/config/config.schema.js';
 import { SIGN_PATH } from './modules/signing/signing.constants.js';
+import { EMAIL_WEBHOOK_PATH } from './modules/webhooks/webhooks.constants.js';
 
 /**
  * Headers on every answer, set before routing so errors and Nest's 404 carry them too. Answers
@@ -40,6 +41,19 @@ function signSubmitJson(request: Request, response: Response, next: NextFunction
   signSubmitParser(request, response, next);
 }
 
+/** The provider's notices are small; a bigger body is refused (413) before anything reads it. */
+export const EMAIL_WEBHOOK_MAX_BYTES = 256 * 1024;
+
+const emailWebhookParser = raw({ type: () => true, limit: EMAIL_WEBHOOK_MAX_BYTES });
+
+/**
+ * The email webhook's body as raw bytes (3.15): the provider's signature covers the exact bytes,
+ * so they are checked before any JSON parsing. Its own name for the same reason as above.
+ */
+function emailWebhookRaw(request: Request, response: Response, next: NextFunction): void {
+  emailWebhookParser(request, response, next);
+}
+
 /** App-level settings shared by main.ts and the API tests. */
 export function configureApp(app: INestApplication): void {
   app.setGlobalPrefix('api');
@@ -54,6 +68,7 @@ export function configureApp(app: INestApplication): void {
   // Only submit takes the signature and drawings (≈ 4 MB); registered before Nest's own JSON
   // parser (100 KB, added at init), which then leaves the parsed body alone.
   app.use(`${SIGN_PATH}/:token/submit`, signSubmitJson);
+  app.use(EMAIL_WEBHOOK_PATH, emailWebhookRaw);
   // Reads the staff session cookie into request.cookies (unsigned; the token itself is random).
   app.use(cookieParser());
 }

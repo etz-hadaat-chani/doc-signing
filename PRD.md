@@ -217,7 +217,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | FR-REM-1 | A daily job sends reminders to recipients in Sent or Opened status whose last email was at least the reminder interval ago, counted in calendar days in Israel (an email on Sunday at any hour is due again on Wednesday with a 3-day interval). It runs at 09:00 Sunday to Thursday and sends nothing on the no-reminder dates a manager sets (for example Yom Tov, FR-ADM-2); those reminders go on the next run. A manager's own reminders (FR-REM-3) are not affected. |
 | FR-REM-2 | Reminders stop only when the employee signs, the link expires or the manager cancels. There is no maximum by default. |
 | FR-REM-3 | A manager can send a reminder now, to one employee or to everyone who hasn't signed in a round. Only employees in Sent or Opened status get one, at their current valid email, with a new link (the older links keep working). Against flooding: one employee can't be reminded while an email to her is still on its way, or within 1 hour of the last one; "remind everyone" skips the locked, those with no valid email, those with an email on its way and those emailed in the last 24 hours, and shows how many were skipped and why. A manual reminder ignores the round's "reminders on/off" and maximum (they are for the daily job) but counts in the reminders sent. |
-| FR-REM-4 | Bounced emails change the status to "Invalid email". |
+| FR-REM-4 | Bounced emails change the status to "Invalid email". A hard bounce (the address will never work) marks that email bounced, the employee's email status "bounced" (only if her stored email is still that address, so a fixed address isn't marked bad by a late notice), and each of her open assignments (pending, sent or opened) whose newest invitation or reminder went to that address "Invalid email"; an assignment emailed since at another address stays as it is. Signed, paper-signed and cancelled assignments never change (a bounced signed copy marks only that email). A soft bounce (mailbox full, server busy) changes nothing and is only logged: the provider retries and the next reminder is another try. Reminders then stop for that row; the link she already has still works, and resend needs a new address. |
 | FR-REM-5 | Every link sent (invitation or reminder) keeps working until the employee signs, the link expires or the manager cancels (then every link of that assignment shows "cancelled"). |
 
 ### Tracking
@@ -517,7 +517,7 @@ A link that isn't valid is refused on every route after the state: signed / canc
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/api/webhooks/email` | Delivery and bounce notices from the email provider; the provider's signature is verified |
+| POST | `/api/webhooks/email` | Delivery and bounce notices from the email provider. Public (no staff session); the provider's signature is checked on the raw body before anything else is read (constant-time compare, notices older than 5 minutes refused): no, wrong or old signature → 401 with no details. A per-IP limit per 15 minutes (429). An unknown message id → 200 and ignored (logged), so the provider doesn't retry it; the same notice twice changes nothing. Rules in FR-REM-4. |
 
 ## 
 12. Data model
@@ -708,8 +708,8 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | type | enum `invite` / `reminder` / `signed_copy` |  |
 | to\_email | varchar(255) | Address actually used |
 | token\_hash | char(64) UNIQUE NULL | SHA-256 of this email's link token; NULL for the signed copy. An invite or reminder gets it just before it is sent (NULL while `queued`, and again if it clearly never left, then `failed`); one that went out always has it |
-| provider\_message\_id | varchar(255) NULL | Matches bounce notices |
-| status | enum `queued` / `sent` / `delivered` / `bounced` / `failed` |  |
+| provider\_message\_id | varchar(255) NULL | Matches bounce notices; none on an email the provider never confirmed |
+| status | enum `queued` / `sent` / `delivered` / `bounced` / `failed` | `bounced`: set by a hard bounce notice (FR-REM-4), only from `sent` / `delivered`; still counts as sent |
 | error | text NULL |  |
 | sent\_at | timestamptz NULL |  |
 

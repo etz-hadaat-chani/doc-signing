@@ -97,6 +97,7 @@ describe('Swagger page outside production', () => {
         'POST /api/sign/{token}/fit',
         'POST /api/sign/{token}/submit',
         'POST /api/sign/{token}/verify',
+        'POST /api/webhooks/email',
       ].sort(),
     );
   });

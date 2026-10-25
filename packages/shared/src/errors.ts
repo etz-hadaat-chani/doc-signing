@@ -124,6 +124,8 @@ export const ERROR_MESSAGES = {
   SIGN_SESSION_EXPIRED: 'עבר זמן רב מדי. יש להקליד שוב את מספר תעודת הזהות כדי להמשיך',
   SIGN_TOO_MANY_REQUESTS: 'יותר מדי בקשות מהמחשב הזה. נא לנסות שוב בעוד כמה דקות',
   SIGN_ACK_REQUIRED: 'יש לסמן שקראת את המסמך ושהחתימה שלך',
+  // Email provider notices (3.15): read by a machine; no hint why it was refused.
+  WEBHOOK_UNAUTHORIZED: 'הבקשה לא אומתה',
   PAYLOAD_TOO_LARGE: 'הקובץ או הבקשה גדולים מדי',
   LOCKED: 'הגישה נחסמה. יש לפנות למשאבי אנוש',
   TOO_MANY_REQUESTS: 'יותר מדי ניסיונות. נא לנסות שוב מאוחר יותר',
