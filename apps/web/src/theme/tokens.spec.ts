@@ -32,6 +32,12 @@ describe('design tokens: text contrast (WCAG AA, 4.5:1)', () => {
     ['error text on its tint', color.error, color.errorTint],
     ['warning text on surface', color.warning, color.surface],
     ['warning text on its tint', color.warning, color.warningTint],
+    ['success text on surface', color.success, color.surface],
+    ['success text on its tint', color.success, color.successTint],
+    ['info text on surface', color.info, color.surface],
+    ['info text on its tint', color.info, color.infoTint],
+    ['secondary text on the neutral tint', color.textSecondary, color.neutralTint],
+    ['text on the neutral tint', color.text, color.neutralTint],
   ])('%s', (_name, foreground, background) => {
     expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);
   });

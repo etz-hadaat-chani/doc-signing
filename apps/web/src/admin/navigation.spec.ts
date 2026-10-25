@@ -19,6 +19,18 @@ describe('ADMIN_PAGES', () => {
   });
 });
 
+describe('components demo page (4.2)', () => {
+  it('is for managers only, dev only, and in no menu', () => {
+    const demo = ADMIN_PAGES.find((page) => page.path === '/demo/components');
+    expect(demo?.roles).toEqual(['manager']);
+    expect(demo?.devOnly).toBe(true);
+    expect(demo?.menu).toBeUndefined();
+    for (const role of USER_ROLES) {
+      expect(menuFor(role).map((item) => item.path)).not.toContain('/demo/components');
+    }
+  });
+});
+
 describe('menuFor', () => {
   it('shows the officer exactly the 4 read-only items', () => {
     expect(labels('officer')).toEqual([

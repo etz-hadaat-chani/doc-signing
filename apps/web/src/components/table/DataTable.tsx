@@ -1,0 +1,245 @@
+import type { Paged } from '@doc-signing/shared';
+import Box from '@mui/material/Box';
+import Checkbox from '@mui/material/Checkbox';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TablePagination from '@mui/material/TablePagination';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import { type ReactNode, useEffect, useRef } from 'react';
+import { he } from '../../i18n/he';
+import { tokens } from '../../theme/tokens';
+import { errorContent } from '../feedback/error-content';
+import { ErrorState } from '../feedback/ErrorState';
+import { PageLoader } from '../feedback/PageLoader';
+import { PAGE_SIZE_OPTIONS } from './paging';
+
+export interface Column<T> {
+  key: string;
+  header: string;
+  render: (row: T) => ReactNode;
+  width?: number | string;
+}
+
+export interface TableSelection<T> {
+  /** Ids of the selected rows (from `getRowId`), across pages. */
+  selected: ReadonlySet<string>;
+  onChange: (next: ReadonlySet<string>) => void;
+  /** Names a row for screen readers: "בחירת השורה <name>". */
+  rowLabel: (row: T) => string;
+  /**
+   * Built by the screen from its filters and search text. When it (or the page size) changes,
+   * the selection is cleared, so an action never includes rows the user can no longer see.
+   */
+  resetKey: string;
+  /** Buttons for the selected rows, shown above the table while some are selected. */
+  actions?: ReactNode;
+}
+
+interface DataTableProps<T> {
+  /** The table's accessible name. */
+  caption: string;
+  columns: readonly Column<T>[];
+  getRowId: (row: T) => string;
+  /** The API's answer for the current page; undefined until the first one arrives. */
+  data: Paged<T> | undefined;
+  isLoading: boolean;
+  error: unknown;
+  onRetry?: () => void;
+  /** 1-based, like the API. */
+  page: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  emptyText?: string;
+  selection?: TableSelection<T>;
+}
+
+/**
+ * A list page from the API (`{ items, total, page, pageSize }`), paged on the server. The
+ * screen keeps page and filters (useTableQuery) and runs the query; this only shows it.
+ */
+export function DataTable<T>({
+  caption,
+  columns,
+  getRowId,
+  data,
+  isLoading,
+  error,
+  onRetry,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  emptyText = he.table.empty,
+  selection,
+}: DataTableProps<T>) {
+  useClearSelectionOn(selection, `${selection?.resetKey ?? ''}|${pageSize}`);
+
+  const rows = data?.items ?? [];
+  const columnCount = columns.length + (selection ? 1 : 0);
+  const pageIds = rows.map(getRowId);
+
+  let body: ReactNode;
+  if (error) {
+    body = (
+      <MessageRow columnCount={columnCount}>
+        <ErrorState {...errorContent(error)} headingComponent="h2" onRetry={onRetry} />
+      </MessageRow>
+    );
+  } else if (isLoading && !data) {
+    body = (
+      <MessageRow columnCount={columnCount}>
+        <PageLoader />
+      </MessageRow>
+    );
+  } else if (rows.length === 0) {
+    body = (
+      <MessageRow columnCount={columnCount}>
+        <Typography color="text.secondary" sx={{ py: 6, textAlign: 'center' }}>
+          {emptyText}
+        </Typography>
+      </MessageRow>
+    );
+  } else {
+    body = rows.map((row, index) => {
+      const id = pageIds[index] ?? '';
+      const isSelected = selection?.selected.has(id) ?? false;
+      return (
+        <TableRow key={id} hover selected={isSelected}>
+          {selection && (
+            <TableCell padding="checkbox">
+              <Checkbox
+                checked={isSelected}
+                onChange={() => selection.onChange(toggled(selection.selected, [id], !isSelected))}
+                slotProps={{
+                  input: { 'aria-label': `${he.table.selectRow} ${selection.rowLabel(row)}` },
+                }}
+              />
+            </TableCell>
+          )}
+          {columns.map((column) => (
+            <TableCell key={column.key}>{column.render(row)}</TableCell>
+          ))}
+        </TableRow>
+      );
+    });
+  }
+
+  const selectedOnPage = selection ? pageIds.filter((id) => selection.selected.has(id)).length : 0;
+  const allOnPage = pageIds.length > 0 && selectedOnPage === pageIds.length;
+  const lastPage = data ? Math.max(0, Math.ceil(data.total / pageSize) - 1) : 0;
+
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: `${tokens.radius.table}px`, overflow: 'hidden' }}>
+      {selection && selection.selected.size > 0 && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            px: 2,
+            py: 1,
+            borderBottom: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Typography role="status">{he.table.selectedCount(selection.selected.size)}</Typography>
+          {selection.actions}
+        </Box>
+      )}
+      <TableContainer>
+        <Table aria-label={caption}>
+          <TableHead>
+            <TableRow>
+              {selection && (
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={allOnPage}
+                    indeterminate={selectedOnPage > 0 && !allOnPage}
+                    disabled={pageIds.length === 0}
+                    onChange={() =>
+                      selection.onChange(toggled(selection.selected, pageIds, !allOnPage))
+                    }
+                    slotProps={{ input: { 'aria-label': he.table.selectAllOnPage } }}
+                  />
+                </TableCell>
+              )}
+              {columns.map((column) => (
+                <TableCell
+                  key={column.key}
+                  sx={{ fontWeight: tokens.font.weight.semibold, width: column.width }}
+                >
+                  {column.header}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>{body}</TableBody>
+        </Table>
+      </TableContainer>
+      {data && data.total > 0 && !error && (
+        <TablePagination
+          component="div"
+          count={data.total}
+          page={Math.min(page - 1, lastPage)}
+          rowsPerPage={pageSize}
+          rowsPerPageOptions={[...PAGE_SIZE_OPTIONS]}
+          onPageChange={(_event, zeroBased) => onPageChange(zeroBased + 1)}
+          onRowsPerPageChange={(event) => onPageSizeChange(Number(event.target.value))}
+          labelRowsPerPage={he.table.rowsPerPage}
+          labelDisplayedRows={({ from, to, count }) => he.table.displayedRows(from, to, count)}
+          getItemAriaLabel={(type) => PAGE_BUTTON_LABELS[type]}
+          showFirstButton
+          showLastButton
+          sx={{ borderTop: 1, borderColor: 'divider' }}
+        />
+      )}
+    </Paper>
+  );
+}
+
+const PAGE_BUTTON_LABELS = {
+  first: he.table.firstPage,
+  previous: he.table.previousPage,
+  next: he.table.nextPage,
+  last: he.table.lastPage,
+} as const;
+
+function MessageRow({ columnCount, children }: { columnCount: number; children: ReactNode }) {
+  return (
+    <TableRow>
+      <TableCell colSpan={columnCount} sx={{ borderBottom: 0 }}>
+        {children}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function toggled(selected: ReadonlySet<string>, ids: readonly string[], add: boolean) {
+  const next = new Set(selected);
+  for (const id of ids) {
+    if (add) next.add(id);
+    else next.delete(id);
+  }
+  return next;
+}
+
+/** Empties the selection when `key` changes (not on the first render). */
+function useClearSelectionOn<T>(selection: TableSelection<T> | undefined, key: string) {
+  const latest = useRef(selection);
+  const previousKey = useRef(key);
+  useEffect(() => {
+    latest.current = selection;
+  });
+  useEffect(() => {
+    if (previousKey.current === key) return;
+    previousKey.current = key;
+    const current = latest.current;
+    if (current && current.selected.size > 0) current.onChange(new Set());
+  }, [key]);
+}

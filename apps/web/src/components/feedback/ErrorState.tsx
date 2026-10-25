@@ -23,6 +23,8 @@ interface ErrorStateProps extends ErrorContent {
   onRetry?: () => void;
   /** Another button, e.g. back to the dashboard. */
   action?: ReactNode;
+  /** The title's tag: `h1` for a whole page, `h2` inside a page (e.g. a table that failed). */
+  headingComponent?: 'h1' | 'h2';
 }
 
 /** The one error look of the app: no permission, not found, server error, no connection. */
@@ -33,6 +35,7 @@ export function ErrorState({
   referenceId,
   onRetry,
   action,
+  headingComponent = 'h1',
 }: ErrorStateProps) {
   const Icon = ICONS[variant];
   return (
@@ -51,7 +54,7 @@ export function ErrorState({
       }}
     >
       <Icon sx={{ fontSize: 40, color: 'text.secondary' }} aria-hidden />
-      <Typography variant="h2" component="h1">
+      <Typography variant="h2" component={headingComponent}>
         {title}
       </Typography>
       <Typography color="text.secondary">{message}</Typography>

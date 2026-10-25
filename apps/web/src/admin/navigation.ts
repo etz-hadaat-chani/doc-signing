@@ -23,16 +23,14 @@ export interface AdminPage {
   task: string;
   /** Shown in the side menu (to `roles` of the menu entry, default: the page's roles). */
   menu?: { group: MenuGroup; icon: typeof SvgIcon; roles?: readonly UserRole[] };
+  /** Only while developing (`pnpm dev`): left out of the production build. */
+  devOnly?: boolean;
 }
 
 const ALL_STAFF = ['manager', 'officer'] as const;
 const MANAGER = ['manager'] as const;
 
-/**
- * Every page of the management area, once (PRD §7, §9). Both the side menu and the role check
- * of every route come from this list, so they can't drift apart. Menu order = list order.
- */
-export const ADMIN_PAGES: readonly AdminPage[] = [
+const ALL_PAGES: readonly AdminPage[] = [
   {
     path: '/',
     label: he.nav.dashboard,
@@ -106,7 +104,24 @@ export const ADMIN_PAGES: readonly AdminPage[] = [
     task: '5.8',
     menu: { group: 'setup', icon: ManageAccountsOutlined },
   },
+  {
+    // Every shared component with made-up data (4.2). Developers only: not in any menu.
+    path: '/demo/components',
+    label: he.nav.componentsDemo,
+    roles: MANAGER,
+    task: '4.2',
+    devOnly: true,
+  },
 ];
+
+/**
+ * Every page of the management area, once (PRD §7, §9). Both the side menu and the role check
+ * of every route come from this list, so they can't drift apart. Menu order = list order.
+ * Dev-only pages exist only in `pnpm dev` (and tests).
+ */
+export const ADMIN_PAGES: readonly AdminPage[] = import.meta.env.DEV
+  ? ALL_PAGES
+  : ALL_PAGES.filter((page) => !page.devOnly);
 
 export interface MenuItem {
   path: string;

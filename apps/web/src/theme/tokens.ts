@@ -21,6 +21,13 @@ export const tokens = {
     errorTint: '#FBEFEE',
     warning: '#8A5A00',
     warningTint: '#FDF5E6',
+    /** Status chips (components/status): done / in progress / neutral, each text on its tint. */
+    success: '#1E6B3A',
+    successTint: '#EAF4EE',
+    info: '#1D4F91',
+    infoTint: '#EDF3FB',
+    /** Background of neutral chips (text: textSecondary). */
+    neutralTint: '#F1F1EE',
   },
   font: {
     family: "'Heebo Variable', 'Heebo', Arial, sans-serif",

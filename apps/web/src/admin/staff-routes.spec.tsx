@@ -42,6 +42,25 @@ describe('staff routes', () => {
     expect(screen.queryByRole('heading', { name: he.nav.templates })).not.toBeInTheDocument();
   });
 
+  it('opens the components demo for a manager', async () => {
+    stubApi({ 'GET /api/auth/me': meAnswer(managerUser) });
+    renderRoutes('/demo/components');
+    // A lazy chunk: its first load can be slow while other suites run in parallel.
+    await screen.findByRole(
+      'heading',
+      { level: 1, name: he.nav.componentsDemo },
+      { timeout: 5000 },
+    );
+    expect(await screen.findByRole('table', { name: he.demo.tableCaption })).toBeInTheDocument();
+  });
+
+  it('shows "no permission" to an officer on the components demo', async () => {
+    stubApi({ 'GET /api/auth/me': meAnswer(officerUser) });
+    renderRoutes('/demo/components');
+    await pageTitle(he.feedback.noPermissionTitle);
+    expect(screen.queryByRole('heading', { name: he.nav.componentsDemo })).not.toBeInTheDocument();
+  });
+
   it('lets an officer open the read-only pages', async () => {
     stubApi({ 'GET /api/auth/me': meAnswer(officerUser) });
     renderRoutes('/manual/approvals');

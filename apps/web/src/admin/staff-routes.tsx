@@ -1,17 +1,44 @@
+import { type ComponentType, lazy, Suspense } from 'react';
 import type { RouteObject } from 'react-router';
+import { PageLoader } from '../components/feedback/PageLoader';
 import { RouteErrorBoundary } from '../components/feedback/RouteErrorBoundary';
 import { LoginPage } from './auth/LoginPage';
 import { RequireAuth } from './auth/RequireAuth';
 import { RequireRole } from './auth/RequireRole';
 import { AdminLayout } from './layout/AdminLayout';
-import { ADMIN_PAGES } from './navigation';
+import { ADMIN_PAGES, type AdminPage } from './navigation';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { StaffRoot } from './StaffRoot';
 
 /**
+ * The real screen of a page, by its path; the others still show PlaceholderPage. Loaded on first
+ * visit, after the role check (another role never downloads it). The demo exists only in
+ * `pnpm dev`: the production build drops this branch and never builds its chunk.
+ */
+const PAGE_COMPONENTS: Partial<Record<string, ComponentType>> = {
+  ...(import.meta.env.DEV && {
+    '/demo/components': lazy(() =>
+      import('./demo/ComponentsDemoPage').then((module) => ({
+        default: module.ComponentsDemoPage,
+      })),
+    ),
+  }),
+};
+
+function pageElement(page: AdminPage) {
+  const Page = PAGE_COMPONENTS[page.path];
+  if (!Page) return <PlaceholderPage page={page} />;
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Page />
+    </Suspense>
+  );
+}
+
+/**
  * The staff area. Every management page comes from ADMIN_PAGES and is wrapped in its role
- * check. Phase 5 swaps a PlaceholderPage for the real screen (a `lazy` route if it is large).
+ * check. Phase 5 adds each real screen to PAGE_COMPONENTS.
  */
 export const staffRoutes: RouteObject[] = [
   {
@@ -31,11 +58,7 @@ export const staffRoutes: RouteObject[] = [
                 children: [
                   ...ADMIN_PAGES.map((page) => ({
                     path: page.path,
-                    element: (
-                      <RequireRole roles={page.roles}>
-                        <PlaceholderPage page={page} />
-                      </RequireRole>
-                    ),
+                    element: <RequireRole roles={page.roles}>{pageElement(page)}</RequireRole>,
                   })),
                   { path: '*', element: <NotFoundPage /> },
                 ],

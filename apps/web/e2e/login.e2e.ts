@@ -1,24 +1,8 @@
-import { readFileSync } from 'node:fs';
 import { expect, type Page, test } from '@playwright/test';
+import { logIn, seedPassword } from './helpers';
 
 // Task 4.1: login and the role menu, against the running app (`pnpm dev` + seeded database).
 // Texts are typed out here on purpose: this checks what the user really sees.
-
-/** The seed users' password: SEED_USER_PASSWORD from the environment or the repo's .env. */
-function seedPassword(): string {
-  if (process.env.SEED_USER_PASSWORD) return process.env.SEED_USER_PASSWORD;
-  const env = readFileSync(new URL('../../../.env', import.meta.url), 'utf8');
-  const line = env.split(/\r?\n/).find((l) => l.startsWith('SEED_USER_PASSWORD='));
-  if (!line) throw new Error('Set SEED_USER_PASSWORD (as in .env) to run this test');
-  return line.slice('SEED_USER_PASSWORD='.length).trim();
-}
-
-async function logIn(page: Page, email: string, password: string) {
-  await page.goto('/login');
-  await page.getByLabel('אימייל').fill(email);
-  await page.getByLabel('סיסמה').fill(password);
-  await page.getByRole('button', { name: 'כניסה' }).click();
-}
 
 const menu = (page: Page) => page.getByRole('navigation', { name: 'תפריט ראשי' });
 

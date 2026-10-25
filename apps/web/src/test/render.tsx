@@ -2,6 +2,7 @@ import type { AuthUser } from '@doc-signing/shared';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { createMemoryRouter, type InitialEntry, type RouteObject } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { staffRoutes } from '../admin/staff-routes';
@@ -29,6 +30,14 @@ export function meAnswer(user: AuthUser | null) {
     user
       ? jsonResponse(200, user)
       : jsonResponse(401, { error: { code: 'UNAUTHORIZED', message: 'x' } });
+}
+
+/**
+ * Renders one component with the real theme, a query client and a router at `entry` (for
+ * components that read the address). Returns the router to check the address.
+ */
+export function renderComponent(ui: ReactNode, entry: InitialEntry = '/') {
+  return renderRoutes(entry, [{ path: '*', element: ui }]);
 }
 
 /** Renders routes (default: the staff area) at an address, with the real theme and cache setup. */
