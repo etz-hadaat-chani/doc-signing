@@ -35,6 +35,6 @@ import { SigningEmailQueue } from './signing-email-queue.js';
     RoundActionsRepository,
     SigningEmailQueue,
   ],
-  exports: [RoundRecipientsService, RoundSendRepository],
+  exports: [RoundRecipientsService, RoundSendRepository, RoundActionsRepository, SigningEmailQueue],
 })
 export class RoundsModule {}

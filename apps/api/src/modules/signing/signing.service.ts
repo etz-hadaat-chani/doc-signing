@@ -27,7 +27,7 @@ import { QueueService } from '../../common/queue/queue.service.js';
 import { SettingsService } from '../../common/settings/settings.service.js';
 import { answerFitKeys } from '../pdf-filler/answer-fit.js';
 import { PdfAssetsService } from '../pdf-filler/pdf-assets.service.js';
-import { renderPersonalizedPdf } from '../pdf-filler/personalized-pdf.js';
+import { renderSavedDocument } from '../pdf-filler/saved-document.js';
 import { renderSignedPdf, type SignedPdf } from '../pdf-filler/signed-pdf.js';
 import { toPosition } from '../templates/stored-position.js';
 import type { FieldPosition } from '../templates/template-changes.js';
@@ -226,18 +226,13 @@ export class SigningService {
    */
   async document(token: string, client: SigningClient): Promise<Uint8Array> {
     const link = await this.openSession(token, 'document', client);
-    const parts = await this.parts(link);
-    const { template, fieldValues } = parts;
-    const saved = fieldValues.employerSignature;
-    const drawsEmployer = template.employerSignatureMode === 'pre_signed' && saved;
-    const { pdf } = await renderPersonalizedPdf({
-      templateBytes: await this.assets.templatePdf(template.fileKey),
-      fields: parts.fields,
+    const { template, fields, fieldValues } = await this.parts(link);
+    const pdf = await renderSavedDocument(this.assets, {
+      templateFileKey: template.fileKey,
+      fields,
       employerSignatureMode: template.employerSignatureMode,
       fieldValues,
       documentDate: todayInIsrael(),
-      employerSignaturePng: drawsEmployer ? await this.assets.employerSignature(saved) : null,
-      font: this.assets.font,
     });
     await this.record(link, client, 'sign.document_viewed', {});
     return pdf;

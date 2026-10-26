@@ -29,9 +29,11 @@ export interface ActionRow extends ActionTarget {
   lastSentAt: Date | null;
 }
 
-/** Which assignments to lock: one, or a round's rows in some statuses. */
+/** Which assignments to lock: one, several (manual handling, 3.16), or a round's rows by status. */
 export type ActionRowsWhere =
-  { assignmentId: string } | { roundId: string; statuses: readonly AssignmentStatus[] };
+  | { assignmentId: string }
+  | { assignmentIds: readonly string[] }
+  | { roundId: string; statuses: readonly AssignmentStatus[] };
 
 /**
  * The round actions (3.12): locks, the facts about each assignment and every status change of
@@ -72,7 +74,12 @@ export class RoundActionsRepository {
       'assignmentId' in where
         ? await db.$queryRaw<{ id: string }[]>`
             SELECT id FROM assignments WHERE id = ${where.assignmentId}::uuid FOR UPDATE`
-        : await db.$queryRaw<{ id: string }[]>`
+        : 'assignmentIds' in where
+          ? await db.$queryRaw<{ id: string }[]>`
+              SELECT id FROM assignments WHERE id = ANY(${[...where.assignmentIds]}::uuid[])
+              ORDER BY id
+              FOR UPDATE`
+          : await db.$queryRaw<{ id: string }[]>`
             SELECT id FROM assignments
             WHERE round_id = ${where.roundId}::uuid
               AND status::text = ANY(${[...where.statuses]}::text[])

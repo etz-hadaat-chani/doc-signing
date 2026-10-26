@@ -80,6 +80,10 @@ describe('every route declares who may call it', () => {
     expect(names).toContain('ImportController.commit (POST /employees/import/:batchId/commit)');
     expect(names).toContain('AssignmentsController.unlock (POST /assignments/:id/unlock)');
     expect(names).toContain('RoundsController.cancel (POST /rounds/:id/cancel)');
+    expect(names).toContain(
+      'ManualAssignmentsController.manualSign (POST /assignments/:id/manual-sign)',
+    );
+    expect(names).toContain('ManualHandlingController.send (POST /manual-handling/send)');
   });
 
   it('public routes are only health, login, the employee signing routes (3.13) and the email webhook (3.15)', () => {

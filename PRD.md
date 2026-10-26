@@ -236,8 +236,8 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | ID | Requirement |
 | --- | --- |
 | FR-MAN-1 | A list of everyone with no email or a bounced email, across rounds. Open assignments in status `no_email` whose employee now has a valid email (for example, added by an import) are marked **"email added, ready to send"**, with a one-click send (a new invitation with a new link). The list also shows: open assignments in status **"Missing data"**, with what is missing; once the employee card is filled in they are marked **"details completed, ready to send"**, and the send checks again, saves the values (FR-RND-8) and sends, or sets "No email". And signed assignments where **"the employee corrected her email: old → new"** (FR-SGN-9), so the manager fixes it in Har Gal; worked out from the data, it disappears once the stored email matches the one she gave. |
-| FR-MAN-2 | A manager can print an employee's personalized PDF (from the saved values, FR-RND-8). |
-| FR-MAN-3 | A manager can upload a scan of a paper-signed document; the status becomes "Signed manually". No answers are stored for it: the paper itself is the record. |
+| FR-MAN-2 | A manager can print an employee's personalized PDF (from the saved values, FR-RND-8; drawn like the employee's view, today as the document date). Open assignments with saved values can be printed (Pending, Sent, Opened, No email, Invalid email; also when locked or the link expired). Missing data has nothing saved yet: complete the card and send first (it then becomes printable even without an email). Signed and cancelled assignments are not printed. Each print is logged as a document view. |
+| FR-MAN-3 | A manager can upload a scan of a paper-signed document; the status becomes "Signed manually". No answers are stored for it: the paper itself is the record. The same assignments as print (FR-MAN-2). PDF only, content checked, at most 20 MB and 100 pages. Stored like a signed file (department at send time), never over another file, with its SHA-256. All links then show "already signed" and reminders stop. It never waits for approval, and **no signed copy is emailed**: she signed the paper at the office, and there is no confirmed address (FR-SGN-6 sends to the address of the link used). |
 | FR-MAN-4 | **Office signing station:** a manager opens signing for an employee on an office computer. The employee still enters their ID number, fills in the form (FR-SGN-4) and signs themselves. |
 
 ### Administration
@@ -466,17 +466,25 @@ All management endpoints need a staff session; the role column says who may call
 | Method | Path | Purpose | Role |
 | --- | --- | --- | --- |
 | GET | `/api/assignments/:id/document` | Redirect to a short-lived link to the signed PDF; logged | M, O |
-| GET | `/api/assignments/:id/print` | Personalized PDF for paper signing | M |
+| GET | `/api/assignments/:id/print` | Personalized PDF for paper signing (FR-MAN-2), inline with a Hebrew file name, never cached; logged. 409 for missing data, signed or cancelled | M |
 | POST | `/api/assignments/:id/remind` | Remind this employee now (Sent or Opened; not locked; not within 1 hour of the last email); 202 | M |
 | POST | `/api/assignments/:id/resend` | A new invitation after a failed send, or after a wrong email was fixed (the address must differ from the one that failed); 202. Sent or Opened rows get a reminder instead; no email or missing data rows are sent from manual handling | M |
 | POST | `/api/assignments/:id/unlock` | Unlock after 5 wrong ID attempts (at most twice per assignment; not after expiry); returns the unlocks left | M |
 | POST | `/api/assignments/:id/cancel` | Cancel for this employee (any open status, also in a draft); every link of hers shows "cancelled" | M |
-| POST | `/api/assignments/:id/manual-sign` | Upload a scanned paper signature | M |
+| POST | `/api/assignments/:id/manual-sign` | Upload a scanned paper signature (multipart `file`, PDF, FR-MAN-3): status "Signed manually"; 201 with the file's SHA-256. Same statuses as print | M |
 | POST | `/api/assignments/:id/kiosk` | Open a one-time signing session at the office signing station | M |
 | GET | `/api/assignments/:id/responses` | What the employee filled in (drawings as short-lived links); logged | M, O |
 | POST | `/api/assignments/:id/approve` | Approve a signed document waiting for approval; logged | M |
 | POST | `/api/assignments/:id/return` | Body `{ note }` (required, up to 500 characters). Return for correction: cancels the assignment; logged | M |
 | POST | `/api/assignments/:id/send-again` | After a return: create and send the linked one-employee correction round (FR-TRK-6); 409 if one already exists. Returns the new round | M |
+
+### Manual handling
+
+| Method | Path | Purpose | Role |
+| --- | --- | --- | --- |
+| GET | `/api/manual-handling?roundId=&dept=&kind=&page=` | The FR-MAN-1 list across sent rounds: no email, invalid email, missing data (names of what is missing) and signed documents whose employee gave another email; each row says whether it is ready to send ("email added", "email fixed", "details completed"). No search text | M |
+| POST | `/api/manual-handling/search` | The same list searched by name, employee number or full ID number: body `{ q, roundId?, dept?, kind?, page?, pageSize? }` | M |
+| POST | `/api/manual-handling/send` | Body `{ assignmentIds }` (1–100): send the ready rows, a normal invitation with a new link; missing data is checked again and its values saved (no valid email → No email). All rows or none: 409 lists each refused row | M |
 
 ### Approvals
 

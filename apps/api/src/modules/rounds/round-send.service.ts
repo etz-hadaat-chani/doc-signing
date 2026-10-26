@@ -18,6 +18,7 @@ import type { TextFitCache } from '../pdf-filler/pdf-text.js';
 import { toPosition } from '../templates/stored-position.js';
 import { TemplatesRepository } from '../templates/templates.repository.js';
 import { type TemplateActor, templateUsability } from '../templates/templates.service.js';
+import type { RecipientEmployee } from './recipient-outcome.js';
 import { planRoundSend } from './round-send-plan.js';
 import { RoundSendRepository, type SendableRow } from './round-send.repository.js';
 import { type CandidateTemplate, templateRef } from './round-templates.js';
@@ -72,23 +73,7 @@ export class RoundSendService {
         assignments: rows.map((row) => ({
           id: row.id,
           status: row.status,
-          employee: {
-            id: row.employee.id,
-            employeeNumber: row.employee.employeeNumber,
-            firstName: row.employee.firstName,
-            lastName: row.employee.lastName,
-            isActive: row.employee.isActive,
-            emailStatus: row.employee.emailStatus,
-            department: row.department,
-            values: {
-              firstName: row.employee.firstName,
-              lastName: row.employee.lastName,
-              idNumber: row.employee.idNumber,
-              employeeNumber: row.employee.employeeNumber,
-              email: row.employee.email,
-              details: detailsFromRow(row.employee),
-            },
-          },
+          employee: sendableRecipient(row),
           template: mustGet(templates.byId, row.templateId),
         })),
         sendDay: todayInIsrael(sentAt),
@@ -219,6 +204,32 @@ export class RoundSendService {
     const version = new Map(rows.map((row) => [row.id, row.version]));
     return new Map(ids.map((id) => [id, version.get(last.get(id) ?? id) ?? 0]));
   }
+}
+
+/**
+ * The employee of an assignment as the values step reads it: as stored now, with the
+ * assignment's own department (at creation). Also used by the manual-handling send (3.16).
+ */
+export function sendableRecipient(
+  row: Pick<SendableRow, 'department' | 'employee'>,
+): RecipientEmployee {
+  return {
+    id: row.employee.id,
+    employeeNumber: row.employee.employeeNumber,
+    firstName: row.employee.firstName,
+    lastName: row.employee.lastName,
+    isActive: row.employee.isActive,
+    emailStatus: row.employee.emailStatus,
+    department: row.department,
+    values: {
+      firstName: row.employee.firstName,
+      lastName: row.employee.lastName,
+      idNumber: row.employee.idNumber,
+      employeeNumber: row.employee.employeeNumber,
+      email: row.employee.email,
+      details: detailsFromRow(row.employee),
+    },
+  };
 }
 
 function mustGet<T>(map: ReadonlyMap<string, T>, key: string): T {

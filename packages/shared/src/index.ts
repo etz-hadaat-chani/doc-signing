@@ -8,6 +8,7 @@ export * from './enums.js';
 export * from './errors.js';
 export * from './field-values.js';
 export * from './id-number.js';
+export * from './manual-handling.js';
 export * from './pagination.js';
 export * from './round-actions.js';
 export * from './rounds.js';

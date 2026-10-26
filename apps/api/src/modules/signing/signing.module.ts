@@ -21,5 +21,6 @@ import { SigningSessionService } from './signing-session.service.js';
     SigningSessionService,
     SignedFilesService,
   ],
+  exports: [SignedFilesService],
 })
 export class SigningModule {}

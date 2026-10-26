@@ -11,6 +11,7 @@ import { StorageModule } from './common/storage/storage.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { EmployeesModule } from './modules/employees/employees.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { ManualHandlingModule } from './modules/manual-handling/manual-handling.module.js';
 import { RoundsModule } from './modules/rounds/rounds.module.js';
 import { SettingsApiModule } from './modules/settings/settings.module.js';
 import { SigningModule } from './modules/signing/signing.module.js';
@@ -38,6 +39,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
     SettingsApiModule,
     SigningModule,
     WebhooksModule,
+    ManualHandlingModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })

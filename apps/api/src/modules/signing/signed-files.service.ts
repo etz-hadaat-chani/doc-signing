@@ -59,14 +59,22 @@ export class SignedFilesService {
   constructor(private readonly storage: StorageAdapter) {}
 
   /** A drawing (PNG) at `key`, or its next free `-n` version. */
-  async storeImage(key: string, png: Uint8Array): Promise<StoredFile> {
+  storeImage(key: string, png: Uint8Array): Promise<StoredFile> {
+    return this.storeFile(key, png, 'image/png');
+  }
+
+  /**
+   * A file stored as it is (a drawing, a scanned paper document, 3.16) at `key`, or its next free
+   * `-n` version: the same bytes already there → kept (a retry); other bytes → left, next key.
+   */
+  async storeFile(key: string, bytes: Uint8Array, contentType: string): Promise<StoredFile> {
     const strayKeys: string[] = [];
     for (let version = 1; version <= MAX_VERSIONS; version++) {
       const target = versionKey(key, version);
-      const stored = await this.tryUpload(target, png, 'image/png');
+      const stored = await this.tryUpload(target, bytes, contentType);
       if (stored) return { ...stored, reused: false, strayKeys };
       const existing = await this.storage.download(target);
-      if (Buffer.from(png).equals(existing)) {
+      if (Buffer.from(bytes).equals(existing)) {
         return {
           key: target,
           sha256: sha256(existing),
@@ -77,7 +85,7 @@ export class SignedFilesService {
       }
       strayKeys.push(target);
     }
-    throw new Error('Too many stored versions of a drawing');
+    throw new Error('Too many stored versions of a file');
   }
 
   /**

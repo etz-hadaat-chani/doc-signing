@@ -63,6 +63,9 @@ export const AUDIT_ACTIONS = [
   'assignment.signed',
   'assignment.signed_copy_sent',
   'assignment.signed_copy_failed',
+  'assignment.manual_send',
+  'assignment.printed',
+  'assignment.signed_manual',
   'email.bounced',
   'email.soft_bounced',
   'sign.verified',
@@ -393,6 +396,36 @@ export interface AuditDetailsMap {
     emailMessageId: string;
     reason: 'permanent' | 'temporary_last_attempt' | 'unexpected_last_attempt';
     providerCode: string | null;
+  };
+  // Manual handling (3.16): the manager is the actor, the assignment the entity. Ids, statuses
+  // and file facts only: never an address, a name, a saved value or the uploaded file's name.
+  /**
+   * Sent from manual handling: `pending` with a queued invitation, or `no_email` (details
+   * completed, still no valid email). `valuesSaved`: the values were saved now (`missing_data`).
+   */
+  'assignment.manual_send': {
+    roundId: string;
+    fromStatus: AssignmentStatus;
+    toStatus: 'pending' | 'no_email';
+    emailMessageId: string | null;
+    valuesSaved: boolean;
+  };
+  /** The personalized PDF was printed (a document view: it holds the ID number). */
+  'assignment.printed': { roundId: string; templateId: string };
+  /**
+   * A scanned paper document was stored: `signed_manual` (FR-MAN-3). No answers, no signed copy.
+   * `fileReused`: the same bytes were already at the key (a retried upload); `strayFileKeys`:
+   * other files found at the key, left as they are.
+   */
+  'assignment.signed_manual': {
+    roundId: string;
+    fromStatus: AssignmentStatus;
+    signMethod: 'manual';
+    fileSha256: string;
+    fileSize: number;
+    pageCount: number;
+    fileReused: boolean;
+    strayFileKeys: string[];
   };
   // Bounce notices (3.15): system actor, entity = the assignment of the email that bounced. Ids
   // and counts only: never the address, a name or the provider's text.
