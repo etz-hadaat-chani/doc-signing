@@ -231,6 +231,90 @@ export const he = {
     },
   },
 
+  /**
+   * The Excel import (A8). Row reasons come from the API (shared IMPORT_ISSUE_MESSAGES); file and
+   * 409 errors from shared ERROR_MESSAGES; field names from `employees.fields`.
+   */
+  employeeImport: {
+    steps: ['העלאת קובץ', 'בדיקה ואישור', 'סיום'],
+    stepsLabel: 'שלבי הייבוא',
+    accept: 'Excel (.xlsx)',
+    uploadIntro: 'יש להעלות את קובץ העובדים מהר גל כמו שהוא, בלי לשנות בו דבר.',
+    nothingSavedYet: 'בשלב הזה רק בודקים את הקובץ. שום פרט של עובד לא משתנה עד שתאשרו את הייבוא.',
+    check: 'בדיקת הקובץ',
+    checking: 'בודקים את הקובץ…',
+    uploadFailed: 'לא ניתן לבדוק את הקובץ',
+    columns: (names: string) => `העמודות: ${names}`,
+    previewTitle: 'תוצאות הבדיקה',
+    fileName: 'הקובץ',
+    confirmableUntil: (date: string, time: string) =>
+      `אפשר לאשר את הייבוא עד ${date} בשעה ${time}. אחר כך יש להעלות את הקובץ שוב.`,
+    leaveNote:
+      'אם תצאו מהמסך לפני האישור, שום דבר לא יישמר ושום דבר לא יאבד: הקובץ נבדק בשרת בלבד, ואפשר להעלות אותו שוב בכל עת.',
+    countsLabel: 'סיכום',
+    counts: {
+      rowsNew: 'עובדים חדשים',
+      rowsUpdated: 'עובדים שיתעדכנו',
+      rowsUnchanged: 'ללא שינוי',
+      rowsFailed: 'שורות עם שגיאות',
+      departmentsNew: 'מחלקות חדשות',
+      departmentsRenamed: 'מחלקות ששמן ישתנה',
+    },
+    doneCounts: {
+      rowsNew: 'עובדים נוספו',
+      rowsUpdated: 'עובדים עודכנו',
+      rowsUnchanged: 'ללא שינוי',
+      rowsFailed: 'שורות לא יובאו',
+      departmentsNew: 'מחלקות נוספו',
+      departmentsRenamed: 'מחלקות ששמן שונה',
+    },
+    reportLabel: 'פירוט הבדיקה',
+    tabs: {
+      new: 'עובדים חדשים',
+      updated: 'עובדים שיתעדכנו',
+      errors: 'שורות עם שגיאות',
+      warnings: 'אזהרות',
+      departments: 'מחלקות',
+    },
+    tabWithCount: (label: string, count: string) => `${label} (${count})`,
+    tableColumns: {
+      row: 'שורה',
+      employeeNumber: 'מספר עובד',
+      name: 'שם',
+      department: 'מחלקה',
+      emailStatus: 'מייל',
+      changes: 'שינויים',
+      reason: 'סיבה',
+    },
+    warningsHint: 'שורות עם אזהרה ייובאו. רק הערך שאינו תקין לא יישמר.',
+    newDepartments: 'מחלקות חדשות',
+    renamedDepartments: 'מחלקות ששמן ישתנה',
+    arrow: '←',
+    changed: 'השתנה',
+    errorsSkipped: (count: string) =>
+      `${count} שורות עם שגיאות לא ייובאו. אפשר לתקן אותן בהר גל ולייבא שוב.`,
+    oneErrorSkipped: 'שורה אחת עם שגיאה לא תיובא. אפשר לתקן אותה בהר גל ולייבא שוב.',
+    nothingToImport: 'אין בקובץ שינויים לייבא: כל העובדים בו כבר מעודכנים.',
+    uploadOther: 'העלאת קובץ אחר',
+    uploadAgain: 'העלאת הקובץ שוב',
+    confirm: 'אישור הייבוא',
+    dialogTitle: 'לייבא את הקובץ?',
+    dialogNew: (count: string) => `ייווספו ${count} עובדים חדשים.`,
+    dialogUpdated: (count: string) => `יעודכנו ${count} עובדים.`,
+    dialogSkipped: (count: string) => `${count} שורות עם שגיאות לא ייובאו.`,
+    dialogNewDepartments: 'ייווספו המחלקות:',
+    dialogRenamedDepartments: 'ישתנה שם המחלקות:',
+    nothingSent: 'שום דבר לא נשלח לעובדים.',
+    dialogConfirm: 'ייבוא',
+    doneTitle: 'הייבוא הושלם',
+    doneNotify: 'הייבוא הושלם',
+    doneManual:
+      'עובדים שנוסף להם אימייל מופיעים בטיפול ידני כ"נוסף אימייל, מוכן לשליחה". המסמך יישלח אליהם רק כשתלחצו על שליחה.',
+    toEmployees: 'לרשימת העובדים',
+    toManual: 'לטיפול ידני',
+    anotherImport: 'ייבוא נוסף',
+  },
+
   /** The components demo page (4.2, development only). Every name and number there is made up. */
   demo: {
     intro: 'דף לבדיקת הרכיבים המשותפים. כל הנתונים כאן מומצאים. הדף קיים רק בסביבת הפיתוח.',

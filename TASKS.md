@@ -745,11 +745,26 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
   - **Every later e2e test that creates employees:** create them without an email and mark them inactive at the end (`afterAll`, also after a failure), so a real "all employees" round can never pick them; unique made-up numbers (nothing is deleted); Hebrew-letter names (digits inside a Hebrew name show jumbled); never print employee data.
   - The card's `idNumber` is manager-only: a screen that needs it for officers must not exist; use the employee id (uuid).
 
-### [ ] 5.3 Import wizard (A8)
+### [x] 5.3 Import wizard (A8)
 - **Build:** Upload, error report, preview, confirm.
 - **Depends on:** 5.2, 3.4
 - **Note (3.4):** A preview can be confirmed for 24 hours (`IMPORT_PREVIEW_MAX_AGE_HOURS`); show that, and on 409 `IMPORT_STALE` / `IMPORT_EXPIRED` / `IMPORT_FILE_MISSING` / `IMPORT_ALREADY_DONE` ask the manager to upload the file again. The confirm has no body: confirming the import confirms the new and renamed departments the preview listed.
 - **Done when:** Full import from the UI with the test file.
+- **Done (rules):**
+  - No API change. Web `admin/employees/import/`: `EmployeeImportPage` (h1 + 3-step `Stepper`), `UploadStep`, `PreviewStep`, `ImportReport`, `ImportCounts`, `DoneStep`, `import.api.ts`, `import-view.ts` (pure); lazy in `PAGE_COMPONENTS` at `/employees/import` (manager only through `ADMIN_PAGES`; officer → "אין לך הרשאה", the chunk never loads). Texts in `he.employeeImport`. No new tokens.
+  - `api/http.ts` `request()`: a `FormData` body is sent as it is (multipart, the browser sets the `Content-Type`); anything else is still JSON.
+  - The wizard's step, the report, the chosen tab and every page are in component memory only: nothing in the address, nothing in browser storage. Leaving before the confirm changes nothing (said on the screen; no "leave?" prompt).
+  - Upload: `FileDropZone` (`.xlsx`, `IMPORT_MAX_FILE_BYTES`), "בדיקת הקובץ", a "checking" status; a refused file → error `Alert` with our Hebrew text by code, plus `details.columns` for missing / repeated columns; the file stays chosen.
+  - Preview: count tiles (department tiles only when there are any); "אפשר לאשר עד DD/MM/YYYY בשעה HH:MM", counted 24 h from when the answer arrived (the answer has no time of its own; the server still decides with `IMPORT_EXPIRED`). Tabs, only for parts with entries: new, updated, errors, warnings, departments; each list a `DataTable` paged in memory (`pageOf`). Change lines in Hebrew (`parseChangeLine`): field name from `he.employees.fields`, values in `<bdi>`, `(none)` → "—", `changed` → "השתנה", email status by label, department code → "15 - name"; the screen shows "←" (old on the right in RTL); the API text and audit keep "→". Unknown lines as they came.
+  - **Confirm with error rows is allowed** (they are skipped, said next to the button: "N שורות עם שגיאות לא ייובאו"); not allowed when nothing would change (no new, updated or department change). Dialog: counts, new and renamed departments, "שום דבר לא נשלח לעובדים". `busy` + a ref guard: a double click commits once. The four 409s → the dialog closes, an error `Alert` with "העלאת הקובץ שוב" (back to step 1, file cleared), confirm disabled; any other failure → `notify.error`, the preview stays (a retry is safe).
+  - Done: the commit's counts, "nothing sent; emails added wait in manual handling as ready to send", links to `/employees` and `/manual`, "ייבוא נוסף". Invalidates `employeeKeys.all`, `employeeKeys.departments`, `dashboardKeys.all`.
+  - Tests: web 239 unit (was 208): `ImportPage.spec` (20), `import-view.spec` (10), `http.spec` (+1). Playwright `e2e/employee-import.e2e.ts` (3): import 2 fake employees + 1 error row from the UI, a second file shows "יישוב: old ← new", a preview committed elsewhere first → 409 → "upload again", officer → no permission. `exceljs` 4.4.0 added as a web devDependency (same version as the API) so the test builds its own files.
+- **Note for later tasks:**
+  - **Every later e2e test that imports:** a) departments are matched by code, so a wrong name RENAMES a real department: read `GET /api/departments` and write an existing department with exactly its current name, never an invented code, and stop before the confirm if the preview shows a department change (`[data-count="departmentsNew"]` / `departmentsRenamed`). b) Clearly fake employees only (Hebrew-letter names, unique made-up numbers, generated valid ID numbers, no email), and mark every one inactive in `afterAll` through `PATCH /api/employees/:id` (also after a failure): an import creates active employees.
+  - The e2e files can't import `@doc-signing/shared` (it resolves to its built `dist`): the import e2e lists the Har Gal headers itself.
+  - 5.4 / 5.8 uploads: send a `FormData` through `staffRequest`, as `import.api.ts` does. `pageOf` + `DataTable` for any list that arrives whole.
+  - 5.7: the done page links to `/manual`; employees whose email an import added show there as "email added, ready to send".
+  - One fake employee from an earlier 5.2 e2e run (number starting 99) is still active in the local database; 5.2's `afterAll` should be checked if it shows up again.
 
 ### [ ] 5.4 Templates (A9)
 - **Build:** List, upload, department picker, number fields for positions, live PDF preview.

@@ -23,6 +23,11 @@ const PAGE_COMPONENTS: Partial<Record<string, ComponentType>> = {
   '/employees': lazy(() =>
     import('./employees/EmployeesPage').then((module) => ({ default: module.EmployeesPage })),
   ),
+  '/employees/import': lazy(() =>
+    import('./employees/import/EmployeeImportPage').then((module) => ({
+      default: module.EmployeeImportPage,
+    })),
+  ),
   '/employees/new': lazy(() =>
     import('./employees/EmployeeFormPage').then((module) => ({
       default: module.EmployeeFormPage,

@@ -235,6 +235,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.1.2
         version: 6.1.2(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+      exceljs:
+        specifier: 4.4.0
+        version: 4.4.0
       jsdom:
         specifier: 30.1.2
         version: 30.1.2(@noble/hashes@1.8.0)

@@ -6,7 +6,7 @@ export interface RequestOptions<T> {
   /** Checks the answer; a 204 / empty answer is checked as `undefined` (use `z.undefined()`). */
   schema: ZodType<T>;
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-  /** Sent as JSON. */
+  /** Sent as JSON; a FormData (file upload) is sent as it is, as multipart. */
   body?: unknown;
   signal?: AbortSignal;
 }
@@ -19,7 +19,9 @@ export interface RequestOptions<T> {
 export async function request<T>(path: `/api/${string}`, options: RequestOptions<T>): Promise<T> {
   const { schema, method = 'GET', body, signal } = options;
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const isForm = body instanceof FormData;
+  // For a FormData the browser sets the multipart Content-Type with its boundary.
+  if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
 
   let response: Response;
   try {
@@ -27,7 +29,7 @@ export async function request<T>(path: `/api/${string}`, options: RequestOptions
       method,
       headers,
       credentials: 'same-origin',
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined || isForm ? body : JSON.stringify(body),
       signal,
     });
   } catch (error) {

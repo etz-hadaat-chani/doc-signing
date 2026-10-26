@@ -42,6 +42,17 @@ describe('request', () => {
     });
   });
 
+  it('sends a FormData as it is, leaving the multipart Content-Type to the browser', async () => {
+    const mock = stubFetch(() => jsonResponse(200, { name: 'a' }));
+    const form = new FormData();
+    form.append('file', new Blob(['x']), 'a.xlsx');
+    await request('/api/x', { schema: nameSchema, method: 'POST', body: form });
+
+    const init = mock.mock.calls[0]?.[1];
+    expect(init?.body).toBe(form);
+    expect(init?.headers).toEqual({ Accept: 'application/json' });
+  });
+
   it('reads an empty 204 answer as undefined', async () => {
     stubFetch(() => new Response(null, { status: 204 }));
     await expect(
