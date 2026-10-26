@@ -142,6 +142,52 @@ function stateColumns(now: Date): Prisma.Sql {
     cr.id AS "correctionRoundId", cr.name AS "correctionRoundName"`;
 }
 
+/** The employee table's FROM (without the joins only the columns need) and WHERE. */
+function assignmentTableParts(
+  filter: Pick<AssignmentFilter, 'roundId' | 'statuses' | 'departmentId' | 'q'>,
+  now: Date,
+): { from: Prisma.Sql; where: Prisma.Sql } {
+  const conditions = [Prisma.sql`a.round_id = ${filter.roundId}::uuid`];
+  if (filter.departmentId !== undefined) {
+    conditions.push(Prisma.sql`a.department_id = ${filter.departmentId}::uuid`);
+  }
+  if (filter.q !== undefined) conditions.push(searchCondition(filter.q));
+  if (filter.statuses !== null) {
+    conditions.push(Prisma.sql`${displayStatusSql(now)} = ANY(${filter.statuses}::text[])`);
+  }
+  return {
+    from: Prisma.sql`
+      FROM assignments a
+      JOIN rounds r ON r.id = a.round_id
+      JOIN employees e ON e.id = a.employee_id
+      ${lastInviteJoin}`,
+    where: Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`,
+  };
+}
+
+/** The employee table's rows in its order (department code, last, first name), no paging. */
+function assignmentTableSelect(from: Prisma.Sql, where: Prisma.Sql, now: Date): Prisma.Sql {
+  return Prisma.sql`
+    SELECT ${stateColumns(now)},
+           e.id AS "employeeId", e.employee_number AS "employeeNumber",
+           e.first_name AS "firstName", e.last_name AS "lastName",
+           a.locked_at IS NOT NULL AS locked, a.reminder_count AS "reminderCount",
+           a.last_reminder_at AS "lastReminderAt",
+           EXISTS (SELECT 1 FROM assignment_responses ar
+                   WHERE ar.assignment_id = a.id
+                     AND ar.key NOT IN (${EMAIL_CHOICE_KEY}, ${EMAIL_ANSWER_KEY})) AS "hasAnswers",
+           rc.value AS "emailChoice", re.value AS "emailGiven",
+           (re.value IS NOT NULL AND re.value IS DISTINCT FROM e.email) AS "emailDiffers",
+           a.cancelled_at AS "cancelledAt", r.sent_at AS "roundSentAt"
+    ${from}
+    JOIN departments d ON d.id = a.department_id
+    LEFT JOIN assignment_responses rc ON rc.assignment_id = a.id AND rc.key = ${EMAIL_CHOICE_KEY}
+    LEFT JOIN assignment_responses re ON re.assignment_id = a.id AND re.key = ${EMAIL_ANSWER_KEY}
+    LEFT JOIN rounds cr ON cr.correction_of_assignment_id = a.id
+    ${where}
+    ORDER BY d.code, e.last_name, e.first_name, a.id`;
+}
+
 /** `count(*)` comes back as bigint. */
 function toCounts<T extends { count: bigint }>(
   rows: T[],
@@ -257,44 +303,27 @@ export class TrackingRepository {
     filter: AssignmentFilter,
     now: Date,
   ): Promise<{ rows: AssignmentTableRow[]; total: number }> {
-    const conditions = [Prisma.sql`a.round_id = ${filter.roundId}::uuid`];
-    if (filter.departmentId !== undefined) {
-      conditions.push(Prisma.sql`a.department_id = ${filter.departmentId}::uuid`);
-    }
-    if (filter.q !== undefined) conditions.push(searchCondition(filter.q));
-    if (filter.statuses !== null) {
-      conditions.push(Prisma.sql`${displayStatusSql(now)} = ANY(${filter.statuses}::text[])`);
-    }
-    const where = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
-    const from = Prisma.sql`
-      FROM assignments a
-      JOIN rounds r ON r.id = a.round_id
-      JOIN employees e ON e.id = a.employee_id
-      ${lastInviteJoin}`;
+    const { from, where } = assignmentTableParts(filter, now);
     const [rows, [count]] = await this.prisma.$transaction([
       this.prisma.$queryRaw<AssignmentTableRow[]>`
-        SELECT ${stateColumns(now)},
-               e.id AS "employeeId", e.employee_number AS "employeeNumber",
-               e.first_name AS "firstName", e.last_name AS "lastName",
-               a.locked_at IS NOT NULL AS locked, a.reminder_count AS "reminderCount",
-               a.last_reminder_at AS "lastReminderAt",
-               EXISTS (SELECT 1 FROM assignment_responses ar
-                       WHERE ar.assignment_id = a.id
-                         AND ar.key NOT IN (${EMAIL_CHOICE_KEY}, ${EMAIL_ANSWER_KEY})) AS "hasAnswers",
-               rc.value AS "emailChoice", re.value AS "emailGiven",
-               (re.value IS NOT NULL AND re.value IS DISTINCT FROM e.email) AS "emailDiffers",
-               a.cancelled_at AS "cancelledAt", r.sent_at AS "roundSentAt"
-        ${from}
-        JOIN departments d ON d.id = a.department_id
-        LEFT JOIN assignment_responses rc ON rc.assignment_id = a.id AND rc.key = ${EMAIL_CHOICE_KEY}
-        LEFT JOIN assignment_responses re ON re.assignment_id = a.id AND re.key = ${EMAIL_ANSWER_KEY}
-        LEFT JOIN rounds cr ON cr.correction_of_assignment_id = a.id
-        ${where}
-        ORDER BY d.code, e.last_name, e.first_name, a.id
+        ${assignmentTableSelect(from, where, now)}
         LIMIT ${filter.pageSize} OFFSET ${(filter.page - 1) * filter.pageSize}`,
       this.prisma.$queryRaw<{ total: bigint }[]>`SELECT count(*) AS total ${from} ${where}`,
     ]);
     return { rows, total: Number(count?.total ?? 0) };
+  }
+
+  /**
+   * Every row of the employee table that matches the filters, in the table's order, in one
+   * query (the status export, 3.17): the same columns, display status and department at send.
+   */
+  async assignmentRows(
+    filter: Omit<AssignmentFilter, 'q' | 'page' | 'pageSize'>,
+    now: Date,
+  ): Promise<AssignmentTableRow[]> {
+    const { from, where } = assignmentTableParts({ ...filter, q: undefined }, now);
+    return this.prisma.$queryRaw<AssignmentTableRow[]>`
+      ${assignmentTableSelect(from, where, now)}`;
   }
 
   /** Sending and active rounds, newest send first. */

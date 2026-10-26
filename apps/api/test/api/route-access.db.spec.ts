@@ -98,6 +98,11 @@ describe('every route declares who may call it', () => {
     expect(names).toContain(
       'ApprovalAssignmentsController.sendAgain (POST /assignments/:id/send-again)',
     );
+    expect(names).toContain('RoundFilesController.export (GET /rounds/:id/export)');
+    expect(names).toContain('RoundFilesController.download (GET /rounds/:id/download)');
+    expect(names).toContain(
+      'AssignmentDocumentController.document (GET /assignments/:id/document)',
+    );
   });
 
   it('public routes are only health, login, the employee signing routes (3.13), the office kiosk (3.16) and the email webhook (3.15)', () => {

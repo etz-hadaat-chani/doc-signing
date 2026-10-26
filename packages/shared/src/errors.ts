@@ -128,6 +128,11 @@ export const ERROR_MESSAGES = {
   DRAWING_IMAGE_DIMENSIONS_INVALID: 'גודל משטח הציור אינו מתאים. יש לרענן את הדף ולצייר שוב',
   DRAWING_EMPTY: 'לא נמצא ציור. יש לצייר בתוך המסגרת',
   HR_CONTACT_PHONE_OR_EMAIL: 'יש למלא טלפון או אימייל של משאבי אנוש (או את שניהם)',
+  // Exports and file access (3.17).
+  DOCUMENT_NOT_SIGNED: 'אין עדיין מסמך חתום לעובד הזה',
+  SIGNED_FILE_NOT_FOUND: 'הקובץ החתום לא נמצא באחסון. יש לפנות לתמיכה',
+  ROUND_HAS_NO_SIGNED_FILES: 'אין עדיין מסמכים חתומים להורדה בסבב הזה (או במחלקה שנבחרה)',
+  DOWNLOAD_IN_PROGRESS: 'הורדת קובץ מסמכים כבר מתבצעת. נא לחכות שתסתיים ולנסות שוב',
   // Employee signing (3.13): read by the employee, so short and plain, with what to do next.
   SIGN_LINK_NOT_FOUND: 'הקישור אינו תקין. יש לפתוח את הקישור מהמייל שקיבלת',
   SIGN_ALREADY_SIGNED: 'המסמך כבר נחתם. אין צורך לחתום שוב',

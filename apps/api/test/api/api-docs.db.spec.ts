@@ -115,6 +115,9 @@ describe('Swagger page outside production', () => {
         'POST /api/assignments/{id}/approve',
         'POST /api/assignments/{id}/return',
         'POST /api/assignments/{id}/send-again',
+        'GET /api/rounds/{id}/export',
+        'GET /api/rounds/{id}/download',
+        'GET /api/assignments/{id}/document',
       ].sort(),
     );
   });

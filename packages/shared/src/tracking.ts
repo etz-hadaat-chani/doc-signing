@@ -53,13 +53,13 @@ export type RoundListQuery = z.output<typeof roundListQuerySchema>;
  * the department at send time (`assignments.department_id`), `approval=waiting` (= status
  * `waiting_for_approval`) and `returned=true` (= status `returned_for_correction`).
  */
-const assignmentFilterShape = {
-  ...pageQuerySchema.shape,
+export const assignmentFiltersShape = {
   status: optionalQuery(statusListSchema),
   dept: optionalQuery(z.uuid()),
   approval: optionalQuery(z.literal('waiting')),
   returned: optionalQuery(flagSchema),
 };
+const assignmentFilterShape = { ...pageQuerySchema.shape, ...assignmentFiltersShape };
 
 /**
  * `GET /api/rounds/:id/assignments`: filters and paging only. Search text is never in a URL

@@ -2,6 +2,7 @@ import type {
   AlreadySignedChoice,
   AssignmentStatus,
   DailyRemindSkipReason,
+  DisplayStatus,
   EmailChoice,
   EmailMessageType,
   EmailStatus,
@@ -12,6 +13,7 @@ import type {
   RoundSettings,
   RoundStatus,
   SignLinkState,
+  SignMethod,
   SignRateScope,
   UserRole,
 } from '@doc-signing/shared';
@@ -51,6 +53,8 @@ export const AUDIT_ACTIONS = [
   'round.assignments_viewed',
   'round.remind_queued',
   'round.cancelled',
+  'round.exported',
+  'round.files_downloaded',
   'reminders.daily_run',
   'assignment.invite_sent',
   'assignment.invite_failed',
@@ -71,6 +75,7 @@ export const AUDIT_ACTIONS = [
   'assignment.approved',
   'assignment.returned',
   'assignment.sent_again',
+  'document.view',
   'email.bounced',
   'email.soft_bounced',
   'sign.verified',
@@ -279,6 +284,26 @@ export interface AuditDetailsMap {
     cancelled: number;
     byStatus: Partial<Record<AssignmentStatus, number>>;
     signedUntouched: number;
+  };
+  // Exports (3.17): manager or officer actor, entity = the round. Filters, ids and counts only.
+  /** The status export to Excel (FR-TRK-4) with the filters it used. */
+  'round.exported': {
+    statuses: DisplayStatus[] | null;
+    departmentId: string | null;
+    rowCount: number;
+    answerColumnCount: number;
+  };
+  /**
+   * The ZIP of signed files (FR-TRK-4), written when the stream ends. `completed` false: the
+   * reader left or storage failed midway. `missingAssignmentIds`: files not found in storage
+   * (listed in the ZIP's note file).
+   */
+  'round.files_downloaded': {
+    departmentId: string | null;
+    fileCount: number;
+    missingCount: number;
+    missingAssignmentIds: string[];
+    completed: boolean;
   };
   /**
    * One run of the daily reminder job (3.14; system actor, entity `job`, id NULL). Counts and
@@ -498,6 +523,8 @@ export interface AuditDetailsMap {
     templateId: string;
     status: AssignmentStatus;
   };
+  /** A signed document was opened through a short-lived link (FR-TRK-3); entity = the assignment. */
+  'document.view': { roundId: string; status: AssignmentStatus; signMethod: SignMethod | null };
   // Bounce notices (3.15): system actor, entity = the assignment of the email that bounced. Ids
   // and counts only: never the address, a name or the provider's text.
   /**

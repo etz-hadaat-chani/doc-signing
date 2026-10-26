@@ -30,7 +30,7 @@ import type { TemplateActor } from '../templates/templates.service.js';
 import { RoundsReadService } from './rounds-read.service.js';
 
 /** The reader. AccessGuard sets `request.auth` on every @Roles route. */
-function actorOf(request: AuthRequest): TemplateActor {
+export function actorOf(request: AuthRequest): TemplateActor {
   if (!request.auth) throw new Error('RoundsReadController used without a session check');
   return { userId: request.auth.user.id, ip: request.ip ?? null };
 }
