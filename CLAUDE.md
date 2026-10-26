@@ -92,8 +92,10 @@ docker-compose.yml      # postgres, minio, mailpit
 - Dates stored UTC; displayed `DD/MM/YYYY` in `Asia/Jerusalem`.
 - Excel exports: neutralize cells starting with `= + - @`. ZIP names UTF-8.
 - Tests: unit tests for logic, API tests for every endpoint's happy path + permissions. Tests must pass before commit.
-- While working, run only the test files you create or change (`pnpm --filter @doc-signing/api exec vitest run <file>`, or `vitest run --changed`). Run the full set only once, at the end, right before the commit: CI runs everything, and only a full run catches a change that breaks older code. If it fails, fix it, run only the failing files again, then the full set once more.
-- Before every commit run all four checks CI runs: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`. ESLint doesn't check formatting; fix it with `pnpm format`, then lint again (Prettier may rewrap a line away from its `eslint-disable-next-line` comment).
+- While working: run only the test files you create or change (`pnpm --filter @doc-signing/api exec vitest run <file>`).
+- Before every commit run: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, the fast tests (`pnpm --filter @doc-signing/shared test`, `pnpm --filter @doc-signing/web test`, `pnpm --filter @doc-signing/api test:unit`), and only the API db test files of the modules you changed plus the ones that use them (list them in your report). Never the full `pnpm test` locally unless I ask for it: CI runs the full set on every push.
+- If a refactor touches code many modules use (common/, prisma schema or migrations, packages/shared), say so in the report and list which db test files you ran; I decide whether to run more.
+- ESLint doesn't check formatting; fix it with `pnpm format`, then lint again (Prettier may rewrap a line away from its `eslint-disable-next-line` comment).
 - Small commits, one task per session. Migrations via Prisma only; never edit an applied migration.
 - Migration order: some migrations have hand-written timestamps (e.g. `20261013140000`). Every new migration folder name must sort after the newest existing one. Create it with `prisma migrate dev --create-only --name <name>`; if Prisma's timestamp is earlier, rename the folder before applying it.
 - Python is not installed on this machine. For helper scripts use Node.js (node -e or a .mjs file), never python.
