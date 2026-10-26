@@ -74,6 +74,20 @@ describe('staff routes', () => {
     ]);
   });
 
+  it.each([
+    ['list', '/templates'],
+    ['upload', '/templates/new'],
+    ['details', '/templates/8b0c7d6e-1f2a-4b3c-9d4e-5f6a7b8c9d0e'],
+  ])('shows "no permission" to an officer on the template %s address', async (_label, path) => {
+    const fetchMock = stubApi({ 'GET /api/auth/me': meAnswer(officerUser) });
+    renderRoutes(path);
+    await pageTitle(he.feedback.noPermissionTitle);
+    // The screen's chunk never loads, so no template is read either.
+    expect(fetchMock.mock.calls.map(([url]) => (typeof url === 'string' ? url : ''))).toEqual([
+      '/api/auth/me',
+    ]);
+  });
+
   it('lets an officer open the read-only pages', async () => {
     stubApi({ 'GET /api/auth/me': meAnswer(officerUser) });
     renderRoutes('/manual/approvals');

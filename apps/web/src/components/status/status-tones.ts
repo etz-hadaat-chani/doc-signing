@@ -7,7 +7,9 @@ import EditOutlined from '@mui/icons-material/EditOutlined';
 import ErrorOutlineOutlined from '@mui/icons-material/ErrorOutlineOutlined';
 import EventBusyOutlined from '@mui/icons-material/EventBusyOutlined';
 import HistoryEduOutlined from '@mui/icons-material/HistoryEduOutlined';
+import HistoryOutlined from '@mui/icons-material/HistoryOutlined';
 import HourglassEmptyOutlined from '@mui/icons-material/HourglassEmptyOutlined';
+import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import MarkEmailReadOutlined from '@mui/icons-material/MarkEmailReadOutlined';
 import OutboxOutlined from '@mui/icons-material/OutboxOutlined';
@@ -103,6 +105,19 @@ export const EMAIL_STATUS_LOOKS: Readonly<Record<EmailStatus, StatusLook>> = {
   invalid: { tone: 'error', icon: CancelScheduleSendOutlined },
   bounced: { tone: 'error', icon: ReplyOutlined },
 };
+
+/** A template version's state (A9): usable, still missing something, or out of use. */
+export type TemplateState = 'ready' | 'not_ready' | 'archived' | 'old_version';
+
+export const TEMPLATE_STATE_LOOKS: Readonly<Record<TemplateState, StatusLook>> = {
+  ready: { tone: 'success', icon: TaskAltOutlined },
+  not_ready: { tone: 'warning', icon: ReportProblemOutlined },
+  archived: { tone: 'neutral', icon: Inventory2Outlined },
+  old_version: { tone: 'neutral', icon: HistoryOutlined },
+};
+
+/** Used by a round: edits create a new version (FR-TPL-4). Shown next to the state. */
+export const TEMPLATE_LOCKED_LOOK: StatusLook = { tone: 'info', icon: LockOutlined };
 
 /** An inactive employee (A6, A7): neutral, never picked into a new round. */
 export const INACTIVE_LOOK: StatusLook = { tone: 'neutral', icon: PersonOffOutlined };

@@ -44,6 +44,19 @@ const PAGE_COMPONENTS: Partial<Record<string, ComponentType>> = {
       default: module.EmployeeFormPage,
     })),
   ),
+  '/templates': lazy(() =>
+    import('./templates/TemplatesPage').then((module) => ({ default: module.TemplatesPage })),
+  ),
+  '/templates/new': lazy(() =>
+    import('./templates/TemplateUploadPage').then((module) => ({
+      default: module.TemplateUploadPage,
+    })),
+  ),
+  '/templates/:templateId': lazy(() =>
+    import('./templates/TemplateDetailsPage').then((module) => ({
+      default: module.TemplateDetailsPage,
+    })),
+  ),
   ...(import.meta.env.DEV && {
     '/demo/components': lazy(() =>
       import('./demo/ComponentsDemoPage').then((module) => ({

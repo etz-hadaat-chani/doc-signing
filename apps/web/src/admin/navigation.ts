@@ -97,6 +97,8 @@ const ALL_PAGES: readonly AdminPage[] = [
     task: '5.4',
     menu: { group: 'setup', icon: DescriptionOutlined },
   },
+  { path: '/templates/new', label: he.nav.templateNew, roles: MANAGER, task: '5.4' },
+  { path: '/templates/:templateId', label: he.nav.templateDetails, roles: MANAGER, task: '5.4' },
   {
     path: '/settings',
     label: he.nav.settings,

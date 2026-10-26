@@ -1,4 +1,9 @@
-import type { UserRole } from '@doc-signing/shared';
+import type {
+  EmployerSignatureMode,
+  TemplateFieldType,
+  TemplateFillMode,
+  UserRole,
+} from '@doc-signing/shared';
 
 /**
  * Every Hebrew text of the web app. Components never hold inline strings. API error texts are
@@ -30,6 +35,8 @@ export const he = {
     manual: 'טיפול ידני',
     approvals: 'ממתינים לאישור',
     templates: 'תבניות',
+    templateNew: 'תבנית חדשה',
+    templateDetails: 'פרטי תבנית',
     settings: 'הגדרות',
     users: 'משתמשי מערכת',
     componentsDemo: 'רכיבים משותפים (הדגמה)',
@@ -61,6 +68,14 @@ export const he = {
     department: 'מחלקה',
     search: 'חיפוש',
     searchHint: 'שם, מספר עובד או תעודת זהות',
+  },
+
+  departmentPicker: {
+    label: 'מחלקות',
+    noOptions: 'אין מחלקות מתאימות',
+    open: 'פתיחת רשימת המחלקות',
+    close: 'סגירת רשימת המחלקות',
+    clear: 'ניקוי הבחירה',
   },
 
   upload: {
@@ -313,6 +328,161 @@ export const he = {
     toEmployees: 'לרשימת העובדים',
     toManual: 'לטיפול ידני',
     anotherImport: 'ייבוא נוסף',
+  },
+
+  /**
+   * Templates (A9). "Ready" reasons come from shared TEMPLATE_NOT_READY_MESSAGES and preview
+   * warnings from TEMPLATE_PREVIEW_WARNINGS, by code; upload and save errors from ERROR_MESSAGES.
+   */
+  templates: {
+    listCaption: 'רשימת התבניות',
+    add: 'תבנית חדשה',
+    empty: 'לא נמצאו תבניות.',
+    includeArchived: 'כולל ארכיון וגרסאות ישנות',
+    emptyValue: '—',
+    columns: {
+      name: 'שם',
+      departments: 'מחלקות',
+      version: 'גרסה',
+      status: 'מצב',
+      updatedAt: 'עודכנה',
+    },
+    version: (version: number) => `גרסה ${version}`,
+    status: {
+      ready: 'מוכנה לשליחה',
+      not_ready: 'לא מוכנה',
+      archived: 'בארכיון',
+      old_version: 'גרסה ישנה',
+      locked: 'נעולה (בשימוש בסבב)',
+    },
+    reasonKeys: (keys: string) => `(${keys})`,
+    boxName: (type: string, key: string) => `${type} – ${key}`,
+    /** Every field type's Hebrew name (FR-TPL-2), also for the position editor. */
+    fieldTypes: {
+      full_name: 'שם מלא',
+      id_number: 'תעודת זהות',
+      date: 'תאריך המסמך',
+      signature: 'חתימת העובד',
+      checkbox: 'תיבת סימון',
+      text: 'טקסט קצר',
+      employee_number: 'מספר עובד',
+      address: 'כתובת',
+      landline: 'טלפון',
+      mobile: 'טלפון נייד',
+      age: 'גיל',
+      job_title: 'תפקיד',
+      employment_status: 'מעמד',
+      job_percent: 'אחוז משרה',
+      work_days: 'ימי עבודה',
+      study_fund: 'קרן השתלמות',
+      pension_has_fund: 'יש קרן פנסיה פעילה',
+      pension_no_fund: 'אין קרן פנסיה פעילה',
+      pension_fund_name: 'שם קרן הפנסיה',
+      email_input: 'תיבת האימייל',
+      no_email_checkbox: 'סימון "אין לי אימייל"',
+      long_text: 'טקסט ארוך',
+      select: 'רשימת בחירה',
+      date_input: 'תאריך שהעובד ממלא',
+      drawing: 'ציור',
+      employer_signature: 'חתימת המעסיק',
+    } satisfies Record<TemplateFieldType, string>,
+    fillModes: {
+      system: 'המערכת בלבד',
+      employee: 'העובד בלבד',
+      system_then_employee: 'המערכת, והעובד כשאין ערך',
+    } satisfies Record<TemplateFillMode, string>,
+    /** The employer-signature setting (FR-TPL-7). */
+    employerModes: {
+      pre_signed: 'כבר על המסמך בשליחה',
+      after_employee: 'נוספת אחרי שהעובד חותם',
+      none: 'ללא חתימת מעסיק',
+    } satisfies Record<EmployerSignatureMode, string>,
+    employerModeHints: {
+      pre_signed: 'העובד מקבל מסמך שהמעסיק כבר חתם עליו, ואז חותם בעצמו.',
+      after_employee: 'החתימה מופיעה רק במסמך החתום, אחרי חתימת העובד.',
+      none: 'במסמך אין חתימת מעסיק.',
+    } satisfies Record<EmployerSignatureMode, string>,
+    upload: {
+      title: 'תבנית חדשה',
+      intro: 'מעלים את קובץ ה-PDF של המחלקה, נותנים לו שם ובוחרים לאילו מחלקות הוא שייך.',
+      name: 'שם התבנית',
+      file: 'קובץ PDF',
+      accept: 'PDF',
+      submit: 'העלאה',
+      submitting: 'מעלה…',
+      failed: 'הקובץ לא הועלה',
+      created: 'התבנית הועלתה',
+      afterUpload:
+        'אחרי ההעלאה התבנית עדיין לא מוכנה לשליחה: צריך להגדיר בה את מיקומי השדות והחתימות.',
+    },
+    form: {
+      required: 'שדה חובה',
+      tooLong: (max: number) => `עד ${max} תווים`,
+      chooseDepartments: 'יש לבחור מחלקה אחת לפחות',
+      chooseFile: 'יש לבחור קובץ PDF',
+      fixFields: 'יש לתקן את השדות המסומנים.',
+    },
+    details: {
+      statusTitle: 'מצב התבנית',
+      ready: 'התבנית מוכנה לשימוש בסבב.',
+      notReady: 'התבנית עדיין לא מוכנה לשימוש בסבב:',
+      pageCount: (count: number) => (count === 1 ? 'עמוד אחד' : `${count} עמודים`),
+      createdAt: (date: string) => `נוצרה ב-${date}`,
+      positionsByDeveloper:
+        'את מיקומי השדות והחתימות מגדיר בשלב זה המפתח. עורך המיקומים יתווסף בהמשך.',
+      settingsTitle: 'הגדרות',
+      employerSignature: 'חתימת המעסיק',
+      save: 'שמירה',
+      saving: 'שומר…',
+      saved: 'השינויים נשמרו',
+      noChanges: 'לא בוצעו שינויים',
+      versionCreated: (version: number) => `נוצרה גרסה ${version}`,
+      lockedNote:
+        'התבנית נעולה כי סבב כבר משתמש בה. שינוי של השם, המיקומים או חתימת המעסיק ייצור גרסה חדשה, וסבבים שכבר נוצרו ימשיכו להשתמש בגרסה הזו. שינוי המחלקות נשמר בגרסה הזו ואינו יוצר גרסה חדשה.',
+      readOnly: 'אי אפשר לערוך גרסה זו.',
+      readOnlyArchived: 'התבנית בארכיון, ולכן אי אפשר לערוך אותה.',
+      readOnlyOld: 'קיימת גרסה חדשה יותר, ורק אותה אפשר לערוך.',
+      toLatest: 'מעבר לגרסה האחרונה',
+      versionDialogTitle: 'ליצור גרסה חדשה?',
+      versionDialogText: (current: number, next: number) =>
+        `התבנית נעולה. השמירה תיצור את גרסה ${next}. סבבים שכבר נוצרו ימשיכו להשתמש בגרסה ${current}, והמסמכים שכבר נשלחו לא ישתנו.`,
+      versionDialogConfirm: 'יצירת גרסה חדשה',
+      positionsTitle: 'מיקומים בתבנית',
+      positionsCaption: 'מיקומי השדות והחתימות',
+      noPositions: 'עדיין לא הוגדרו מיקומים.',
+      positionColumns: {
+        type: 'סוג',
+        key: 'מפתח',
+        label: 'כותרת',
+        fillMode: 'מי ממלא',
+        page: 'עמוד',
+      },
+      previewTitle: 'תצוגה מקדימה',
+      previewIntro:
+        'התצוגה המקדימה ממלאת את התבנית בפרטים של עובד לדוגמה (מומצא), לפי המיקומים השמורים.',
+      openPreview: 'פתיחת התצוגה המקדימה (בלשונית חדשה)',
+      checkTitle: 'מה נמצא בבדיקה',
+      missing: 'ערכים חסרים:',
+      leftForEmployee: 'תיבות שהעובד ימלא:',
+      warnings: 'הערות:',
+      checkClean: 'לא נמצאו ערכים חסרים או הערות.',
+      versionsTitle: 'גרסאות',
+      versionsCaption: 'כל הגרסאות של התבנית',
+      versionColumns: {
+        version: 'גרסה',
+        createdAt: 'נוצרה',
+        status: 'מצב',
+      },
+      current: 'הגרסה המוצגת',
+      archiveTitle: 'העברה לארכיון',
+      archiveIntro:
+        'תבנית בארכיון לא תוצע בסבבים חדשים. סבבים שכבר נוצרו ממשיכים להשתמש בה. אי אפשר להחזיר תבנית מהארכיון.',
+      archive: 'העברה לארכיון',
+      archiveDialogTitle: 'להעביר את התבנית לארכיון?',
+      archiveDialogText: (name: string, version: number) =>
+        `"${name}" (גרסה ${version}) לא תוצע יותר בסבבים חדשים. סבבים שכבר נוצרו ימשיכו להשתמש בה. אי אפשר לבטל את הפעולה.`,
+      archived: 'התבנית הועברה לארכיון',
+    },
   },
 
   /** The components demo page (4.2, development only). Every name and number there is made up. */
