@@ -11,7 +11,16 @@ import { DISPLAY_STATUS_LOOKS, ROUND_STATUS_LOOKS, TONE_STYLES, type Tone } from
 
 const { font, radius } = tokens;
 
-function Chip({ label, tone, icon: Icon }: { label: string; tone: Tone; icon: typeof SvgIcon }) {
+/** A label with a tone and an icon: the one chip look (statuses, email status, …). */
+export function ToneChip({
+  label,
+  tone,
+  icon: Icon,
+}: {
+  label: string;
+  tone: Tone;
+  icon: typeof SvgIcon;
+}) {
   const style = TONE_STYLES[tone];
   return (
     <Box
@@ -46,11 +55,11 @@ function Chip({ label, tone, icon: Icon }: { label: string; tone: Tone; icon: ty
  */
 export function StatusChip({ status }: { status: DisplayStatus }) {
   const look = DISPLAY_STATUS_LOOKS[status];
-  return <Chip label={STATUS_LABELS[status]} tone={look.tone} icon={look.icon} />;
+  return <ToneChip label={STATUS_LABELS[status]} tone={look.tone} icon={look.icon} />;
 }
 
 /** A send round's status (A3). */
 export function RoundStatusChip({ status }: { status: RoundStatus }) {
   const look = ROUND_STATUS_LOOKS[status];
-  return <Chip label={ROUND_STATUS_LABELS[status]} tone={look.tone} icon={look.icon} />;
+  return <ToneChip label={ROUND_STATUS_LABELS[status]} tone={look.tone} icon={look.icon} />;
 }

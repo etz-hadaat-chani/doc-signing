@@ -264,7 +264,7 @@ Wherever a department is shown or picked (lists, filters, cards, wizard, exports
 | A4 | Round details (פרטי סבב) | One row per employee: status (with the "waiting for approval" flag, and "returned for correction → sent again in round X" with a link), department ("15 - name"), last update, reminders, email-section answer, answers panel, link to signed PDF; counts with "returned for correction" apart from "cancelled"; a correction round links back to the original; filters (including department and approval), search, export, ZIP; manager actions (remind, resend, cancel, unlock, manual signature, office signing, approve, return for correction) | All staff; actions for managers |
 | A5 | New round wizard (אשף סבב חדש) | Name and mode, document, recipients (departments as "15 - name"), summary, settings, preview, send | Manager |
 | A6 | Employees (עובדים) | List with department ("15 - name"), search and filters, email status mark, import and add buttons | All staff; edits for managers |
-| A7 | Employee card (כרטיס עובד) | Details including department ("15 - name"), landline and mobile, address and city, birth date (DD/MM/YYYY) and age, role, employment status, job %, work days and hours, pension funds and study fund; history across rounds, signed documents, "Send document" shortcut | All staff; edits for managers |
+| A7 | Employee card (כרטיס עובד) | Details including department ("15 - name"), landline and mobile, address and city, birth date (DD/MM/YYYY) and age, role, employment status, job %, work days and hours, pension funds and study fund; history across rounds, signed documents, "Send document" shortcut. The ID number is shown to managers only | All staff; edits for managers |
 | A8 | Excel import (ייבוא מאקסל) | Upload the Har Gal export, check report, preview (including new and renamed departments as "15 - name"), confirm | Manager |
 | A9 | Templates (תבניות) | Templates with departments ("15 - name"), version, field positions (type, key, Hebrew label, who fills it in, required or optional, "shown only when", limits, needs approval, pension source), employer-signature setting, the "ready" reasons, preview with missing values | Manager |
 | A10 | Manual handling (טיפול ידני) | Employees with no or bad email or missing data across rounds ("email added" / "details completed, ready to send"), and employees who corrected their email; print, upload scan, fix email. Tab **"Waiting for approval"**: signed documents waiting for approval, what the employee filled in, Approve / Return for correction (with a note) and "Send again" | Manager; the approval tab is read-only for officers |
@@ -357,6 +357,8 @@ Seven flows cover the MVP. The core is flow 3 (create a round) and flow 4 (signi
 
 Permissions are checked on the server for every request, not only hidden in the interface.
 
+The employee's ID number protects every signing link (it is also left out of the Excel export), so only managers see it on the employee card; the API leaves it out of an officer's answer.
+
 | Action | Manager | Officer | Employee |
 | --- | --- | --- | --- |
 | See dashboard and all employees' statuses | Yes | Yes | No |
@@ -424,8 +426,9 @@ All management endpoints need a staff session; the role column says who may call
 
 | Method | Path | Purpose | Role |
 | --- | --- | --- | --- |
-| GET | `/api/employees?dept=&q=&emailStatus=&page=` | List with search, filters, paging | M, O |
-| GET | `/api/employees/:id` | Employee card | M, O |
+| GET | `/api/employees?dept=&emailStatus=&active=&page=&pageSize=` | List with filters and paging; no search text (`q` → 400) | M, O |
+| POST | `/api/employees/search` | The same filters and paging, plus `q` in the body (name, part of the employee number, or the full ID number). Search text never goes in a URL: it may be an ID number | M, O |
+| GET | `/api/employees/:id` | Employee card (the ID number only in the manager's answer) | M, O |
 | GET | `/api/employees/:id/assignments?page=` | History across rounds, newest first: round, document, department at the time, status, dates, whether a signed file exists | M, O |
 | POST | `/api/employees` | Add one employee | M |
 | PATCH | `/api/employees/:id` | Edit an employee | M |

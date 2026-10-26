@@ -15,6 +15,12 @@ export function optionalQuery<T extends z.ZodType>(schema: T) {
   return z.preprocess((value) => (value === '' ? undefined : value), schema.optional());
 }
 
+/** `?flag=true` in a query string, `true` in a body. */
+export const flagSchema = z.preprocess(
+  (value) => (value === 'true' ? true : value === 'false' ? false : value),
+  z.boolean(),
+);
+
 /** The body of every list response. */
 export interface Paged<T> {
   items: T[];

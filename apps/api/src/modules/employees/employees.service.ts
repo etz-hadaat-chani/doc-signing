@@ -7,6 +7,7 @@ import {
   nextEmailStatus,
   type Paged,
   type UpdateEmployeeInput,
+  type UserRole,
 } from '@doc-signing/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service.js';
@@ -73,13 +74,19 @@ export class EmployeesService {
     return { items: rows.map(toListItem), total, page: query.page, pageSize: query.pageSize };
   }
 
-  async card(id: string): Promise<EmployeeCard> {
+  /**
+   * The card. Officers get it without the ID number: it protects every signing link, and they
+   * only follow up (PRD §9).
+   */
+  async card(id: string, role: UserRole): Promise<EmployeeCard> {
     const row = await this.prisma.employee.findUnique({
       where: { id },
       select: employeeCardSelect,
     });
     if (!row) throw new AppException('NOT_FOUND', HttpStatus.NOT_FOUND);
-    return buildCard(row);
+    const card = buildCard(row);
+    // An undefined field is left out of the JSON answer.
+    return role === 'manager' ? card : { ...card, idNumber: undefined };
   }
 
   /** Adds one employee (active) and logs it, together. */

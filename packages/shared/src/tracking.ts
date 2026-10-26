@@ -6,7 +6,7 @@ import {
   roundStatusSchema,
   signMethodSchema,
 } from './enums.js';
-import { optionalQuery, pageQuerySchema } from './pagination.js';
+import { flagSchema, optionalQuery, pageQuerySchema } from './pagination.js';
 import { roundCreatedSchema, roundSettingsSchema } from './rounds.js';
 import { DISPLAY_STATUSES, type DisplayStatus } from './status.js';
 import { EMAIL_CHOICES, type EmailChoice } from './template-fields.js';
@@ -24,12 +24,6 @@ export const EMAIL_CHOICE_LABELS: Readonly<Record<EmailChoice, string>> = {
 };
 
 export const displayStatusSchema = z.enum(DISPLAY_STATUSES);
-
-/** `?flag=true` in a query string, `true` in a body. */
-const flagSchema = z.preprocess(
-  (value) => (value === 'true' ? true : value === 'false' ? false : value),
-  z.boolean(),
-);
 
 /** `?status=a&status=b` (or one value) in a query string, an array in a body. */
 const statusListSchema = z.preprocess(

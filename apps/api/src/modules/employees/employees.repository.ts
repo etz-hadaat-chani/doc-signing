@@ -144,12 +144,13 @@ export interface EmployeeListRow {
   departmentName: string;
 }
 
-function whereClause({ q, dept, emailStatus }: EmployeeListQuery): Prisma.Sql {
+function whereClause({ q, dept, emailStatus, active }: EmployeeListQuery): Prisma.Sql {
   const conditions: Prisma.Sql[] = [];
   if (dept !== undefined) conditions.push(Prisma.sql`e.department_id = ${dept}::uuid`);
   if (emailStatus !== undefined) {
     conditions.push(Prisma.sql`e.email_status = ${emailStatus}::email_status`);
   }
+  if (active !== undefined) conditions.push(Prisma.sql`e.is_active = ${active}`);
   if (q !== undefined) conditions.push(searchCondition(q));
   return conditions.length === 0
     ? Prisma.empty

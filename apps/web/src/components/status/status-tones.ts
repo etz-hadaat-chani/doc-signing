@@ -1,4 +1,4 @@
-import type { DisplayStatus, RoundStatus } from '@doc-signing/shared';
+import type { DisplayStatus, EmailStatus, RoundStatus } from '@doc-signing/shared';
 import BlockOutlined from '@mui/icons-material/BlockOutlined';
 import CancelScheduleSendOutlined from '@mui/icons-material/CancelScheduleSendOutlined';
 import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';
@@ -11,7 +11,9 @@ import HourglassEmptyOutlined from '@mui/icons-material/HourglassEmptyOutlined';
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import MarkEmailReadOutlined from '@mui/icons-material/MarkEmailReadOutlined';
 import OutboxOutlined from '@mui/icons-material/OutboxOutlined';
+import PersonOffOutlined from '@mui/icons-material/PersonOffOutlined';
 import PlayCircleOutlined from '@mui/icons-material/PlayCircleOutlined';
+import ReplyOutlined from '@mui/icons-material/ReplyOutlined';
 import ReportProblemOutlined from '@mui/icons-material/ReportProblemOutlined';
 import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined';
 import SendOutlined from '@mui/icons-material/SendOutlined';
@@ -62,7 +64,7 @@ export const TONE_STYLES: Readonly<Record<Tone, ToneStyle>> = {
   },
 };
 
-interface StatusLook {
+export interface StatusLook {
   tone: Tone;
   icon: typeof SvgIcon;
 }
@@ -93,3 +95,14 @@ export const ROUND_STATUS_LOOKS: Readonly<Record<RoundStatus, StatusLook>> = {
   closed: { tone: 'neutral', icon: CheckCircleOutlined },
   cancelled: { tone: 'neutral', icon: BlockOutlined },
 };
+
+/** An employee's email status (A6, A7): only a valid address can get documents by email. */
+export const EMAIL_STATUS_LOOKS: Readonly<Record<EmailStatus, StatusLook>> = {
+  valid: { tone: 'success', icon: MarkEmailReadOutlined },
+  missing: { tone: 'error', icon: UnsubscribeOutlined },
+  invalid: { tone: 'error', icon: CancelScheduleSendOutlined },
+  bounced: { tone: 'error', icon: ReplyOutlined },
+};
+
+/** An inactive employee (A6, A7): neutral, never picked into a new round. */
+export const INACTIVE_LOOK: StatusLook = { tone: 'neutral', icon: PersonOffOutlined };

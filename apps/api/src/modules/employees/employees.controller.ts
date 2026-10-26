@@ -5,11 +5,23 @@ import {
   type EmployeeListItem,
   type EmployeeListQuery,
   employeeListQuerySchema,
+  employeeSearchSchema,
   type Paged,
   type UpdateEmployeeInput,
   updateEmployeeSchema,
 } from '@doc-signing/shared';
-import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { ApiZodBody, ApiZodQuery } from '../../common/api-docs/api-docs.js';
@@ -30,7 +42,12 @@ function actorOf(request: AuthRequest): EmployeeActor {
 export class EmployeesController {
   constructor(private readonly employees: EmployeesService) {}
 
-  @ApiOperation({ summary: 'List employees (search, filters, paging)' })
+  @ApiOperation({
+    summary: 'List employees (filters and paging, no search text)',
+    description:
+      'dept, emailStatus, active=true|false. To search by name, employee number or ID use ' +
+      'POST /api/employees/search: search text never goes in a URL.',
+  })
   @ApiZodQuery(employeeListQuerySchema)
   @Roles('manager', 'officer')
   @Get()
@@ -40,11 +57,29 @@ export class EmployeesController {
     return this.employees.list(query);
   }
 
-  @ApiOperation({ summary: 'Employee card' })
+  @ApiOperation({
+    summary: 'Search employees: the same filters and paging, plus q in the body',
+    description:
+      'q matches part of the name, part of the employee number, or the full ID number only.',
+  })
+  @ApiZodBody(employeeSearchSchema)
+  @Roles('manager', 'officer')
+  @Post('search')
+  @HttpCode(HttpStatus.OK)
+  search(
+    @Body(new ZodValidationPipe(employeeSearchSchema)) body: EmployeeListQuery,
+  ): Promise<Paged<EmployeeListItem>> {
+    return this.employees.list(body);
+  }
+
+  @ApiOperation({ summary: 'Employee card (the ID number for managers only)' })
   @Roles('manager', 'officer')
   @Get(':id')
-  card(@Param('id', new ZodValidationPipe(z.uuid())) id: string): Promise<EmployeeCard> {
-    return this.employees.card(id);
+  card(
+    @Param('id', new ZodValidationPipe(z.uuid())) id: string,
+    @Req() request: AuthRequest,
+  ): Promise<EmployeeCard> {
+    return this.employees.card(id, request.auth?.user.role ?? 'officer');
   }
 
   @ApiOperation({ summary: 'Add one employee' })

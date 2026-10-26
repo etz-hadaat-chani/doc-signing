@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { type EmailStatus, emailStatusSchema } from './enums.js';
 import { idNumberSchema } from './id-number.js';
-import { optionalQuery, pageQuerySchema } from './pagination.js';
+import { flagSchema, optionalQuery, pageQuerySchema } from './pagination.js';
 
 export const EMPLOYEE_NUMBER_MAX_LENGTH = 20;
 export const EMPLOYEE_NAME_MAX_LENGTH = 50;
@@ -294,8 +294,23 @@ export const updateEmployeeSchema = z
   .refine((value) => Object.values(value).some((item) => item !== undefined));
 export type UpdateEmployeeInput = z.output<typeof updateEmployeeSchema>;
 
-/** `GET /api/employees?q=&dept=&emailStatus=&page=&pageSize=`. Filters combine with AND. */
-export const employeeListQuerySchema = pageQuerySchema.extend({
+/** The employee list's filters, combined with AND: department, email status, active or not. */
+const employeeFilterShape = {
+  ...pageQuerySchema.shape,
+  dept: optionalQuery(z.uuid()),
+  emailStatus: optionalQuery(emailStatusSchema),
+  active: optionalQuery(flagSchema),
+};
+
+/**
+ * `GET /api/employees?dept=&emailStatus=&active=&page=&pageSize=`: filters and paging only.
+ * Search text is never in a URL (it may be an ID number): it goes in the body of the search route.
+ */
+export const employeeListQuerySchema = z.strictObject(employeeFilterShape);
+
+/** `POST /api/employees/search`: the same filters plus `q`. */
+export const employeeSearchSchema = z.strictObject({
+  ...employeeFilterShape,
   q: optionalQuery(
     z
       .string()
@@ -303,10 +318,8 @@ export const employeeListQuerySchema = pageQuerySchema.extend({
       .transform(normalizeSearchText)
       .transform((value) => (value === '' ? undefined : value)),
   ),
-  dept: optionalQuery(z.uuid()),
-  emailStatus: optionalQuery(emailStatusSchema),
 });
-export type EmployeeListQuery = z.output<typeof employeeListQuerySchema>;
+export type EmployeeListQuery = z.output<typeof employeeSearchSchema>;
 
 /** A department as the API returns it; shown as "code - name" (formatDepartment). */
 export const departmentSchema = z.object({
@@ -333,9 +346,11 @@ export type EmployeeListItem = z.infer<typeof employeeListItemSchema>;
 /**
  * The employee card: the list row plus ID number, phones, the extra details and dates. `age` is
  * worked out from `birthDate` (today in Israel), never stored; `hoursBaseLabel` from the code.
+ * `idNumber` is left out for officers: it protects every signing link, and officers only follow
+ * up (PRD §9).
  */
 export const employeeCardSchema = employeeListItemSchema.extend({
-  idNumber: z.string(),
+  idNumber: z.string().optional(),
   landline: z.string().nullable(),
   mobile: z.string().nullable(),
   address: z.string().nullable(),

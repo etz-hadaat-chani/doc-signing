@@ -67,7 +67,14 @@ const ALL_PAGES: readonly AdminPage[] = [
     task: '5.3',
     menu: { group: 'work', icon: UploadFileOutlined },
   },
+  { path: '/employees/new', label: he.nav.employeeNew, roles: MANAGER, task: '5.2' },
   { path: '/employees/:employeeId', label: he.nav.employeeCard, roles: ALL_STAFF, task: '5.2' },
+  {
+    path: '/employees/:employeeId/edit',
+    label: he.nav.employeeEdit,
+    roles: MANAGER,
+    task: '5.2',
+  },
   {
     path: '/manual',
     label: he.nav.manual,

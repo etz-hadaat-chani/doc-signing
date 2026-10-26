@@ -4,6 +4,7 @@ import {
   createEmployeeSchema,
   hoursBaseLabel,
   employeeListQuerySchema,
+  employeeSearchSchema,
   isEmailFormat,
   nextEmailStatus,
   normalizeEmail,
@@ -235,19 +236,34 @@ describe('employeeListQuerySchema', () => {
   });
 
   it('treats empty filters as not sent', () => {
-    expect(employeeListQuerySchema.parse({ q: '  ', dept: '', emailStatus: '' })).toEqual({
+    expect(employeeListQuerySchema.parse({ dept: '', emailStatus: '', active: '' })).toEqual({
       page: 1,
       pageSize: 25,
     });
   });
 
-  it('normalizes the search and checks the filters', () => {
+  it('checks the filters; active arrives as text in a query string', () => {
     expect(
-      employeeListQuerySchema.parse({ q: ' משה   כהן ', dept: departmentId, emailStatus: 'valid' }),
-    ).toEqual({ page: 1, pageSize: 25, q: 'משה כהן', dept: departmentId, emailStatus: 'valid' });
+      employeeListQuerySchema.parse({ dept: departmentId, emailStatus: 'valid', active: 'false' }),
+    ).toEqual({ page: 1, pageSize: 25, dept: departmentId, emailStatus: 'valid', active: false });
     expect(employeeListQuerySchema.safeParse({ dept: '15' }).success).toBe(false);
     expect(employeeListQuerySchema.safeParse({ emailStatus: 'nope' }).success).toBe(false);
-    expect(employeeListQuerySchema.safeParse({ q: 'x'.repeat(101) }).success).toBe(false);
+    expect(employeeListQuerySchema.safeParse({ active: 'yes' }).success).toBe(false);
+  });
+
+  it('refuses search text: it never goes in a URL', () => {
+    expect(employeeListQuerySchema.safeParse({ q: 'כהן' }).success).toBe(false);
+  });
+});
+
+describe('employeeSearchSchema', () => {
+  it('normalizes the search and takes the same filters', () => {
+    expect(
+      employeeSearchSchema.parse({ q: ' משה   כהן ', dept: departmentId, active: true, page: 2 }),
+    ).toEqual({ page: 2, pageSize: 25, q: 'משה כהן', dept: departmentId, active: true });
+    expect(employeeSearchSchema.parse({ q: '  ' })).toEqual({ page: 1, pageSize: 25 });
+    expect(employeeSearchSchema.safeParse({ q: 'x'.repeat(101) }).success).toBe(false);
+    expect(employeeSearchSchema.safeParse({ q: 'x', extra: 1 }).success).toBe(false);
   });
 });
 

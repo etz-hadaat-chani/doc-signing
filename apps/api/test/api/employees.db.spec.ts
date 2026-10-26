@@ -133,6 +133,9 @@ describe('access', () => {
       officerCookie,
     );
     expect(card.status).toBe(200);
+    // The ID number protects every signing link: officers get the card without it (PRD §9).
+    expect(card.body).not.toHaveProperty('idNumber');
+    expect(card.text).not.toContain('012345674');
   });
 
   it('an officer gets 403 on create and edit, and nothing changes', async () => {
@@ -195,36 +198,7 @@ describe('GET /api/employees', () => {
     );
   });
 
-  it.each([
-    ['first name', 'משה', ['1001']],
-    ['last name (part)', 'כהן', ['1001', '1002']],
-    ['full name', 'משה כהן', ['1001']],
-    ['full name, last name first', 'כהן משה', ['1001']],
-    ['full name with extra spaces', '  משה    כהן ', ['1001']],
-    ['a name with a hyphen', 'הלוי-כץ', ['1009']],
-    ['employee number', '1017', ['1017']],
-    ['employee number with leading zeros', '01017', ['1017']],
-    ['ID number', '012345674', ['1001']],
-    ['ID number without its leading 0', '12345674', ['1001']],
-  ])('finds by %s', async (_label, q, expected) => {
-    const response = await list({ q });
-    expect(response.status).toBe(200);
-    expect(numbersOf(response).sort()).toEqual(expected);
-  });
-
-  it('never matches part of an ID number', async () => {
-    expect(numbersOf(await list({ q: '1234567' }))).toEqual([]);
-  });
-
-  it('treats % and _ as plain characters', async () => {
-    for (const q of ['%', '_', 'כ%ן', 'מש_']) {
-      const response = await list({ q });
-      expect(response.status).toBe(200);
-      expect(pageOf(response).total).toBe(0);
-    }
-  });
-
-  it('filters by department, email status, and both together', async () => {
+  it('filters by department, email status, active, and together', async () => {
     const dept15 = await departmentId(15);
     const inDept = pageOf(await list({ dept: dept15, pageSize: '100' }));
     expect(inDept.total).toBe(7);
@@ -232,11 +206,13 @@ describe('GET /api/employees', () => {
 
     expect(numbersOf(await list({ emailStatus: 'missing' })).sort()).toEqual(['1007', '1015']);
     expect(numbersOf(await list({ dept: dept15, emailStatus: 'missing' }))).toEqual(['1007']);
-    expect(numbersOf(await list({ dept: dept15, q: 'כהן', emailStatus: 'valid' })).sort()).toEqual([
-      '1001',
-      '1002',
-    ]);
-    expect(pageOf(await list({ dept: await departmentId(19), q: 'כהן' })).total).toBe(0);
+
+    expect((await update(await employeeId('1007'), { isActive: false })).status).toBe(200);
+    expect(numbersOf(await list({ active: 'false' }))).toEqual(['1007']);
+    expect(pageOf(await list({ active: 'true' })).total).toBe(19);
+    expect(numbersOf(await list({ dept: dept15, emailStatus: 'missing', active: 'true' }))).toEqual(
+      [],
+    );
   });
 
   it('refuses bad filters with 400', async () => {
@@ -244,6 +220,8 @@ describe('GET /api/employees', () => {
       { dept: '15' },
       { emailStatus: 'nope' },
       { page: '0' },
+      { active: 'yes' },
+      { extra: '1' },
     ];
     for (const query of badQueries) {
       const response = await list(query);
@@ -400,12 +378,20 @@ describe('PATCH /api/employees/:id', () => {
     expect(changes).toContain('jobPercent: (none) → 62.5');
     expect(JSON.stringify(changes)).not.toContain('1980');
 
-    const listed = pageOf(await list({ q: '1001' })).items[0] ?? {};
+    const listed =
+      pageOf(await list({ pageSize: '100' })).items.find(
+        ({ employeeNumber }) => employeeNumber === '1001',
+      ) ?? {};
     for (const key of ['mobile', 'address', 'birthDate', 'jobPercent', 'studyFund']) {
       expect(listed).not.toHaveProperty(key);
     }
 
-    const cleared = await update(id, { birthDate: null, address: '', hoursBaseCode: 0 });
+    const cleared = await update(id, {
+      birthDate: null,
+      address: '',
+      hoursBaseCode: 0,
+      mobile: null,
+    });
     expect(cardOf(cleared)).toMatchObject({
       birthDate: null,
       age: null,
@@ -413,6 +399,12 @@ describe('PATCH /api/employees/:id', () => {
       hoursBaseLabel: '0',
       city: 'ירושלים',
     });
+    // Read back: really empty, not the old value.
+    const reread = await withCookie(
+      request(httpServer(app)).get(`/api/employees/${id}`),
+      managerCookie,
+    );
+    expect(cardOf(reread)).toMatchObject({ mobile: null, address: null, birthDate: null });
   });
 
   it('edits fields and logs each change as "field: old → new", never the ID value', async () => {

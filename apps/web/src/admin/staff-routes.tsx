@@ -20,6 +20,25 @@ const PAGE_COMPONENTS: Partial<Record<string, ComponentType>> = {
   '/': lazy(() =>
     import('./dashboard/DashboardPage').then((module) => ({ default: module.DashboardPage })),
   ),
+  '/employees': lazy(() =>
+    import('./employees/EmployeesPage').then((module) => ({ default: module.EmployeesPage })),
+  ),
+  '/employees/new': lazy(() =>
+    import('./employees/EmployeeFormPage').then((module) => ({
+      default: module.EmployeeFormPage,
+    })),
+  ),
+  '/employees/:employeeId': lazy(() =>
+    import('./employees/EmployeeCardPage').then((module) => ({
+      default: module.EmployeeCardPage,
+    })),
+  ),
+  // Add and edit are one screen (one chunk).
+  '/employees/:employeeId/edit': lazy(() =>
+    import('./employees/EmployeeFormPage').then((module) => ({
+      default: module.EmployeeFormPage,
+    })),
+  ),
   ...(import.meta.env.DEV && {
     '/demo/components': lazy(() =>
       import('./demo/ComponentsDemoPage').then((module) => ({
