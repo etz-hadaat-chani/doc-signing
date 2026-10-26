@@ -1,9 +1,9 @@
-import { MAX_ID_ATTEMPTS } from '@doc-signing/shared';
+import { type AssignmentStatus, MAX_ID_ATTEMPTS } from '@doc-signing/shared';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { Db } from '../../common/prisma/prisma.types.js';
 import type { Prisma } from '../../generated/prisma/client.js';
-import { type LinkFacts, SIGNABLE_STATUSES } from './link-state.js';
+import { KIOSK_SIGNABLE_STATUSES, type LinkFacts, SIGNABLE_STATUSES } from './link-state.js';
 
 /** A signing link: the invitation or reminder row its token belongs to, with what it opens. */
 export interface SigningLink extends LinkFacts {
@@ -39,6 +39,12 @@ export interface SigningData {
 
 export interface SignedWrite {
   assignmentId: string;
+  /** `digital` by link (3.13), `kiosk` at the office signing station (3.16). */
+  signMethod: 'digital' | 'kiosk';
+  /** The manager who opened the kiosk; null for a link. */
+  handledById: string | null;
+  /** The statuses it may be signed from (the caller's state rule). */
+  fromStatuses: readonly AssignmentStatus[];
   signedAt: Date;
   fileKey: string;
   fileSha256: string;
@@ -87,7 +93,10 @@ export class SigningRepository {
    * Locks the round (FOR SHARE) and the assignment (FOR UPDATE) and reads the facts again, after
    * any cancel, lock or signature that went first.
    */
-  async lockForSigning(link: SigningLink, db: Db): Promise<LockedAssignment> {
+  async lockForSigning(
+    link: Pick<SigningLink, 'roundId' | 'assignmentId'>,
+    db: Db,
+  ): Promise<LockedAssignment> {
     await db.$queryRaw`SELECT id FROM rounds WHERE id = ${link.roundId}::uuid FOR SHARE`;
     const rows = await db.$queryRaw<LockedAssignment[]>`
       SELECT a.status::text AS status, a.locked_at IS NOT NULL AS locked,
@@ -123,16 +132,18 @@ export class SigningRepository {
 
   /**
    * A correct ID number: "Opened" (from `pending`, `sent` or `invalid_email`; `opened` stays),
-   * `first_opened_at` the first time only. The count of wrong attempts stays (only an unlock
-   * clears it).
+   * `first_opened_at` the first time only. At the office kiosk a `no_email` row keeps its
+   * status (she has no link and stays in manual handling until she signs), but gets
+   * `first_opened_at`. The count of wrong attempts stays (only an unlock clears it).
    */
   async markOpened(assignmentId: string, db: Db): Promise<void> {
     await db.$executeRaw`
       UPDATE assignments
-      SET status = 'opened', first_opened_at = coalesce(first_opened_at, now()),
-          updated_at = now()
+      SET status = CASE WHEN status::text = ANY(${[...SIGNABLE_STATUSES]}::text[])
+                        THEN 'opened'::assignment_status ELSE status END,
+          first_opened_at = coalesce(first_opened_at, now()), updated_at = now()
       WHERE id = ${assignmentId}::uuid
-        AND status::text = ANY(${[...SIGNABLE_STATUSES]}::text[])`;
+        AND status::text = ANY(${[...KIOSK_SIGNABLE_STATUSES]}::text[])`;
   }
 
   /** What the document, the form and submit need. */
@@ -154,19 +165,20 @@ export class SigningRepository {
   }
 
   /**
-   * Signed (FR-SGN-5, NFR-SIG-2): status, time, method, the stored file and its hash, IP, user
-   * agent, approval flag. Only from a status that can be signed and while not locked (the caller
-   * holds the row lock and checked the state); throws otherwise.
+   * Signed (FR-SGN-5, NFR-SIG-2): status, time, method, who handled it (kiosk), the stored file
+   * and its hash, IP, user agent, approval flag. Only from one of `fromStatuses` and while not
+   * locked (the caller holds the row lock and checked the state); throws otherwise.
    */
   async markSigned(write: SignedWrite, db: Db): Promise<void> {
     const count = await db.$executeRaw`
       UPDATE assignments
-      SET status = 'signed', signed_at = ${write.signedAt}, sign_method = 'digital',
+      SET status = 'signed', signed_at = ${write.signedAt},
+          sign_method = ${write.signMethod}::sign_method, handled_by = ${write.handledById}::uuid,
           signed_file_key = ${write.fileKey}, signed_file_sha256 = ${write.fileSha256},
           signer_ip = ${write.ip}::inet, signer_user_agent = ${write.userAgent},
           needs_approval = ${write.needsApproval}, updated_at = now()
       WHERE id = ${write.assignmentId}::uuid AND locked_at IS NULL
-        AND status::text = ANY(${[...SIGNABLE_STATUSES]}::text[])`;
+        AND status::text = ANY(${[...write.fromStatuses]}::text[])`;
     if (count !== 1) throw new Error('Assignment changed while signing');
   }
 

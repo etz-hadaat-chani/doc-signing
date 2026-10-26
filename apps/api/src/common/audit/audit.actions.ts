@@ -64,6 +64,7 @@ export const AUDIT_ACTIONS = [
   'assignment.signed_copy_sent',
   'assignment.signed_copy_failed',
   'assignment.manual_send',
+  'assignment.kiosk_opened',
   'assignment.printed',
   'assignment.signed_manual',
   'email.bounced',
@@ -344,20 +345,49 @@ export interface AuditDetailsMap {
   /** One employee's assignment was cancelled; every link of it now shows "cancelled". */
   'assignment.cancelled': { roundId: string; fromStatus: AssignmentStatus };
   // Employee signing (3.13): the employee is the actor (her IP in `ip`), the assignment the
-  // entity, `emailMessageId` the link used. Never the typed ID number, the link token, an
+  // entity, `emailMessageId` the link used (null at the office kiosk, 3.16: `kioskSessionId`). Never the typed ID number, the link token, an
   // address, an answer or a saved value (NFR-PRV-7).
   /** A correct ID number: a 15-minute signing session started. */
-  'sign.verified': { roundId: string; emailMessageId: string; fromStatus: AssignmentStatus };
+  'sign.verified': {
+    roundId: string;
+    emailMessageId: string | null;
+    kioskSessionId?: string;
+    fromStatus: AssignmentStatus;
+  };
   /** A wrong ID number; `failedAttempts` counts it. */
-  'sign.verify_failed': { roundId: string; emailMessageId: string; failedAttempts: number };
+  'sign.verify_failed': {
+    roundId: string;
+    emailMessageId: string | null;
+    kioskSessionId?: string;
+    failedAttempts: number;
+  };
   /** The 5th wrong ID number locked the assignment (FR-SGN-2). */
-  'sign.locked': { roundId: string; emailMessageId: string; failedAttempts: number };
+  'sign.locked': {
+    roundId: string;
+    emailMessageId: string | null;
+    kioskSessionId?: string;
+    failedAttempts: number;
+  };
   /** An ID number sent to a link that is signed, cancelled, expired or locked; not compared. */
-  'sign.verify_refused': { roundId: string; emailMessageId: string; state: SignLinkState };
+  'sign.verify_refused': {
+    roundId: string;
+    emailMessageId: string | null;
+    kioskSessionId?: string;
+    state: SignLinkState;
+  };
   /** The personalized document was viewed (B2). */
-  'sign.document_viewed': { roundId: string; emailMessageId: string };
+  'sign.document_viewed': {
+    roundId: string;
+    emailMessageId: string | null;
+    kioskSessionId?: string;
+  };
   /** The form was read (B3); `correction`: a correction round, so the note was shown. */
-  'sign.form_viewed': { roundId: string; emailMessageId: string; correction: boolean };
+  'sign.form_viewed': {
+    roundId: string;
+    emailMessageId: string | null;
+    kioskSessionId?: string;
+    correction: boolean;
+  };
   /**
    * One IP first went over a per-IP limit in a 15-minute window (entity id NULL; the IP is in
    * `ip`). Logged once per IP, scope and window, to tune the limits.
@@ -370,8 +400,8 @@ export interface AuditDetailsMap {
    */
   'assignment.signed': {
     roundId: string;
-    emailMessageId: string;
-    signMethod: 'digital';
+    emailMessageId: string | null;
+    signMethod: 'digital' | 'kiosk';
     fileSha256: string;
     fileSize: number;
     fileReused: boolean;
@@ -382,6 +412,10 @@ export interface AuditDetailsMap {
     needsApproval: boolean;
     strayFileKeys: string[];
     userAgent: string | null;
+    /** Kiosk only (3.16): the kiosk session, the manager who opened it, the copy's email row. */
+    kioskSessionId?: string;
+    handledById?: string;
+    signedCopyEmailId?: string | null;
   };
   /** The signed copy went out (system actor); the same details as an invitation's. */
   'assignment.signed_copy_sent': {
@@ -412,6 +446,16 @@ export interface AuditDetailsMap {
   };
   /** The personalized PDF was printed (a document view: it holds the ID number). */
   'assignment.printed': { roundId: string; templateId: string };
+  /**
+   * The office signing station was opened (FR-MAN-4); `replaced`: earlier kiosk sessions of
+   * the assignment it ended. Never the code.
+   */
+  'assignment.kiosk_opened': {
+    roundId: string;
+    kioskSessionId: string;
+    expiresAt: string;
+    replaced: number;
+  };
   /**
    * A scanned paper document was stored: `signed_manual` (FR-MAN-3). No answers, no signed copy.
    * `fileReused`: the same bytes were already at the key (a retried upload); `strayFileKeys`:

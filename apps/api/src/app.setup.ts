@@ -3,7 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { type Express, json, type NextFunction, raw, type Request, type Response } from 'express';
 import { AppConfig } from './common/config/config.schema.js';
-import { SIGN_PATH } from './modules/signing/signing.constants.js';
+import { KIOSK_PATH, SIGN_PATH } from './modules/signing/signing.constants.js';
 import { EMAIL_WEBHOOK_PATH } from './modules/webhooks/webhooks.constants.js';
 
 /**
@@ -22,6 +22,7 @@ function securityHeaders(_request: Request, response: Response, next: NextFuncti
  * The signing routes (3.13): the link token is in the address, so the browser must never send it
  * on as a `Referer`, and no other site may show the signing screens or the document inside a
  * frame (a fake page wrapping the real one). Before routing, so 404, 413 and 429 get them too.
+ * The office signing station (3.16) gets the same.
  */
 function signingHeaders(_request: Request, response: Response, next: NextFunction): void {
   response.setHeader('Referrer-Policy', 'no-referrer');
@@ -65,9 +66,11 @@ export function configureApp(app: INestApplication): void {
   express.set('trust proxy', app.get(AppConfig).trustProxyHops);
   app.use(securityHeaders);
   app.use(SIGN_PATH, signingHeaders);
+  app.use(KIOSK_PATH, signingHeaders);
   // Only submit takes the signature and drawings (≈ 4 MB); registered before Nest's own JSON
   // parser (100 KB, added at init), which then leaves the parsed body alone.
   app.use(`${SIGN_PATH}/:token/submit`, signSubmitJson);
+  app.use(`${KIOSK_PATH}/submit`, signSubmitJson);
   app.use(EMAIL_WEBHOOK_PATH, emailWebhookRaw);
   // Reads the staff session cookie into request.cookies (unsigned; the token itself is random).
   app.use(cookieParser());

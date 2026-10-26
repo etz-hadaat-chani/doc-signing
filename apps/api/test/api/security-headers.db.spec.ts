@@ -79,8 +79,11 @@ describe('security headers on every answer', () => {
         .post(`/api/sign/${token}/submit`)
         .set('Content-Type', 'application/json')
         .send('{"broken'),
+      // The office kiosk (3.16) gets the same.
+      await server().post('/api/kiosk/state').send({ code: token }),
+      await server().get('/api/kiosk/document'),
     ];
-    expect(answers.map(({ status }) => status)).toEqual([404, 404, 404, 404, 400]);
+    expect(answers.map(({ status }) => status)).toEqual([404, 404, 404, 404, 400, 404, 401]);
     for (const response of answers) {
       expectSecurityHeaders(response);
       expect(response.headers['referrer-policy']).toBe('no-referrer');

@@ -1,4 +1,4 @@
-import { MANUAL_SCAN_MAX_BYTES, type ManualSigned } from '@doc-signing/shared';
+import { type KioskOpened, MANUAL_SCAN_MAX_BYTES, type ManualSigned } from '@doc-signing/shared';
 import {
   Controller,
   Get,
@@ -28,8 +28,8 @@ import { actorOf } from './manual-handling.controller.js';
 const idPipe = new ZodValidationPipe(z.uuid());
 
 /**
- * Paper signing for one assignment (3.16 part A, PRD §11, FR-MAN-2, FR-MAN-3): print and the
- * scanned signature. Manager only. Only the assignment id is in the address.
+ * Office handling of one assignment (3.16, PRD §11, FR-MAN-2 to FR-MAN-4): print, the
+ * scanned signature and the office kiosk. Manager only. Only the assignment id is in the address.
  */
 @ApiTags('assignments')
 @Controller('assignments')
@@ -79,5 +79,20 @@ export class ManualAssignmentsController {
     @Req() request: AuthRequest,
   ): Promise<ManualSigned> {
     return this.documents.manualSign(id, file.buffer, actorOf(request));
+  }
+
+  @ApiOperation({
+    summary: 'Open the office signing station for this employee (FR-MAN-4); logged',
+    description:
+      'A one-time code (only its SHA-256 is stored), valid 10 minutes until her correct ID ' +
+      'number; open `kioskPath#code` in a new window. Ends any earlier kiosk session of the ' +
+      'row. Same statuses as print, also after the link expired; 409 ASSIGNMENT_LOCKED: ' +
+      'unlock first.',
+  })
+  @Roles('manager')
+  @Post(':id/kiosk')
+  @HttpCode(HttpStatus.CREATED)
+  openKiosk(@Param('id', idPipe) id: string, @Req() request: AuthRequest): Promise<KioskOpened> {
+    return this.documents.openKiosk(id, actorOf(request));
   }
 }

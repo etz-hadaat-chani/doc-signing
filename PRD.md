@@ -200,11 +200,11 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | ID | Requirement |
 | --- | --- |
 | FR-SGN-1 | Each employee gets a unique link. The link shows no personal details until the ID number is entered. |
-| FR-SGN-2 | The employee enters their ID number. 5 wrong attempts lock the assignment until a manager unlocks it. Unlocking clears the attempts; a manager can unlock one assignment at most twice (each unlock gives whoever is typing 5 more tries), and not after the link expired. After that the employee is handled at the office: cancel, then print or the office signing station. A locked assignment gets no reminder or resend until it is unlocked. |
+| FR-SGN-2 | The employee enters their ID number. 5 wrong attempts lock the assignment until a manager unlocks it. Unlocking clears the attempts; a manager can unlock one assignment at most twice (each unlock gives whoever is typing 5 more tries), and not after the link expired. After that the employee is handled at the office: print and upload the scan (FR-MAN-2, FR-MAN-3); the office signing station only while the assignment can still be unlocked (FR-MAN-4: a locked row is unlocked first). A locked assignment gets no reminder or resend until it is unlocked. |
 | FR-SGN-3 | The employee sees their personalized PDF (the saved values filled in, FR-RND-8; the employer signature if the template has it "already on the document") and must scroll to the end before signing. |
 | FR-SGN-4 | Before the signature pad, the employee fills in a short form: the boxes she fills in (FR-TPL-9, FR-TPL-10) and the email section (FR-SGN-9), in the template's order, each with a clear Hebrew label. Boxes with a condition appear and disappear as she answers. Each mistake shows a Hebrew error next to its box (required box empty, text too long, date out of range); she can't submit with a required box empty. A drawing box has its own small pad with Clear. Then she draws a signature with the mouse (touch also works), can clear and redraw, and confirms a reading statement. The form and the pad are on one screen (B3), so the flow stays within 4 screens (NFR-USE-3). If the document was returned for correction (FR-TRK-6), a short box at the top of this screen shows "תיקון נדרש: <the manager's note>", only after the ID check. |
 | FR-SGN-5 | On confirm, the system checks every answer again with the same rules (FR-TPL-10), then places the signature (FR-SGN-10), the date, the employee's answers (FR-TPL-9, FR-SGN-9) and, if set, the employer signature ("added after the employee signs") in the PDF, locks the file against edits, and adds a small line with the signing date, time and reference number. |
-| FR-SGN-6 | The signed PDF is saved under round / department (at send time, `assignments.department_id`) / employee, and a copy is emailed to the employee at the address the link was sent to (never to an address the employee typed in the email section, and also when she chose "no email, at the office": the link proves she reads that mailbox). |
+| FR-SGN-6 | The signed PDF is saved under round / department (at send time, `assignments.department_id`) / employee, and a copy is emailed to the employee at the address the link was sent to (never to an address the employee typed in the email section, and also when she chose "no email, at the office": the link proves she reads that mailbox). At the office signing station no link is used: see FR-MAN-4. |
 | FR-SGN-7 | After signing, the link only shows "Already signed". Expired, cancelled and locked links show a clear Hebrew message with HR contact details. |
 | FR-SGN-8 | The signing session ends 15 minutes after the correct ID number (fixed, not extended by use) or when the browser closes. It opens only the link it was started on. If it ends while she is still filling in the form, the screen keeps her answers and signature, asks for the ID number again and sends them; nothing is saved before. |
 | FR-SGN-9 | **Email section** (the same in every contract). The employee must choose exactly one: (a) **an email**: the box is pre-filled with the email the system has; she can keep or correct it; or (b) tick **"I have no email and want my payslip and notices at the institution's office in my city"**. She can't sign without choosing one. Checks: valid email format, at most 254 characters, exactly one option. The answer is saved with the assignment (`assignment_responses`), drawn into the signed PDF, shown to managers and officers, and included in the Excel export. A corrected email **never** overwrites the employee's stored email; it shows in manual handling (FR-MAN-1) so it can be fixed in Har Gal. |
@@ -238,7 +238,7 @@ All requirements below are MVP. Each has an ID so the team can link tasks and te
 | FR-MAN-1 | A list of everyone with no email or a bounced email, across rounds. Open assignments in status `no_email` whose employee now has a valid email (for example, added by an import) are marked **"email added, ready to send"**, with a one-click send (a new invitation with a new link). The list also shows: open assignments in status **"Missing data"**, with what is missing; once the employee card is filled in they are marked **"details completed, ready to send"**, and the send checks again, saves the values (FR-RND-8) and sends, or sets "No email". And signed assignments where **"the employee corrected her email: old → new"** (FR-SGN-9), so the manager fixes it in Har Gal; worked out from the data, it disappears once the stored email matches the one she gave. |
 | FR-MAN-2 | A manager can print an employee's personalized PDF (from the saved values, FR-RND-8; drawn like the employee's view, today as the document date). Open assignments with saved values can be printed (Pending, Sent, Opened, No email, Invalid email; also when locked or the link expired). Missing data has nothing saved yet: complete the card and send first (it then becomes printable even without an email). Signed and cancelled assignments are not printed. Each print is logged as a document view. |
 | FR-MAN-3 | A manager can upload a scan of a paper-signed document; the status becomes "Signed manually". No answers are stored for it: the paper itself is the record. The same assignments as print (FR-MAN-2). PDF only, content checked, at most 20 MB and 100 pages. Stored like a signed file (department at send time), never over another file, with its SHA-256. All links then show "already signed" and reminders stop. It never waits for approval, and **no signed copy is emailed**: she signed the paper at the office, and there is no confirmed address (FR-SGN-6 sends to the address of the link used). |
-| FR-MAN-4 | **Office signing station:** a manager opens signing for an employee on an office computer. The employee still enters their ID number, fills in the form (FR-SGN-4) and signs themselves. |
+| FR-MAN-4 | **Office signing station:** a manager opens signing for an employee on an office computer. The employee still enters their ID number, fills in the form (FR-SGN-4) and signs themselves. Opening it gives a one-time code (256 bits, only its SHA-256 stored, never emailed or logged) that works for 10 minutes until her correct ID number, then the usual 15-minute signing session; a new one ends the earlier one. The code reaches the kiosk window after `#` in its address (never sent to a server) and then only in request bodies, so no address holds personal data. Open for the same assignments as print (FR-MAN-2), also after the link expired; a locked one is unlocked first (FR-SGN-2). Wrong ID numbers count toward the same 5-attempt lock as her links. Signed: "Signed" with method kiosk and the manager in `handled_by`; every link shows "already signed" and reminders stop; the answers may wait for approval like a digital signature. Signed copy: to the email she gives in the email section if she chooses "email" (she is there in person, her ID number checked, and typed or confirmed it herself), none for "at the office"; it never changes her stored email. Open point (decide in the management and signing screens): the office computer has a manager signed in to the staff app, so the employee could switch to a staff window; options are a separate office computer with no staff user signed in (it would need a short code typed there), the staff app hiding its screens while a kiosk window is open, or both. |
 
 ### Administration
 
@@ -472,7 +472,7 @@ All management endpoints need a staff session; the role column says who may call
 | POST | `/api/assignments/:id/unlock` | Unlock after 5 wrong ID attempts (at most twice per assignment; not after expiry); returns the unlocks left | M |
 | POST | `/api/assignments/:id/cancel` | Cancel for this employee (any open status, also in a draft); every link of hers shows "cancelled" | M |
 | POST | `/api/assignments/:id/manual-sign` | Upload a scanned paper signature (multipart `file`, PDF, FR-MAN-3): status "Signed manually"; 201 with the file's SHA-256. Same statuses as print | M |
-| POST | `/api/assignments/:id/kiosk` | Open a one-time signing session at the office signing station | M |
+| POST | `/api/assignments/:id/kiosk` | Open a one-time signing session at the office signing station (FR-MAN-4): 201 `{ assignmentId, code, expiresAt, kioskPath }`; open `kioskPath#code` in a new window. Same statuses as print, also expired; locked → 409 (unlock first) | M |
 | GET | `/api/assignments/:id/responses` | What the employee filled in (drawings as short-lived links); logged | M, O |
 | POST | `/api/assignments/:id/approve` | Approve a signed document waiting for approval; logged | M |
 | POST | `/api/assignments/:id/return` | Body `{ note }` (required, up to 500 characters). Return for correction: cancels the assignment; logged | M |
@@ -514,6 +514,19 @@ All management endpoints need a staff session; the role column says who may call
 | POST | `/api/sign/:token/submit` | Body `{ signatureImage, acknowledged: true, emailChoice: "email" \| "office", email?, answers: { [key]: string \| boolean }, drawings: { [key]: "<PNG, base64>" } }` (`email` required for `"email"`, FR-SGN-9; `answers` and `drawings` checked with the template's rules, FR-TPL-10). Saves the answers, builds and saves the signed PDF, emails the copy, closes all links of the assignment. |
 
 A link that isn't valid is refused on every route after the state: signed / cancelled / expired → 409 (`SIGN_ALREADY_SIGNED`, `SIGN_CANCELLED`, `SIGN_LINK_EXPIRED`), locked → 423 `SIGN_LOCKED`; no session, an expired one or another link's → 401 `SIGN_SESSION_EXPIRED`; over a per-IP limit → 429 `SIGN_TOO_MANY_REQUESTS` with `Retry-After`. These routes send `Referrer-Policy: no-referrer` and may not be shown in another site's frame.
+
+### Office signing station (public, FR-MAN-4)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/api/kiosk/state` | Body `{ code }`: `{ state, hrContact }` only. An unknown, used, replaced or old code → 404 `KIOSK_CODE_NOT_FOUND` |
+| POST | `/api/kiosk/verify` | Body `{ code, idNumber }`: the same ID check as a link (counted in the same 5 attempts); correct → uses the code, opens a 15-minute session (cookie `kiosk_sid`, path `/api/kiosk`) |
+| GET | `/api/kiosk/document` | The personalized PDF; needs the kiosk session |
+| GET | `/api/kiosk/form` | The same form as `/api/sign/:token/form` |
+| POST | `/api/kiosk/fit` | The same as `/api/sign/:token/fit` |
+| POST | `/api/kiosk/submit` | The same body as `/api/sign/:token/submit`. Signs (method kiosk), ends the kiosk session and clears the cookie |
+
+Nothing here reads the staff session: a manager signed in on the same computer gives the kiosk nothing. Every answer is `no-store` (the PDF too); after submit every call is 401, so going "back" can fetch nothing. Same refusals, headers and per-IP limits as the signing routes.
 
 ### System
 
@@ -783,10 +796,25 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | id | uuid PK |  |
 | token\_hash | char(64) UNIQUE | SHA-256 of the `sign_sid` cookie token; the token itself is never stored |
 | assignment\_id | uuid FK → assignments |  |
-| email\_message\_id | uuid FK → email\_messages | The link the ID check was made on; the session opens only that link, and the signed copy goes to its `to_email` |
+| email\_message\_id | uuid FK → email\_messages NULL | The link the ID check was made on; the session opens only that link, and the signed copy goes to its `to_email` |
+| kiosk\_session\_id | uuid FK → kiosk\_sessions NULL | Or the office kiosk session (FR-MAN-4), cookie `kiosk_sid`. Exactly one of the two (CHECK) |
 | expires\_at | timestamptz | ID check + 15 minutes, fixed |
 | ip | inet NULL |  |
 | user\_agent | text NULL |  |
+| created\_at | timestamptz |  |
+
+**`kiosk_sessions`**: office signing station sessions (FR-MAN-4); kept, never deleted
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | uuid PK |  |
+| assignment\_id | uuid FK → assignments | At most one not ended per assignment (partial unique index) |
+| code\_hash | char(64) UNIQUE | SHA-256 of the one-time code; the code itself is never stored |
+| opened\_by | uuid FK → users | The manager; becomes `handled_by` of a kiosk signature |
+| expires\_at | timestamptz | Opened + 10 minutes; the code works until then, or until used |
+| used\_at | timestamptz NULL | The correct ID number used the code |
+| ended\_at | timestamptz NULL |  |
+| end\_reason | enum `replaced` / `signed` / `locked` NULL | Set with `ended_at` (CHECK) |
 | created\_at | timestamptz |  |
 
 **`signing_rate_hits`**: per-IP counters of the public signing routes (NFR-SEC-3)
@@ -799,7 +827,7 @@ The employee number is a good business key, not a primary key: if it is ever reu
 | hits | int |  |
 |  | PK (scope, ip, window\_start) |  |
 
-Rows of `sessions`, `login_attempts`, `signing_sessions` and `signing_rate_hits` are short-lived and deleted (logout, expiry, successful login, signing, daily cleanup; rate counters after 1 day); nothing references them except `signing_sessions` → assignments / email messages. `email_messages` has at most one `signed_copy` row per assignment (a partial unique index).
+Rows of `sessions`, `login_attempts`, `signing_sessions` and `signing_rate_hits` are short-lived and deleted (logout, expiry, successful login, signing, daily cleanup; rate counters after 1 day); nothing references them except `signing_sessions` → assignments / email messages / kiosk sessions. `email_messages` has at most one `signed_copy` row per assignment (a partial unique index).
 
 ### Relationships
 
@@ -935,6 +963,7 @@ The biggest risk to launch is not the code but internet filters blocking the sig
 - [x] Filter companies: NetFree, Etrog, Nativ, Rimon.
 - [ ] Cloud provider (AWS or Azure): decide before the deployment phase. Development runs locally in Docker, and storage and email sit behind adapters, so either works.
 - [ ] Har Gal export format: unknown; the later phase keeps all options open.
+- [ ] Office signing station (FR-MAN-4): the kiosk window runs where a manager is signed in to the staff app, so the employee could switch to a staff window. Decide in the screens (5.7, 6.4): a separate office computer with no staff user signed in (needs a short code typed there), the staff app hiding its screens while a kiosk window is open, or both.
 - [ ] After-school contract (צהרונית / סייעת צהרון): fields not decided yet. Nothing is built for it now; when it is, its pension field uses "ב only" (FR-TPL-5).
 - [ ] Lawyer: confirm that one drawn signature placed by the system in several positions (main signature, employee declaration, the "no email" line) is acceptable.
 - [ ] Hours base (שעות עבודה): it is a full-time base code, not hours (1 = 42, 3 = 30, 4 = 40 hours a week). HR to confirm what 0 and 2 mean and that the data is accurate. Until then it is stored and shown on the card only; no template uses it.

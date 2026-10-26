@@ -74,3 +74,19 @@ export function manualDocumentRefusal(
   if (!isIn(MANUAL_PRINTABLE_STATUSES, status)) return { code: 'ASSIGNMENT_NOT_PRINTABLE' };
   return null;
 }
+
+/**
+ * The office signing station (FR-MAN-4): the print statuses, also when the link expired (a
+ * manager is there and no emailed link is used), but a locked row must be unlocked first through
+ * the logged unlock action (3.12), so the 5-attempt guard is never skipped.
+ */
+export function kioskRefusal(
+  status: AssignmentStatus,
+  locked: boolean,
+  round: ActionRound,
+): Refusal | null {
+  const refusal = manualDocumentRefusal(status, round);
+  if (refusal) return refusal;
+  if (locked) return { code: 'ASSIGNMENT_LOCKED' };
+  return null;
+}

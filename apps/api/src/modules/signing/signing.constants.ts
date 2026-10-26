@@ -18,3 +18,14 @@ export function signCookieOptions(): CookieOptions {
 
 /** The value kept of the browser's user agent (NFR-SIG-2), cut to a sane length. */
 export const USER_AGENT_MAX_LENGTH = 512;
+
+/** The office signing station's session cookie (3.16); never `sign_sid` or the staff `sid`. */
+export const KIOSK_COOKIE = 'kiosk_sid';
+
+/** Where every kiosk route lives; its cookie and the signing headers are limited to it. */
+export const KIOSK_PATH = '/api/kiosk';
+
+/** Like `signCookieOptions`, for the kiosk routes only (Path /api/kiosk). */
+export function kioskCookieOptions(): CookieOptions {
+  return { httpOnly: true, secure: true, sameSite: 'strict', path: KIOSK_PATH };
+}

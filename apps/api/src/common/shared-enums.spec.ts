@@ -6,6 +6,7 @@ import {
   EMAIL_STATUSES,
   EMPLOYER_SIGNATURE_MODES,
   IMPORT_STATUSES,
+  KIOSK_END_REASONS,
   ROUND_MODES,
   ROUND_STATUSES,
   SIGN_METHODS,
@@ -34,6 +35,7 @@ const sharedEnums: Record<keyof typeof prismaEnums, readonly string[]> = {
   EmailMessageType: EMAIL_MESSAGE_TYPES,
   EmailMessageStatus: EMAIL_MESSAGE_STATUSES,
   ActorType: ACTOR_TYPES,
+  KioskEndReason: KIOSK_END_REASONS,
 };
 
 describe('shared enums', () => {

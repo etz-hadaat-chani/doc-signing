@@ -84,9 +84,10 @@ describe('every route declares who may call it', () => {
       'ManualAssignmentsController.manualSign (POST /assignments/:id/manual-sign)',
     );
     expect(names).toContain('ManualHandlingController.send (POST /manual-handling/send)');
+    expect(names).toContain('ManualAssignmentsController.openKiosk (POST /assignments/:id/kiosk)');
   });
 
-  it('public routes are only health, login, the employee signing routes (3.13) and the email webhook (3.15)', () => {
+  it('public routes are only health, login, the employee signing routes (3.13), the office kiosk (3.16) and the email webhook (3.15)', () => {
     const open = routes
       .filter(({ method, controller }) => resolveAccess(method, controller).kind === 'public')
       .map(({ name }) => name)
@@ -94,6 +95,12 @@ describe('every route declares who may call it', () => {
     expect(open).toEqual([
       'AuthController.login (POST /auth/login)',
       'HealthController.check (GET /health)',
+      'KioskSigningController.document (GET /kiosk/document)',
+      'KioskSigningController.fit (POST /kiosk/fit)',
+      'KioskSigningController.form (GET /kiosk/form)',
+      'KioskSigningController.state (POST /kiosk/state)',
+      'KioskSigningController.submit (POST /kiosk/submit)',
+      'KioskSigningController.verify (POST /kiosk/verify)',
       'SigningController.document (GET /sign/:token/document)',
       'SigningController.fit (POST /sign/:token/fit)',
       'SigningController.form (GET /sign/:token/form)',

@@ -262,9 +262,18 @@ export class ManualHandlingRepository {
 
   /** Locks the assignment row (the caller holds the round lock) and reads its status again. */
   async lockStatus(assignmentId: string, db: Db): Promise<AssignmentStatus | null> {
-    const rows = await db.$queryRaw<{ status: AssignmentStatus }[]>`
-      SELECT status::text AS status FROM assignments WHERE id = ${assignmentId}::uuid FOR UPDATE`;
-    return rows[0]?.status ?? null;
+    return (await this.lockState(assignmentId, db))?.status ?? null;
+  }
+
+  /** Like `lockStatus`, with the 5-attempt lock flag (the office kiosk needs both). */
+  async lockState(
+    assignmentId: string,
+    db: Db,
+  ): Promise<{ status: AssignmentStatus; locked: boolean } | null> {
+    const rows = await db.$queryRaw<{ status: AssignmentStatus; locked: boolean }[]>`
+      SELECT status::text AS status, locked_at IS NOT NULL AS locked
+      FROM assignments WHERE id = ${assignmentId}::uuid FOR UPDATE`;
+    return rows[0] ?? null;
   }
 
   /**

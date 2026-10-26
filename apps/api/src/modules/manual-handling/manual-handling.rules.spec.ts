@@ -2,6 +2,7 @@ import { ASSIGNMENT_STATUSES, type AssignmentStatus, type RoundStatus } from '@d
 import { describe, expect, it } from 'vitest';
 import type { ActionRound } from '../rounds/round-actions.rules.js';
 import {
+  kioskRefusal,
   manualDocumentRefusal,
   manualSendRefusal,
   type ManualSendTarget,
@@ -114,5 +115,30 @@ describe('manualDocumentRefusal', () => {
     expect(manualDocumentRefusal('sent', round({ linkExpiresAt: NOW }))).toBeNull();
     expect(code(manualDocumentRefusal('sent', round({ status: 'draft' })))).toBe('ROUND_NOT_SENT');
     expect(code(manualDocumentRefusal('sent', round({ status: 'closed' })))).toBe('ROUND_NOT_OPEN');
+  });
+});
+
+describe('kioskRefusal', () => {
+  const past = round({ linkExpiresAt: new Date('2026-10-01T00:00:00.000Z') });
+
+  it.each<AssignmentStatus>(['pending', 'sent', 'opened', 'no_email', 'invalid_email'])(
+    '%s may open the kiosk, also after the link expired',
+    (status) => {
+      expect(kioskRefusal(status, false, round())).toBeNull();
+      expect(kioskRefusal(status, false, past)).toBeNull();
+    },
+  );
+
+  it('a locked row is unlocked first', () => {
+    expect(kioskRefusal('sent', true, round())).toEqual({ code: 'ASSIGNMENT_LOCKED' });
+  });
+
+  it('signed, cancelled, missing data and closed rounds first, like print', () => {
+    expect(kioskRefusal('signed', true, round())?.code).toBe('ASSIGNMENT_ALREADY_SIGNED');
+    expect(kioskRefusal('signed_manual', false, round())?.code).toBe('ASSIGNMENT_ALREADY_SIGNED');
+    expect(kioskRefusal('cancelled', true, round())?.code).toBe('ASSIGNMENT_ALREADY_CANCELLED');
+    expect(kioskRefusal('missing_data', false, round())?.code).toBe('ASSIGNMENT_NOT_PRINTABLE');
+    expect(kioskRefusal('sent', false, round({ status: 'closed' }))?.code).toBe('ROUND_NOT_OPEN');
+    expect(kioskRefusal('sent', false, round({ status: 'draft' }))?.code).toBe('ROUND_NOT_SENT');
   });
 });

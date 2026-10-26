@@ -229,12 +229,13 @@ model User {
   importBatches       ImportBatch[]
   templates           Template[]
   rounds              Round[]
-  handledAssignments  Assignment[]  @relation("AssignmentHandledBy")
-  approvedAssignments Assignment[]  @relation("AssignmentApprovedBy")
-  returnedAssignments Assignment[]  @relation("AssignmentReturnedBy")
+  handledAssignments  Assignment[]   @relation("AssignmentHandledBy")
+  approvedAssignments Assignment[]   @relation("AssignmentApprovedBy")
+  returnedAssignments Assignment[]   @relation("AssignmentReturnedBy")
   auditLogs           AuditLog[]
   updatedSettings     Setting[]
   sessions            Session[]
+  kioskSessions       KioskSession[]
 
   @@map("users")
 }
@@ -488,6 +489,7 @@ model Assignment {
   responses       AssignmentResponse[]
   correctionRound Round?               @relation("CorrectionRound")
   signingSessions SigningSession[]
+  kioskSessions   KioskSession[]
 
   @@unique([roundId, employeeId])
   @@index([roundId, status]) // Round counts
@@ -612,24 +614,57 @@ model LoginAttempt {
 }
 
 // Employee signing sessions (3.13): one per correct ID check, 15 minutes fixed (FR-SGN-8). The
-// cookie token is stored only as SHA-256. Bound to the assignment AND the exact link (email row)
-// used, whose to_email gets the signed copy. Deleted at signing and by the daily cleanup.
+// cookie token is stored only as SHA-256. Bound to the assignment AND either the exact link (email
+// row) used, whose to_email gets the signed copy, or the office kiosk session (3.16); exactly one
+// of the two (CHECK in the migration). Deleted at signing and by the daily cleanup.
 model SigningSession {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tokenHash      String   @unique @map("token_hash") @db.Char(64)
   assignmentId   String   @map("assignment_id") @db.Uuid
-  emailMessageId String   @map("email_message_id") @db.Uuid
+  emailMessageId String?  @map("email_message_id") @db.Uuid
+  kioskSessionId String?  @map("kiosk_session_id") @db.Uuid
   expiresAt      DateTime @map("expires_at") @db.Timestamptz(3)
   ip             String?  @db.Inet
   userAgent      String?  @map("user_agent")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  assignment   Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
-  emailMessage EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Restrict)
+  assignment   Assignment    @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  emailMessage EmailMessage? @relation(fields: [emailMessageId], references: [id], onDelete: Restrict)
+  kioskSession KioskSession? @relation(fields: [kioskSessionId], references: [id], onDelete: Restrict)
 
   @@index([assignmentId])
   @@index([expiresAt]) // Cleanup
   @@map("signing_sessions")
+}
+
+enum KioskEndReason {
+  replaced // The manager opened a new kiosk session for the same assignment
+  signed
+  locked // The 5th wrong ID number
+
+  @@map("kiosk_end_reason")
+}
+
+// Office signing station sessions (3.16, FR-MAN-4): opened by a manager for one assignment. The
+// one-time code is stored only as SHA-256 and works for KIOSK_CODE_MINUTES until the correct ID
+// number uses it (used_at). Kept as a record (never deleted); ended_at + end_reason when it ends.
+model KioskSession {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assignmentId String          @map("assignment_id") @db.Uuid
+  codeHash     String          @unique @map("code_hash") @db.Char(64)
+  openedById   String          @map("opened_by") @db.Uuid
+  expiresAt    DateTime        @map("expires_at") @db.Timestamptz(3) // For the code, until used
+  usedAt       DateTime?       @map("used_at") @db.Timestamptz(3) // The correct ID number
+  endedAt      DateTime?       @map("ended_at") @db.Timestamptz(3)
+  endReason    KioskEndReason? @map("end_reason")
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  assignment      Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  openedBy        User             @relation(fields: [openedById], references: [id], onDelete: Restrict)
+  signingSessions SigningSession[]
+
+  @@index([assignmentId])
+  @@map("kiosk_sessions")
 }
 
 // Per-IP counters of the public signing routes (3.13): one row per scope, IP and 15-minute

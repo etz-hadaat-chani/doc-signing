@@ -1,11 +1,14 @@
 import {
   fieldValuesSchema,
+  KIOSK_PAGE_PATH,
+  type KioskOpened,
   MANUAL_SCAN_MAX_PAGES,
   type ManualSigned,
   todayInIsrael,
 } from '@doc-signing/shared';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service.js';
+import { hashSigningToken, newSigningToken } from '../../common/email/signing-token.js';
 import { AppException } from '../../common/errors/app.exception.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { readPdfContent } from '../../common/upload/pdf-content.js';
@@ -13,12 +16,13 @@ import { PdfAssetsService } from '../pdf-filler/pdf-assets.service.js';
 import { renderSavedDocument } from '../pdf-filler/saved-document.js';
 import type { ActionRound } from '../rounds/round-actions.rules.js';
 import { RoundActionsRepository } from '../rounds/round-actions.repository.js';
+import { KioskRepository } from '../signing/kiosk.repository.js';
 import { SignedFilesService } from '../signing/signed-files.service.js';
 import { toPosition } from '../templates/stored-position.js';
 import { TemplatesRepository } from '../templates/templates.repository.js';
 import type { TemplateActor } from '../templates/templates.service.js';
 import { type DocumentFacts, ManualHandlingRepository } from './manual-handling.repository.js';
-import { manualDocumentRefusal } from './manual-handling.rules.js';
+import { kioskRefusal, manualDocumentRefusal } from './manual-handling.rules.js';
 
 /** Like the round actions (3.12): READ COMMITTED, the round row first. */
 const SIGN_TRANSACTION = { maxWait: 10_000, timeout: 30_000 } as const;
@@ -36,9 +40,10 @@ export interface PrintedDocument {
 }
 
 /**
- * Paper signing (3.16 part A, FR-MAN-2, FR-MAN-3, Flow 7): print the personalized PDF from the
+ * Office handling (3.16, FR-MAN-2 to FR-MAN-4, Flow 7): print the personalized PDF from the
  * saved values, then store the scan of the signed paper as "Signed manually". The scan is the
- * record: no answers are stored, nothing waits for approval and no signed copy is emailed.
+ * record: no answers are stored, nothing waits for approval and no signed copy is emailed. Or
+ * open the office signing station, where she signs herself (`/api/kiosk/*`, signing module).
  */
 @Injectable()
 export class ManualDocumentsService {
@@ -51,6 +56,7 @@ export class ManualDocumentsService {
     private readonly templates: TemplatesRepository,
     private readonly assets: PdfAssetsService,
     private readonly files: SignedFilesService,
+    private readonly kiosks: KioskRepository,
     private readonly audit: AuditService,
   ) {}
 
@@ -155,6 +161,53 @@ export class ManualDocumentsService {
       status: 'signed_manual',
       signedAt: signed.toISOString(),
       fileSha256: stored.sha256,
+    };
+  }
+
+  /**
+   * Opens the office signing station for one assignment (FR-MAN-4). One transaction under the
+   * round and row locks: the kiosk rule (the print statuses, also expired; locked → unlock
+   * first), every earlier kiosk session of the row ended (and its signing session), a new one
+   * with a one-time code (only its SHA-256 stored), one audit row without the code. The code
+   * goes back only in this answer, for the kiosk window (`/kiosk#<code>`).
+   */
+  async openKiosk(assignmentId: string, actor: TemplateActor): Promise<KioskOpened> {
+    const roundId = await this.actions.roundOfAssignment(assignmentId);
+    if (!roundId) throw new AppException('ASSIGNMENT_NOT_FOUND', HttpStatus.NOT_FOUND);
+    const code = newSigningToken();
+    const opened = await this.prisma.$transaction(async (tx) => {
+      const round = await this.actions.lockRound(roundId, tx);
+      const row = await this.repository.lockState(assignmentId, tx);
+      if (!round || !row) throw new Error('Assignment or round gone while opening the kiosk');
+      const refusal = kioskRefusal(row.status, row.locked, round);
+      if (refusal) throw new AppException(refusal.code, HttpStatus.CONFLICT, refusal.details);
+      const replaced = await this.kiosks.endOpenOf(assignmentId, tx);
+      const session = await this.kiosks.create(
+        { assignmentId, codeHash: hashSigningToken(code), openedById: actor.userId },
+        tx,
+      );
+      await this.audit.record(
+        {
+          actor: { type: 'user', userId: actor.userId },
+          action: 'assignment.kiosk_opened',
+          entity: { type: 'assignment', id: assignmentId },
+          ip: actor.ip,
+          details: {
+            roundId,
+            kioskSessionId: session.id,
+            expiresAt: session.expiresAt.toISOString(),
+            replaced,
+          },
+        },
+        tx,
+      );
+      return session;
+    }, SIGN_TRANSACTION);
+    return {
+      assignmentId,
+      code,
+      expiresAt: opened.expiresAt.toISOString(),
+      kioskPath: KIOSK_PAGE_PATH,
     };
   }
 

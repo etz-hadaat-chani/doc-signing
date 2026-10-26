@@ -100,6 +100,10 @@ export const SIGN_METHODS = ['digital', 'manual', 'kiosk'] as const;
 export const signMethodSchema = z.enum(SIGN_METHODS);
 export type SignMethod = (typeof SIGN_METHODS)[number];
 
+// kiosk_sessions.end_reason (3.16)
+export const KIOSK_END_REASONS = ['replaced', 'signed', 'locked'] as const;
+export type KioskEndReason = (typeof KIOSK_END_REASONS)[number];
+
 // email_messages.type
 export const EMAIL_MESSAGE_TYPES = ['invite', 'reminder', 'signed_copy'] as const;
 export const emailMessageTypeSchema = z.enum(EMAIL_MESSAGE_TYPES);
