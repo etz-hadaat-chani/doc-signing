@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { todayInIsrael } from './employees.js';
 import type { TemplateFieldType } from './enums.js';
 import { templateFieldKeySchema } from './template-fields.js';
 
@@ -63,4 +64,21 @@ export type FieldValues = z.infer<typeof fieldValuesSchema>;
 export function formatDayIL(day: string): string {
   const [year, month, date] = day.split('-');
   return `${date}/${month}/${year}`;
+}
+
+/** A moment (Date or ISO string) as the Israeli day `DD/MM/YYYY` (NFR-HEB-1), for screens. */
+export function formatDate(value: Date | string): string {
+  return formatDayIL(todayInIsrael(new Date(value)));
+}
+
+const israelTime = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Jerusalem',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** A moment (Date or ISO string) as the Israeli time `HH:MM`, 24 hours. */
+export function formatTime(value: Date | string): string {
+  return israelTime.format(new Date(value));
 }

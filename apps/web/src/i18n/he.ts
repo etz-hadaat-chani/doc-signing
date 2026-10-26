@@ -112,6 +112,33 @@ export const he = {
     offline: 'אין חיבור לאינטרנט. הנתונים יתעדכנו כשהחיבור יחזור.',
   },
 
+  /** The dashboard (A2). Status names come from STATUS_LABELS / ROUND_STATUS_LABELS (shared). */
+  dashboard: {
+    refresh: 'רענון',
+    refreshing: 'מרענן…',
+    updatedAt: (time: string) => `עודכן ב-${time}`,
+    totalsTitle: 'סיכום הסבבים הפעילים',
+    activeRounds: (count: number, formatted: string) =>
+      count === 1 ? 'סבב פעיל אחד' : `${formatted} סבבים פעילים`,
+    percentSigned: (percent: string) => `${percent}% נחתמו`,
+    recipients: (count: number, formatted: string) =>
+      count === 1 ? 'נמען אחד' : `${formatted} נמענים`,
+    roundsTitle: 'סבבים פעילים',
+    noActiveRounds: 'אין סבבים פעילים כרגע.',
+    needsHandling: 'דורש טיפול:',
+    nothingToHandle: 'אין עובדים שדורשים טיפול.',
+    sentProgress: (sent: string, total: string) => `נשלחו ${sent} מתוך ${total}`,
+    progressLabel: 'התקדמות השליחה',
+    linkExpires: (date: string) => `הקישורים בתוקף עד ${date}`,
+    draftsTitle: (formatted: string) => `טיוטות פתוחות (${formatted})`,
+    draftsHint: 'טיוטה שלא נשלחה תופסת את העובדים שבה. כדאי לשלוח אותה או לבטל אותה.',
+    draftAge: (days: number) =>
+      days === 0 ? 'נוצרה היום' : days === 1 ? 'נוצרה אתמול' : `נוצרה לפני ${days} ימים`,
+    allDrafts: 'לכל הטיוטות',
+    emptyTitle: 'עדיין אין סבבים',
+    emptyText: 'מצב החתימות יופיע כאן אחרי שייווצר הסבב הראשון.',
+  },
+
   /** The components demo page (4.2, development only). Every name and number there is made up. */
   demo: {
     intro: 'דף לבדיקת הרכיבים המשותפים. כל הנתונים כאן מומצאים. הדף קיים רק בסביבת הפיתוח.',

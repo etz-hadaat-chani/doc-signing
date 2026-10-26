@@ -701,10 +701,26 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
 
 ## Phase 5: Management screens
 
-### [ ] 5.1 Dashboard (A2)
+### [x] 5.1 Dashboard (A2)
 - **Build:** Totals and rounds needing attention.
 - **Depends on:** 4.2, 3.11
 - **Done when:** Numbers match the API.
+- **Done (rules):**
+  - No API change. `admin/dashboard/` (`DashboardPage`, `StatTiles`, `AttentionRounds`, `OpenDrafts`, `use-dashboard.ts`, `dashboard.api.ts`, `dashboard-view.ts`), lazy in `PAGE_COMPONENTS` at `/`. The h1 "לוח בקרה" is always shown; loading = `PageLoader`, a failed summary = `ErrorState` as h2 with retry (so the page keeps one h1), empty (no active rounds, no drafts) = "עדיין אין סבבים".
+  - Three routes, all M + O: `GET /api/dashboard/summary`; `GET /api/rounds?status=draft&pageSize=100` only when `drafts.count > 0` (the summary has no draft names); `GET /api/rounds/:id` only for a `sending` round, for `progress` ("נשלחו X מתוך Y" + bar; nothing shown while it loads or if it fails). Keys `dashboardKeys` under `['staff','dashboard', …]`.
+  - Tiles (FR-TRK-1), `DISPLAY_STATUSES` order, labels from `STATUS_LABELS`: sent (= "waiting"), opened, signed, waiting_for_approval, no_email; plus "N סבבים פעילים · X% נחתמו".
+  - Rounds: every sending / active round (name → `/rounds/:id`, `RoundStatusChip`, % signed, recipients, link expiry); "דורש טיפול:" = the `ATTENTION_DISPLAY_STATUSES` with rows, in `DISPLAY_STATUSES` order, each `StatusChip` + count linking to `/rounds/:id?status=<status>`. Order: most `needsAttention` first, then sending before active, then the API's order. Drafts: name, "טיוטה", "נוצרה היום / אתמול / לפני N ימים"; over 100 → "לכל הטיוטות" (`/rounds?status=draft`).
+  - Real time: refetch on window focus / tab shown again (when older than 30 s), a "רענון" button (refetches every `['staff','dashboard']` query), "עודכן ב-HH:MM". No `refetchInterval` (tested), so a forgotten screen sends nothing and the idle session ends. A failed refresh keeps the numbers and shows `notify.error`.
+  - Manager only: "סבב חדש" (→ `/rounds/new`); officers see the same data, no action buttons (`useAuthUser().role` only hides it).
+  - Formatting: shared `formatDate` (DD/MM/YYYY) and `formatTime` (HH:MM, 24 h), both Asia/Jerusalem, next to `formatDayIL` in `packages/shared/src/field-values.ts` (`field-values.spec.ts`); web `i18n/format.ts` `formatNumber` (he-IL, "1,500"). New token `font.size.stat` 32 (tile numbers: nothing bigger than the 24 px title existed). `ErrorState` takes `headingComponent="h3"` too.
+  - Side menu (4.1 fix): the `<nav>` stretches with the page (white to the bottom on long pages); an inner box stays sticky and scrolls.
+  - Tests: web 170 unit (was 155): `DashboardPage.spec` (tiles, order, links, progress, drafts, empty / loading / error + retry, manager vs officer button, refresh refetches all, no polling), `dashboard-view.spec`, `format.spec`; shared `field-values.spec` (midnight in summer / winter, 00:00). Playwright `e2e/dashboard.e2e.ts`: manager and officer, every tile and round count equals `GET /api/dashboard/summary` from the same session, links carry only `?status=`, officer has no "סבב חדש".
+- **Note for later tasks:**
+  - 5.6: read `?status=` on `/rounds/:roundId` (the dashboard links there, one display status). `/rounds?status=draft` is linked too.
+  - After any action that changes counts (send, remind, cancel, approve, scan, import does not), invalidate `dashboardKeys.all` as well as your own keys.
+  - Dates and times on every screen: shared `formatDate` / `formatTime`; numbers: `formatNumber`. Never `toLocaleDateString` (he-IL uses dots).
+  - API: `common/email/templates/format-date.ts` `formatIsraelDate` should switch to the shared `formatDate` (same output; its tests stay).
+  - Big numbers use `font.size.stat`; a progress bar uses the `border` token as its track. A section that fails inside a page uses `ErrorState` with `headingComponent` h2 / h3.
 
 ### [ ] 5.2 Employees (A6, A7)
 - **Build:** List, employee card with history, add/edit (manager only).

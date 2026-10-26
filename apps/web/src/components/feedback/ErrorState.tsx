@@ -23,8 +23,8 @@ interface ErrorStateProps extends ErrorContent {
   onRetry?: () => void;
   /** Another button, e.g. back to the dashboard. */
   action?: ReactNode;
-  /** The title's tag: `h1` for a whole page, `h2` inside a page (e.g. a table that failed). */
-  headingComponent?: 'h1' | 'h2';
+  /** The title's tag: `h1` for a whole page, `h2` / `h3` inside a page (a table or section that failed). */
+  headingComponent?: 'h1' | 'h2' | 'h3';
 }
 
 /** The one error look of the app: no permission, not found, server error, no connection. */

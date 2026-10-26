@@ -21,6 +21,8 @@ export function SideMenu({ role }: { role: UserRole }) {
     (groupItems) => groupItems.length > 0,
   );
 
+  // The white column stretches with the page (a long page keeps it white to the bottom); the
+  // list inside stays in view while the page scrolls.
   return (
     <Box
       component="nav"
@@ -28,25 +30,31 @@ export function SideMenu({ role }: { role: UserRole }) {
       sx={{
         width: layout.sideMenuWidth,
         flexShrink: 0,
-        position: 'sticky',
-        top: layout.topBarHeight,
-        height: `calc(100vh - ${layout.topBarHeight}px)`,
-        overflowY: 'auto',
+        alignSelf: 'stretch',
         bgcolor: color.surface,
         borderInlineEnd: `1px solid ${color.border}`,
-        py: 2,
       }}
     >
-      {groups.map((groupItems, index) => (
-        <Fragment key={groupItems[0]?.group}>
-          {index > 0 && <Divider sx={{ my: 1.5, mx: 2.5 }} />}
-          <List disablePadding>
-            {groupItems.map((item) => (
-              <SideMenuItem key={item.path} item={item} active={item.path === active} />
-            ))}
-          </List>
-        </Fragment>
-      ))}
+      <Box
+        sx={{
+          position: 'sticky',
+          top: layout.topBarHeight,
+          maxHeight: `calc(100vh - ${layout.topBarHeight}px)`,
+          overflowY: 'auto',
+          py: 2,
+        }}
+      >
+        {groups.map((groupItems, index) => (
+          <Fragment key={groupItems[0]?.group}>
+            {index > 0 && <Divider sx={{ my: 1.5, mx: 2.5 }} />}
+            <List disablePadding>
+              {groupItems.map((item) => (
+                <SideMenuItem key={item.path} item={item} active={item.path === active} />
+              ))}
+            </List>
+          </Fragment>
+        ))}
+      </Box>
     </Box>
   );
 }

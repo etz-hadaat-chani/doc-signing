@@ -17,6 +17,9 @@ import { StaffRoot } from './StaffRoot';
  * `pnpm dev`: the production build drops this branch and never builds its chunk.
  */
 const PAGE_COMPONENTS: Partial<Record<string, ComponentType>> = {
+  '/': lazy(() =>
+    import('./dashboard/DashboardPage').then((module) => ({ default: module.DashboardPage })),
+  ),
   ...(import.meta.env.DEV && {
     '/demo/components': lazy(() =>
       import('./demo/ComponentsDemoPage').then((module) => ({

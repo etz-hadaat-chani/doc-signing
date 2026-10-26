@@ -31,8 +31,8 @@ export const tokens = {
   },
   font: {
     family: "'Heebo Variable', 'Heebo', Arial, sans-serif",
-    /** Sizes in px: page title, section, body, small. */
-    size: { title: 24, section: 18, body: 16, small: 14 },
+    /** Sizes in px: page title, section, body, small; `stat` = the big number of a dashboard tile. */
+    size: { title: 24, section: 18, body: 16, small: 14, stat: 32 },
     weight: { regular: 400, medium: 500, semibold: 600 },
   },
   /** Base unit of the 8 px grid (MUI `spacing(1)`). */
