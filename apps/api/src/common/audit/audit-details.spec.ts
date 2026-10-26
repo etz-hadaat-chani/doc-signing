@@ -50,11 +50,18 @@ describe('sanitizeDetails', () => {
     });
   });
 
-  it('keeps a value that is exactly one uuid, even with 9 digits in a row', () => {
-    const id = 'd310b239-251d-4ba8-b6ad-591669898d2d';
-    expect(sanitizeDetails({ importBatchId: id, note: `batch ${id}` })).toEqual({
+  it('keeps uuids whole, even with 9 digits in a row, alone or inside a longer string', () => {
+    const id = '5883646f-84e9-48ea-b0fe-8e683058449e';
+    expect(
+      sanitizeDetails({
+        importBatchId: id,
+        strayFileKeys: [`rounds/${id}/15/1001.pdf`],
+        note: `batch ${id}, id 012345672`,
+      }),
+    ).toEqual({
       importBatchId: id,
-      note: 'batch d310b239-251d-4ba8-b6ad-[redacted]d2d',
+      strayFileKeys: [`rounds/${id}/15/1001.pdf`],
+      note: `batch ${id}, id [redacted]`,
     });
   });
 

@@ -27,6 +27,30 @@ describe('redactForLog', () => {
     );
   });
 
+  describe('a uuid with 9 digits in a row stays whole', () => {
+    const uuid = '5883646f-84e9-48ea-b0fe-8e683058449e';
+
+    it('inside a storage key', () => {
+      const key = `rounds/${uuid}/15/1001.pdf`;
+      expect(redactForLog(key)).toBe(key);
+    });
+
+    it('at the start, middle and end of a log line', () => {
+      expect(redactForLog(`${uuid} failed`)).toBe(`${uuid} failed`);
+      expect(redactForLog(`assignment ${uuid} failed`)).toBe(`assignment ${uuid} failed`);
+      expect(redactForLog(`failed: ${uuid}`)).toBe(`failed: ${uuid}`);
+      expect(redactForLog(`${uuid},${uuid}`)).toBe(`${uuid},${uuid}`);
+    });
+
+    it('an ID number next to it is still hidden', () => {
+      expect(redactForLog(`id 012345672 assignment ${uuid}`)).toBe(
+        `id [redacted] assignment ${uuid}`,
+      );
+      expect(redactForLog(`${uuid} 012345672`)).toBe(`${uuid} [redacted]`);
+      expect(redactForLog(`rounds/${uuid}/012345672.pdf`)).toBe(`rounds/${uuid}/[redacted].pdf`);
+    });
+  });
+
   it('hides passwords', () => {
     expect(redactForLog('{"email":"a@b.c","password":"hunter2"}')).toBe(
       '{"email":"a@b.c","password":[redacted]}',
