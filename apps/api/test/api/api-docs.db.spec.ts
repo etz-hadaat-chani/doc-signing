@@ -86,6 +86,7 @@ describe('Swagger page outside production', () => {
         'POST /api/employees',
         'POST /api/employees/import/{batchId}/commit',
         'POST /api/employees/import/preview',
+        'POST /api/employees/search',
         'POST /api/rounds',
         'POST /api/rounds/recipients-preview',
         'POST /api/rounds/{id}/assignments/search',
@@ -141,7 +142,7 @@ describe('Swagger page outside production', () => {
     const parameters = document.paths['/api/employees']?.get?.parameters ?? [];
     const query = parameters.filter((parameter) => parameter.in === 'query');
     expect(query.map(({ name }) => name).sort()).toEqual(
-      ['dept', 'emailStatus', 'page', 'pageSize', 'q'].sort(),
+      ['active', 'dept', 'emailStatus', 'page', 'pageSize'].sort(),
     );
   });
 
