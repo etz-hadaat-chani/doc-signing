@@ -1,5 +1,6 @@
 // Public entry point for code shared between apps/api and apps/web.
 // Must not import Prisma or anything from apps/: the web app uses it too.
+export * from './approvals.js';
 export * from './auth.js';
 export * from './department.js';
 export * from './employee-import.js';

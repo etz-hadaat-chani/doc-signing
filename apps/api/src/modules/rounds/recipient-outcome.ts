@@ -124,7 +124,14 @@ export function noEmailReasonOf(employee: {
 /** A box's Hebrew name for the warnings: the system value's name, else its label, else its key. */
 export function boxName(fields: readonly FieldPosition[], key: string): string {
   const field = fields.find((position) => position.key === key);
-  if (!field) return key;
+  return field ? boxLabel(field, key) : key;
+}
+
+/** `boxName` for one position already found (also the approvals of 3.16). */
+export function boxLabel(
+  field: { fieldType: FieldPosition['fieldType']; label?: string | null | undefined },
+  key: string,
+): string {
   if (isSystemValueType(field.fieldType)) return SYSTEM_VALUE_NAMES[field.fieldType];
   if (field.fieldType === 'pension_fund_name') return PENSION_FUND_NAME_LABEL;
   return field.label ?? key;

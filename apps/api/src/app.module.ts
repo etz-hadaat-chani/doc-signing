@@ -8,6 +8,7 @@ import { PrismaModule } from './common/prisma/prisma.module.js';
 import { QueueModule } from './common/queue/queue.module.js';
 import { SettingsModule } from './common/settings/settings.module.js';
 import { StorageModule } from './common/storage/storage.module.js';
+import { ApprovalsModule } from './modules/approvals/approvals.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { EmployeesModule } from './modules/employees/employees.module.js';
 import { HealthModule } from './modules/health/health.module.js';
@@ -40,6 +41,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
     SigningModule,
     WebhooksModule,
     ManualHandlingModule,
+    ApprovalsModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })

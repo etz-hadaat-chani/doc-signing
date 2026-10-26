@@ -85,6 +85,19 @@ describe('every route declares who may call it', () => {
     );
     expect(names).toContain('ManualHandlingController.send (POST /manual-handling/send)');
     expect(names).toContain('ManualAssignmentsController.openKiosk (POST /assignments/:id/kiosk)');
+    expect(names).toContain('ApprovalsController.list (GET /approvals)');
+    expect(names).toContain(
+      'ApprovalAssignmentsController.responses (GET /assignments/:id/responses)',
+    );
+    expect(names).toContain(
+      'ApprovalAssignmentsController.approve (POST /assignments/:id/approve)',
+    );
+    expect(names).toContain(
+      'ApprovalAssignmentsController.returnForCorrection (POST /assignments/:id/return)',
+    );
+    expect(names).toContain(
+      'ApprovalAssignmentsController.sendAgain (POST /assignments/:id/send-again)',
+    );
   });
 
   it('public routes are only health, login, the employee signing routes (3.13), the office kiosk (3.16) and the email webhook (3.15)', () => {

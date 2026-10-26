@@ -55,84 +55,98 @@ export class RoundSendService {
    * data) → the writes → the jobs → one audit row.
    */
   async send(roundId: string, input: RoundSendInput, actor: TemplateActor): Promise<RoundSent> {
-    const sent = await this.prisma.$transaction(async (tx) => {
-      const round = await this.repository.lockRound(roundId, tx);
-      if (!round) throw new AppException('ROUND_NOT_FOUND', HttpStatus.NOT_FOUND);
-      if (round.status !== 'draft') {
-        throw new AppException('ROUND_NOT_DRAFT', HttpStatus.CONFLICT, { status: round.status });
-      }
-
-      const rows = await this.repository.lockSendable(roundId, tx);
-      const employerSignature = await this.settings.getEmployerSignature(tx);
-      const templates = await this.checkTemplates(rows, employerSignature !== null, input, tx);
-
-      const sentAt = round.now;
-      const linkExpiresAt = new Date(sentAt.getTime() + round.linkExpiryDays * DAY_MS);
-      const textFitCache: TextFitCache = new Map();
-      const plan = planRoundSend({
-        assignments: rows.map((row) => ({
-          id: row.id,
-          status: row.status,
-          employee: sendableRecipient(row),
-          template: mustGet(templates.byId, row.templateId),
-        })),
-        sendDay: todayInIsrael(sentAt),
-        employerSignature,
-        font: this.assets.font,
-        textFitCache,
-      });
-
-      await this.repository.applyDecisions(plan.decisions, sentAt, tx);
-      const toEmail = plan.decisions.flatMap(({ assignmentId, status, toEmail: address }) =>
-        status === 'pending' && address ? [{ assignmentId, toEmail: address }] : [],
-      );
-      const invites = await this.repository.createSigningEmails('invite', toEmail, tx);
-      const added = await this.queue.sendMany(
-        INVITATION_QUEUE,
-        invites.map(({ id, assignmentId }) => ({
-          data: { assignmentId, emailMessageId: id },
-          singletonKey: assignmentId,
-        })),
-        tx,
-      );
-      if (added !== invites.length) {
-        // A job already waits for one of these assignments: never queue a second email.
-        throw new Error(`Queued ${String(added)} of ${String(invites.length)} invitations`);
-      }
-      const status = invites.length > 0 ? 'sending' : 'active';
-      await this.repository.markRoundSent(roundId, { status, sentAt, linkExpiresAt }, tx);
-
-      const valuesSaved = plan.decisions.filter(({ fieldValues }) => fieldValues !== null).length;
-      await this.audit.record(
-        {
-          actor: { type: 'user', userId: actor.userId },
-          action: 'round.sent',
-          entity: { type: 'round', id: roundId },
-          ip: actor.ip,
-          details: {
-            templateIds: [...templates.byId.keys()],
-            outdatedTemplateIds: templates.outdatedIds,
-            linkExpiresAt: linkExpiresAt.toISOString(),
-            counts: plan.counts,
-            valuesSaved,
-            textWarnings: plan.textWarnings.total,
-          },
-        },
-        tx,
-      );
-
-      return {
-        id: roundId,
-        status,
-        sentAt: sentAt.toISOString(),
-        linkExpiresAt: linkExpiresAt.toISOString(),
-        counts: plan.counts,
-        outdatedTemplateIds: templates.outdatedIds,
-        textWarnings: plan.textWarnings,
-      } satisfies RoundSent;
-    }, SEND_TRANSACTION);
+    const sent = await this.prisma.$transaction(
+      (tx) => this.sendInTransaction(roundId, input, actor, tx),
+      SEND_TRANSACTION,
+    );
     this.logger.log(`Round ${roundId}: queued ${String(sent.counts.queued)} invitations`);
     return sent;
+  }
+
+  /**
+   * `send` inside a transaction the caller started (also the correction round of 3.16, created
+   * and sent in one transaction). The caller logs after its commit.
+   */
+  async sendInTransaction(
+    roundId: string,
+    input: RoundSendInput,
+    actor: TemplateActor,
+    tx: Db,
+  ): Promise<RoundSent> {
+    const round = await this.repository.lockRound(roundId, tx);
+    if (!round) throw new AppException('ROUND_NOT_FOUND', HttpStatus.NOT_FOUND);
+    if (round.status !== 'draft') {
+      throw new AppException('ROUND_NOT_DRAFT', HttpStatus.CONFLICT, { status: round.status });
+    }
+
+    const rows = await this.repository.lockSendable(roundId, tx);
+    const employerSignature = await this.settings.getEmployerSignature(tx);
+    const templates = await this.checkTemplates(rows, employerSignature !== null, input, tx);
+
+    const sentAt = round.now;
+    const linkExpiresAt = new Date(sentAt.getTime() + round.linkExpiryDays * DAY_MS);
+    const textFitCache: TextFitCache = new Map();
+    const plan = planRoundSend({
+      assignments: rows.map((row) => ({
+        id: row.id,
+        status: row.status,
+        employee: sendableRecipient(row),
+        template: mustGet(templates.byId, row.templateId),
+      })),
+      sendDay: todayInIsrael(sentAt),
+      employerSignature,
+      font: this.assets.font,
+      textFitCache,
+    });
+
+    await this.repository.applyDecisions(plan.decisions, sentAt, tx);
+    const toEmail = plan.decisions.flatMap(({ assignmentId, status, toEmail: address }) =>
+      status === 'pending' && address ? [{ assignmentId, toEmail: address }] : [],
+    );
+    const invites = await this.repository.createSigningEmails('invite', toEmail, tx);
+    const added = await this.queue.sendMany(
+      INVITATION_QUEUE,
+      invites.map(({ id, assignmentId }) => ({
+        data: { assignmentId, emailMessageId: id },
+        singletonKey: assignmentId,
+      })),
+      tx,
+    );
+    if (added !== invites.length) {
+      // A job already waits for one of these assignments: never queue a second email.
+      throw new Error(`Queued ${String(added)} of ${String(invites.length)} invitations`);
+    }
+    const status = invites.length > 0 ? 'sending' : 'active';
+    await this.repository.markRoundSent(roundId, { status, sentAt, linkExpiresAt }, tx);
+
+    const valuesSaved = plan.decisions.filter(({ fieldValues }) => fieldValues !== null).length;
+    await this.audit.record(
+      {
+        actor: { type: 'user', userId: actor.userId },
+        action: 'round.sent',
+        entity: { type: 'round', id: roundId },
+        ip: actor.ip,
+        details: {
+          templateIds: [...templates.byId.keys()],
+          outdatedTemplateIds: templates.outdatedIds,
+          linkExpiresAt: linkExpiresAt.toISOString(),
+          counts: plan.counts,
+          valuesSaved,
+          textWarnings: plan.textWarnings.total,
+        },
+      },
+      tx,
+    );
+
+    return {
+      id: roundId,
+      status,
+      sentAt: sentAt.toISOString(),
+      linkExpiresAt: linkExpiresAt.toISOString(),
+      counts: plan.counts,
+      outdatedTemplateIds: templates.outdatedIds,
+      textWarnings: plan.textWarnings,
+    } satisfies RoundSent;
   }
 
   /**

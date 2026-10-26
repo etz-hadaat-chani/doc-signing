@@ -19,7 +19,8 @@ import { SigningEmailQueue } from './signing-email-queue.js';
  * same choice with `RoundRecipientsService.resolve` inside its own transaction, and the send
  * (3.10), which queues the invitations the worker sends (`SigningEmailSender`, worker module),
  * and the manager's actions (3.12): remind, resend, unlock and cancel. The daily reminders
- * (3.14, `DailyRemindersService`) run in the worker module only.
+ * (3.14, `DailyRemindersService`) run in the worker module only. Create and send also run inside
+ * one caller's transaction (`createInTransaction` / `sendInTransaction`): the 3.16 correction round.
  */
 @Module({
   imports: [AuthModule, TemplatesModule, PdfFillerModule],
@@ -35,6 +36,13 @@ import { SigningEmailQueue } from './signing-email-queue.js';
     RoundActionsRepository,
     SigningEmailQueue,
   ],
-  exports: [RoundRecipientsService, RoundSendRepository, RoundActionsRepository, SigningEmailQueue],
+  exports: [
+    RoundRecipientsService,
+    RoundsService,
+    RoundSendService,
+    RoundSendRepository,
+    RoundActionsRepository,
+    SigningEmailQueue,
+  ],
 })
 export class RoundsModule {}

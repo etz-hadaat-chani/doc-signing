@@ -67,6 +67,10 @@ export const AUDIT_ACTIONS = [
   'assignment.kiosk_opened',
   'assignment.printed',
   'assignment.signed_manual',
+  'assignment.responses_viewed',
+  'assignment.approved',
+  'assignment.returned',
+  'assignment.sent_again',
   'email.bounced',
   'email.soft_bounced',
   'sign.verified',
@@ -470,6 +474,29 @@ export interface AuditDetailsMap {
     pageCount: number;
     fileReused: boolean;
     strayFileKeys: string[];
+  };
+  // Approvals (3.16 part B2): manager or officer actor, entity = the assignment. Ids and counts
+  // only: never an answer, an address, a name or the return note.
+  /** The employee's answers were viewed (a document view: answers and the address she gave). */
+  'assignment.responses_viewed': {
+    roundId: string;
+    answerCount: number;
+    drawingCount: number;
+    emailShown: boolean;
+  };
+  /** A signed document waiting for approval was approved (FR-TRK-6); the file is untouched. */
+  'assignment.approved': { roundId: string };
+  /** Returned for correction: `signed` → `cancelled`. The note is never logged. */
+  'assignment.returned': { roundId: string; fromStatus: 'signed' };
+  /**
+   * The correction round of a returned assignment was created and sent (with its own
+   * `round.created` and `round.sent` rows); `status`: her row in the new round.
+   */
+  'assignment.sent_again': {
+    roundId: string;
+    correctionRoundId: string;
+    templateId: string;
+    status: AssignmentStatus;
   };
   // Bounce notices (3.15): system actor, entity = the assignment of the email that bounced. Ids
   // and counts only: never the address, a name or the provider's text.

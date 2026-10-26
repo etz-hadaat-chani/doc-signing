@@ -95,6 +95,11 @@ export const ERROR_MESSAGES = {
     'עדיין אין מסמך להדפסה: חסרים פרטים בכרטיס העובד. יש להשלים אותם ולשלוח, ואז אפשר להדפיס',
   FILE_EMPTY: 'הקובץ ריק',
   SCAN_TOO_MANY_PAGES: 'בקובץ הסריקה יש יותר מדי עמודים (עד 100 עמודים)',
+  // Approvals (3.16 part B2).
+  ASSIGNMENT_NOT_WAITING_FOR_APPROVAL:
+    'המסמך אינו ממתין לאישור (ייתכן שכבר אושר או הוחזר לתיקון). יש לרענן את הרשימה',
+  ASSIGNMENT_NOT_RETURNED: 'אפשר לשלוח שוב רק מסמך שהוחזר לתיקון',
+  CORRECTION_ROUND_EXISTS: 'המסמך המתוקן כבר נשלח לעובד בסבב תיקון',
   UNLOCK_LIMIT_REACHED:
     'הגישה ננעלה שוב אחרי שתי פתיחות. יש לבטל את השליחה לעובד ולטפל בו במשרד: הדפסה או עמדת חתימה במשרד',
   ROUND_TEMPLATE_OUTDATED:

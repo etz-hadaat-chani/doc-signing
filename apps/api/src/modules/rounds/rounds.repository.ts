@@ -26,7 +26,14 @@ export class RoundsRepository {
 
   /** A new draft round. `link_expires_at` stays NULL until the send (3.10). */
   async createRound(
-    data: { name: string; mode: RoundMode; settings: RoundSettings; createdById: string },
+    data: {
+      name: string;
+      mode: RoundMode;
+      settings: RoundSettings;
+      createdById: string;
+      /** A correction round (3.16): the returned assignment it replaces. */
+      correctionOfAssignmentId?: string | null;
+    },
     db: Db = this.prisma,
   ): Promise<{ id: string; createdAt: Date }> {
     const { settings } = data;
@@ -40,6 +47,7 @@ export class RoundsRepository {
         maxReminders: settings.maxReminders,
         linkExpiryDays: settings.linkExpiryDays,
         createdById: data.createdById,
+        correctionOfAssignmentId: data.correctionOfAssignmentId ?? null,
       },
       select: { id: true, createdAt: true },
     });
