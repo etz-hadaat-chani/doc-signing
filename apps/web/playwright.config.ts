@@ -4,6 +4,8 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.e2e.ts',
+  // Fails the run if a test template is still active (5.4 danger rule).
+  globalTeardown: './e2e/global-teardown.ts',
   use: {
     baseURL: 'http://localhost:5173',
     locale: 'he-IL',

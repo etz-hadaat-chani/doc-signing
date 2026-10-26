@@ -117,6 +117,13 @@ export const SELECT_MAX_CHOICES = 30;
 export const SELECT_CHOICE_MAX_LENGTH = 100;
 export const TEMPLATE_MAX_DRAWINGS = 5;
 
+/**
+ * The bottom strip of every page where the signed PDF prints its footer line (3.7: 6 pt text,
+ * baseline 8 pt above the CropBox bottom). No position may start below it: `y` must be at least
+ * this, in points from the CropBox bottom (FR-TPL-8).
+ */
+export const TEMPLATE_FOOTER_HEIGHT = 16;
+
 export const PENSION_SOURCES = ['a_then_b', 'b_only'] as const;
 export type PensionSource = (typeof PENSION_SOURCES)[number];
 
@@ -179,7 +186,7 @@ export function employeeMayFill(field: Pick<TemplateFieldSettings, 'fieldType' |
 }
 
 /** The text limit that applies to a type with this fill mode, or null when it takes none. */
-function textLimitFor(type: TemplateFieldType, fillMode: TemplateFillMode | null) {
+export function textLimitFor(type: TemplateFieldType, fillMode: TemplateFillMode | null) {
   if (type === 'text' || type === 'long_text') return TEXT_LIMITS[type];
   if (TEMPLATE_FIELD_GROUPS[type] === 'system' && fillMode !== 'system') return SYSTEM_TEXT_LIMIT;
   return null;
@@ -318,6 +325,7 @@ export const TEMPLATE_NOT_READY_MESSAGES = {
   CONDITION_TARGET_HAS_CONDITION: 'תנאי מפנה לתיבה שיש לה תנאי משלה',
   CONDITION_VALUE_INVALID: 'תנאי מפנה לערך שהתיבה לא יכולה לקבל',
   KEY_SETTINGS_MISMATCH: 'מיקומים עם אותו מפתח חייבים להיות מאותו סוג ועם אותן הגדרות',
+  POSITION_IN_FOOTER: 'שדה נמצא ב-16 הנקודות התחתונות של העמוד, שם מודפסת שורת פרטי החתימה',
   DATE_RANGE_INVALID: 'התאריך המוקדם ביותר מאוחר מהתאריך המאוחר ביותר',
   TOO_MANY_DRAWINGS: 'בתבנית יכולות להיות עד 5 תיבות ציור',
 } as const;
@@ -378,7 +386,7 @@ function conditionValues(target: TemplateFieldSettings): readonly string[] | nul
  */
 export function templateReadiness(template: {
   employerSignatureMode: EmployerSignatureMode;
-  fields: readonly TemplateFieldSettings[];
+  fields: readonly (TemplateFieldSettings & { y: number })[];
   employerSignatureImageUploaded: boolean;
 }): TemplateNotReadyReason[] {
   const { fields } = template;
@@ -438,6 +446,7 @@ export function templateReadiness(template: {
     }
     if (fieldType === 'drawing') drawings += 1;
   }
+  for (const { key, y } of fields) if (y < TEMPLATE_FOOTER_HEIGHT) add('POSITION_IN_FOOTER', key);
   if (drawings > TEMPLATE_MAX_DRAWINGS) add('TOO_MANY_DRAWINGS', ...keysOf('drawing'));
 
   for (const { key, showWhen } of fields) {

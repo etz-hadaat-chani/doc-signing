@@ -1,6 +1,10 @@
 import type { TemplateField } from '@doc-signing/shared';
+import EditOutlined from '@mui/icons-material/EditOutlined';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
+import { Link as RouterLink } from 'react-router';
 import { type Column, DataTable } from '../../components/table/DataTable';
 import { DEFAULT_PAGE_SIZE } from '../../components/table/paging';
 import { he } from '../../i18n/he';
@@ -29,15 +33,33 @@ const COLUMNS: readonly Column<TemplateField>[] = [
   { key: 'page', header: text.positionColumns.page, render: (field) => field.page },
 ];
 
-/** The stored positions, read only (the position editor comes with part B of 5.4). */
-export function TemplatePositions({ fields }: { fields: readonly TemplateField[] }) {
+/** The stored positions, read only, with a way to the position editor on an editable version. */
+export function TemplatePositions({
+  fields,
+  editPath,
+}: {
+  fields: readonly TemplateField[];
+  editPath: string | null;
+}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   return (
     <section aria-labelledby="template-positions">
-      <Typography id="template-positions" variant="h2" sx={{ mb: 2 }}>
-        {text.positionsTitle}
-      </Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography id="template-positions" variant="h2">
+          {text.positionsTitle}
+        </Typography>
+        {editPath && (
+          <Button
+            component={RouterLink}
+            to={editPath}
+            variant="contained"
+            startIcon={<EditOutlined />}
+          >
+            {text.editPositions}
+          </Button>
+        )}
+      </Box>
       <DataTable
         caption={text.positionsCaption}
         columns={COLUMNS}

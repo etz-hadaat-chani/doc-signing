@@ -6,7 +6,7 @@ import {
   templatePreviewReportSchema,
   type TemplateUpdateInput,
 } from '@doc-signing/shared';
-import { staffRequest } from '../auth/staff-api';
+import { staffRequest, staffRequestBytes } from '../auth/staff-api';
 
 /** Every template query: invalidating `all` after a change refreshes the list, item and versions. */
 export const templateKeys = {
@@ -15,6 +15,7 @@ export const templateKeys = {
   item: (id: string) => ['staff', 'templates', 'item', id] as const,
   versions: ['staff', 'templates', 'versions'] as const,
   check: (id: string) => ['staff', 'templates', 'check', id] as const,
+  previewPdf: (id: string) => ['staff', 'templates', 'preview-pdf', id] as const,
 };
 
 const templatePageSchema = pagedSchema(templateItemSchema);
@@ -110,6 +111,14 @@ export function fetchPreviewCheck(id: string, signal?: AbortSignal) {
  * The sample preview PDF, opened in a new tab: the API forbids showing its answers in a frame
  * (X-Frame-Options), and it is never cached.
  */
-export function previewPath(id: string): string {
+export function previewPath(id: string): `/api/${string}` {
   return `/api/templates/${encodeURIComponent(id)}/preview`;
+}
+
+/**
+ * The same sample preview as bytes, for pdf.js on the position editor (5.4 part B). The API draws
+ * the saved positions only; the editor outlines the unsaved ones on top.
+ */
+export function fetchPreviewPdf(id: string, signal?: AbortSignal): Promise<ArrayBuffer> {
+  return staffRequestBytes(previewPath(id), { signal });
 }

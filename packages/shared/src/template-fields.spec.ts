@@ -7,6 +7,7 @@ import {
 import {
   allowedFillModes,
   TEMPLATE_FIELD_GROUPS,
+  TEMPLATE_FOOTER_HEIGHT,
   TEMPLATE_NOT_READY_CODES,
   TEMPLATE_NOT_READY_MESSAGES,
   type TemplateNotReadyCode,
@@ -442,6 +443,28 @@ describe('templateReadiness (FR-TPL-8)', () => {
           employerSignatureImageUploaded: false,
         }),
       ).toEqual([]);
+    });
+  });
+
+  describe('the footer line (3.7)', () => {
+    it('a position starting below 16 pt is a reason, with its key', () => {
+      const reasons = templateReadiness({
+        employerSignatureMode: 'none',
+        fields: fields([signature, pos('full_name', { y: 15.99 }), pos('date', { y: 0 })]),
+        employerSignatureImageUploaded: true,
+      });
+      expect(reasons).toEqual([
+        {
+          code: 'POSITION_IN_FOOTER',
+          message: TEMPLATE_NOT_READY_MESSAGES.POSITION_IN_FOOTER,
+          keys: ['full_name', 'date'],
+        },
+      ]);
+    });
+
+    it('exactly 16 pt is fine', () => {
+      expect(TEMPLATE_FOOTER_HEIGHT).toBe(16);
+      expect(codes([signature, pos('full_name', { y: 16 })])).toEqual([]);
     });
   });
 

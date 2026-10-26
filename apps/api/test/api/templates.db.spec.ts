@@ -736,6 +736,25 @@ describe('field types and box settings (3.20)', () => {
     }
   });
 
+  it('a position below the 16 pt footer line saves but is a reason naming its box', async () => {
+    const created = await uploaded();
+    const low = await patch(created.id, {
+      fields: [position('signature', { y: 15.99 }), position('full_name', { y: 300 })],
+    });
+    expect(low.status).toBe(200);
+    expect(itemOf(low).notReadyReasons).toEqual([
+      {
+        code: 'POSITION_IN_FOOTER',
+        message: TEMPLATE_NOT_READY_MESSAGES.POSITION_IN_FOOTER,
+        keys: ['signature'],
+      },
+    ]);
+    const onTheLine = await patch(created.id, {
+      fields: [position('signature', { y: 16 }), position('full_name', { y: 300 })],
+    });
+    expect(itemOf(onTheLine).isReady).toBe(true);
+  });
+
   it('refuses a wrong fill mode, key, limit or approval with a 400 naming the position', async () => {
     const created = await uploaded();
     const notAllowed = 'TEMPLATE_FIELD_OPTION_NOT_ALLOWED';

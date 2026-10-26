@@ -47,6 +47,31 @@ export async function request<T>(path: `/api/${string}`, options: RequestOptions
   return parsed.data;
 }
 
+/**
+ * A file the API sends (a PDF), as bytes, with the same session and error handling as request():
+ * a failure answered in our JSON format becomes the same ApiRequestError.
+ */
+export async function requestBytes(
+  path: `/api/${string}`,
+  options: { signal?: AbortSignal } = {},
+): Promise<ArrayBuffer> {
+  const { signal } = options;
+  let response: Response;
+  try {
+    response = await fetch(path, { credentials: 'same-origin', signal });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new ApiRequestError({ kind: 'network' });
+  }
+  if (!response.ok) throw toError(response, await readJson(response));
+  try {
+    return await response.arrayBuffer();
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new ApiRequestError({ kind: 'network' });
+  }
+}
+
 type JsonResult = { ok: true; value: unknown } | { ok: false };
 
 /** An empty body reads as `undefined`; a body that isn't JSON is "not ours". */

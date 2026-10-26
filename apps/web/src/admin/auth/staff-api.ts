@@ -1,7 +1,7 @@
 import { type AuthUser, authUserSchema, type LoginInput } from '@doc-signing/shared';
 import { z } from 'zod';
 import { isApiRequestError } from '../../api/api-error';
-import { request, type RequestOptions } from '../../api/http';
+import { request, requestBytes, type RequestOptions } from '../../api/http';
 
 /** Every staff query key starts with 'staff', so a logout or an expired session clears them all. */
 export const staffKeys = {
@@ -28,8 +28,20 @@ export async function staffRequest<T>(
   path: `/api/${string}`,
   options: RequestOptions<T>,
 ): Promise<T> {
+  return reportAccess(() => request(path, options));
+}
+
+/** requestBytes() (a PDF) for the management screens, with the same 401 / 403 reporting. */
+export function staffRequestBytes(
+  path: `/api/${string}`,
+  options: { signal?: AbortSignal } = {},
+): Promise<ArrayBuffer> {
+  return reportAccess(() => requestBytes(path, options));
+}
+
+async function reportAccess<T>(call: () => Promise<T>): Promise<T> {
   try {
-    return await request(path, options);
+    return await call();
   } catch (error) {
     if (isApiRequestError(error) && (error.status === 401 || error.status === 403)) {
       const event = error.status === 401 ? 'unauthorized' : 'forbidden';

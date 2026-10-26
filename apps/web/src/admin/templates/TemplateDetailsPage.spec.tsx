@@ -81,7 +81,10 @@ describe('TemplateDetailsPage: what it shows', () => {
     expect(
       within(status).getByText(TEMPLATE_NOT_READY_MESSAGES.NO_MAIN_SIGNATURE),
     ).toBeInTheDocument();
-    expect(within(status).getByText(text.positionsByDeveloper)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: text.editPositions })).toHaveAttribute(
+      'href',
+      `/templates/${TEMPLATE_ID}/positions`,
+    );
 
     const positions = screen.getByRole('table', { name: text.positionsCaption });
     expect(within(positions).getByText(he.templates.fieldTypes.select)).toBeInTheDocument();

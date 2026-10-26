@@ -54,7 +54,7 @@ export interface TemplateUsability {
  */
 export function templateUsability(
   row: Pick<TemplateRow, 'isArchived' | 'isLatest' | 'employerSignatureMode'>,
-  fields: readonly TemplateFieldSettings[],
+  fields: readonly (TemplateFieldSettings & Pick<TemplateFieldInput, 'y'>)[],
   employerSignatureImageUploaded: boolean,
 ): TemplateUsability {
   const notReadyReasons = templateReadiness({

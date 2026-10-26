@@ -100,6 +100,12 @@ const ALL_PAGES: readonly AdminPage[] = [
   { path: '/templates/new', label: he.nav.templateNew, roles: MANAGER, task: '5.4' },
   { path: '/templates/:templateId', label: he.nav.templateDetails, roles: MANAGER, task: '5.4' },
   {
+    path: '/templates/:templateId/positions',
+    label: he.nav.templatePositions,
+    roles: MANAGER,
+    task: '5.4',
+  },
+  {
     path: '/settings',
     label: he.nav.settings,
     roles: MANAGER,

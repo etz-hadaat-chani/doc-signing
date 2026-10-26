@@ -1,5 +1,4 @@
 import { formatDate, type TemplateItem } from '@doc-signing/shared';
-import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -40,11 +39,6 @@ function ReadyStatus({ item }: { item: TemplateItem }) {
             ))}
           </Box>
         </>
-      )}
-      {isEditable(item) && (
-        <Alert severity="info" role="note" sx={{ mt: 2 }}>
-          {text.positionsByDeveloper}
-        </Alert>
       )}
     </Paper>
   );
@@ -112,7 +106,10 @@ export function TemplateDetailsPage() {
           item={item}
           latestId={latestId}
         />
-        <TemplatePositions fields={item.fields} />
+        <TemplatePositions
+          fields={item.fields}
+          editPath={isEditable(item) ? `/templates/${item.id}/positions` : null}
+        />
         <TemplatePreview item={item} />
         <TemplateVersions
           currentId={item.id}

@@ -57,6 +57,11 @@ const PAGE_COMPONENTS: Partial<Record<string, ComponentType>> = {
       default: module.TemplateDetailsPage,
     })),
   ),
+  '/templates/:templateId/positions': lazy(() =>
+    import('./templates/editor/TemplatePositionsPage').then((module) => ({
+      default: module.TemplatePositionsPage,
+    })),
+  ),
   ...(import.meta.env.DEV && {
     '/demo/components': lazy(() =>
       import('./demo/ComponentsDemoPage').then((module) => ({
