@@ -49,6 +49,8 @@ describe('EmailService through SMTP (Mailpit)', () => {
   const documentName = 'הצהרת סודיות 2026';
   const newToken = () => randomBytes(32).toString('base64url');
 
+  // 15 s: the first email of the file opens the SMTP connection, then messagesTo() may wait up to
+  // 5 s on its own, so a busy machine went over the 5 s default (5.2 s seen in the full run).
   it('delivers the invitation: Hebrew subject, right-to-left HTML, the link', async () => {
     const token = newToken();
     const link = `${config.email.publicUrl}/sign/${token}`;
@@ -76,7 +78,7 @@ describe('EmailService through SMTP (Mailpit)', () => {
     expect(message.HTML).toContain('הקישור בתוקף עד 12/12/2026.');
     expect(message.Text).toContain(link);
     expect(message.Attachments).toEqual([]);
-  });
+  }, 15_000);
 
   it('delivers the reminder with its own subject and link', async () => {
     const first = newToken();

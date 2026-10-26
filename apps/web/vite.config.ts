@@ -23,5 +23,8 @@ export default defineConfig({
     include: ['src/**/*.spec.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
     restoreMocks: true,
+    // 15 s, not the 5 s default: UI tests that type or load a lazy page take 0.4–1.4 s alone but
+    // went over 5 s when every suite runs at once (staff-routes login, filters department).
+    testTimeout: 15_000,
   },
 });
