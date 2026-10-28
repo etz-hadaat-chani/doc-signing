@@ -43,12 +43,19 @@ async function reportAccess<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (error) {
-    if (isApiRequestError(error) && (error.status === 401 || error.status === 403)) {
-      const event = error.status === 401 ? 'unauthorized' : 'forbidden';
-      listeners.forEach((listener) => listener(event));
-    }
+    if (isApiRequestError(error) && error.status !== null) reportStaffStatus(error.status);
     throw error;
   }
+}
+
+/**
+ * Reports a 401 / 403 that didn't come through staffRequest (a file the browser downloads by
+ * itself, e.g. the ZIP): the same signed-out or role check follows. Other statuses do nothing.
+ */
+export function reportStaffStatus(status: number): void {
+  if (status !== 401 && status !== 403) return;
+  const event: StaffAccessEvent = status === 401 ? 'unauthorized' : 'forbidden';
+  listeners.forEach((listener) => listener(event));
 }
 
 /** The signed-in user, or null when nobody is (a 401 here is an answer, not an error). */

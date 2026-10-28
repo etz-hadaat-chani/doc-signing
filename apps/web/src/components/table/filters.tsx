@@ -24,16 +24,80 @@ export function FilterBar({ children }: { children: ReactNode }) {
   );
 }
 
-interface SelectFilterProps {
+interface SelectFilterBase {
   label: string;
+  options: readonly FilterOption[];
+}
+
+interface SingleSelectFilterProps extends SelectFilterBase {
+  multiple?: false;
   /** undefined = "הכול". */
   value: string | undefined;
-  options: readonly FilterOption[];
   onChange: (value: string | undefined) => void;
 }
 
-/** One choice from a list, or "הכול". */
-export function SelectFilter({ label, value, options, onChange }: SelectFilterProps) {
+interface MultipleSelectFilterProps extends SelectFilterBase {
+  /** Several choices at once (e.g. a table's statuses); none chosen = "הכול". */
+  multiple: true;
+  /** [] = "הכול". */
+  value: readonly string[];
+  /** [] when "הכול" is picked or the last choice is removed; else in the options' order. */
+  onChange: (values: string[]) => void;
+}
+
+/** One choice from a list (or several, with `multiple`), or "הכול". */
+export function SelectFilter(props: SingleSelectFilterProps | MultipleSelectFilterProps) {
+  const { label, options } = props;
+  const items = [
+    <MenuItem key="" value="">
+      {he.filters.all}
+    </MenuItem>,
+    ...options.map((option) => (
+      <MenuItem key={option.value} value={option.value}>
+        {option.label}
+      </MenuItem>
+    )),
+  ];
+
+  if (props.multiple) {
+    const { value, onChange } = props;
+    const labels = new Map(options.map((option) => [option.value, option.label]));
+    return (
+      <TextField
+        select
+        label={label}
+        value={[...value]}
+        onChange={(event) => {
+          const raw: unknown = event.target.value;
+          const picked = Array.isArray(raw) ? raw.map(String) : String(raw).split(',');
+          // "הכול" clears every choice; otherwise keep the options' order.
+          onChange(
+            picked.includes('')
+              ? []
+              : options.map((option) => option.value).filter((item) => picked.includes(item)),
+          );
+        }}
+        sx={{ minWidth: 200, maxWidth: 360 }}
+        slotProps={{
+          select: {
+            multiple: true,
+            displayEmpty: true,
+            renderValue: (selected) => {
+              const chosen = selected as string[];
+              return chosen.length === 0
+                ? he.filters.all
+                : chosen.map((item) => labels.get(item) ?? item).join(', ');
+            },
+          },
+          inputLabel: { shrink: true },
+        }}
+      >
+        {items}
+      </TextField>
+    );
+  }
+
+  const { value, onChange } = props;
   return (
     <TextField
       select
@@ -42,12 +106,7 @@ export function SelectFilter({ label, value, options, onChange }: SelectFilterPr
       onChange={(event) => onChange(event.target.value === '' ? undefined : event.target.value)}
       sx={{ minWidth: 200 }}
     >
-      <MenuItem value="">{he.filters.all}</MenuItem>
-      {options.map((option) => (
-        <MenuItem key={option.value} value={option.value}>
-          {option.label}
-        </MenuItem>
-      ))}
+      {items}
     </TextField>
   );
 }

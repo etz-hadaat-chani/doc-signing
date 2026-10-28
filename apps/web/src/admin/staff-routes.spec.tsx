@@ -105,6 +105,27 @@ describe('staff routes', () => {
     await pageTitle(he.nav.approvals);
   });
 
+  it('lets an officer open the rounds list and a round', async () => {
+    const roundId = '1b4e28ba-2fa1-41d2-883f-0016d3cca427';
+    stubApi({
+      'GET /api/auth/me': meAnswer(officerUser),
+      'GET /api/rounds?page=1&pageSize=25': () =>
+        jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 25 }),
+      [`GET /api/rounds/${roundId}`]: () => apiErrorResponse(404, 'ROUND_NOT_FOUND'),
+    });
+    const { router } = renderRoutes('/rounds');
+    await pageTitle(he.nav.rounds);
+    await router.navigate(`/rounds/${roundId}`);
+    await screen.findByRole('heading', { name: he.feedback.notFoundTitle });
+  });
+
+  it('a round address that is not a uuid shows "not found" without asking for it', async () => {
+    const fetchMock = stubApi({ 'GET /api/auth/me': meAnswer(officerUser) });
+    renderRoutes('/rounds/abc');
+    await screen.findByRole('heading', { name: he.feedback.notFoundTitle });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/auth/me']);
+  });
+
   it('on a 401 from any staff request: back to login, staff data cleared, page remembered', async () => {
     stubApi({
       'GET /api/auth/me': meAnswer(managerUser),

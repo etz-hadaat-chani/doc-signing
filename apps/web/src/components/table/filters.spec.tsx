@@ -57,4 +57,44 @@ describe('filters', () => {
     await user.click(screen.getByRole('option', { name: he.filters.all }));
     expect(onChange).toHaveBeenCalledWith(undefined);
   });
+
+  it('multiple: picks several, kept in the order of the options; "all" clears them', async () => {
+    const onChange = vi.fn();
+    const options = [
+      { value: 'sent', label: 'נשלח' },
+      { value: 'opened', label: 'נפתח' },
+      { value: 'locked', label: 'נעול' },
+    ];
+    const { user } = renderComponent(
+      <SelectFilter
+        multiple
+        label={he.filters.status}
+        value={['locked']}
+        options={options}
+        onChange={onChange}
+      />,
+    );
+    const select = screen.getByRole('combobox', { name: he.filters.status });
+    expect(select).toHaveTextContent('נעול');
+    await user.click(select);
+    await user.click(screen.getByRole('option', { name: 'נשלח' }));
+    expect(onChange).toHaveBeenLastCalledWith(['sent', 'locked']);
+    await user.click(screen.getByRole('option', { name: he.filters.all }));
+    expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it('multiple: nothing chosen reads "all"', () => {
+    renderComponent(
+      <SelectFilter
+        multiple
+        label={he.filters.status}
+        value={[]}
+        options={[{ value: 'sent', label: 'נשלח' }]}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('combobox', { name: he.filters.status })).toHaveTextContent(
+      he.filters.all,
+    );
+  });
 });

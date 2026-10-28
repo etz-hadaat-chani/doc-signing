@@ -1,6 +1,8 @@
 import Box from '@mui/material/Box';
+import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
+import { Link as RouterLink } from 'react-router';
 import { formatNumber } from '../../i18n/format';
 import { tokens } from '../../theme/tokens';
 
@@ -9,6 +11,10 @@ export interface CountTile {
   key: string;
   label: string;
   value: number;
+  /** The label links here (e.g. a table filtered to this count). */
+  to?: string;
+  /** A short line under the number. */
+  note?: string;
 }
 
 const { font } = tokens;
@@ -51,7 +57,13 @@ export function CountTiles({
           sx={{ p: 2, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
         >
           <Typography variant="body2" color="text.secondary">
-            {tile.label}
+            {tile.to === undefined ? (
+              tile.label
+            ) : (
+              <Link component={RouterLink} to={tile.to}>
+                {tile.label}
+              </Link>
+            )}
           </Typography>
           <Typography
             data-value
@@ -65,6 +77,11 @@ export function CountTiles({
           >
             {formatNumber(tile.value)}
           </Typography>
+          {tile.note !== undefined && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {tile.note}
+            </Typography>
+          )}
         </Paper>
       ))}
     </Box>
