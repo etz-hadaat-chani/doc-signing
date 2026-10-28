@@ -157,6 +157,10 @@ function PositionsEditor({ item }: { item: TemplateItem }) {
   const previewPdf = useQuery({
     queryKey: templateKeys.previewPdf(item.id),
     queryFn: ({ signal }) => fetchPreviewPdf(item.id, signal),
+    // Each fetch logs a view (`template.previewed`) and redraws the PDF: fetched once, and again
+    // only after a save invalidates it, never on window focus.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
   const pdfState = usePdf(previewPdf.data);
   const pages = pdfState.status === 'ready' ? pdfState.pdf.pages : null;

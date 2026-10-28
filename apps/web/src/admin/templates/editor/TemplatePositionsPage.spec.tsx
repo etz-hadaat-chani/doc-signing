@@ -253,4 +253,19 @@ describe('TemplatePositionsPage', () => {
     await openEditor();
     expect(await screen.findByRole('button', { name: he.feedback.retry })).toBeInTheDocument();
   });
+
+  it('a window focus never fetches the preview PDF again (each fetch logs a view)', async () => {
+    const mock = stubEditor();
+    await openEditor();
+    const calls = (url: string) => mock.mock.calls.filter(([called]) => called === url).length;
+    const itemPath = `/api/templates/${TEMPLATE_ID}`;
+    const pdfPath = `${itemPath}/preview`;
+    await waitFor(() => expect(calls(pdfPath)).toBe(1));
+    // Past the default 30 s staleTime: other queries do refetch on this focus.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000);
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => expect(calls(itemPath)).toBe(2));
+    expect(calls(pdfPath)).toBe(1);
+    vi.restoreAllMocks();
+  });
 });

@@ -114,6 +114,7 @@ export const row: AssignmentRow = {
   displayStatus: 'sent',
   statusLabel: 'נשלח',
   locked: false,
+  unlocksLeft: 2,
   sentAt: '2026-10-01T08:00:00.000Z',
   firstOpenedAt: null,
   signedAt: null,

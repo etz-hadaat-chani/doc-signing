@@ -6,6 +6,7 @@ import {
   emptyDisplayCounts,
   type EmployeeHistoryItem,
   formatDepartment,
+  MAX_UNLOCKS,
   percentSigned,
   ROUND_STATUS_LABELS,
   SIGNED_DISPLAY_STATUSES,
@@ -119,7 +120,11 @@ function departmentOf(row: Pick<HistoryRow, 'departmentId' | 'departmentCode' | 
 }
 
 /** One row of the employee table. The email answer only on signed rows (FR-TRK-2). */
-export function toAssignmentRow(row: AssignmentTableRow): AssignmentRow {
+/**
+ * One table row. `unlocksUsed`: the row's earlier unlocks (its `assignment.unlocked` audit rows,
+ * the unlock rule's own count); the export leaves it out.
+ */
+export function toAssignmentRow(row: AssignmentTableRow, unlocksUsed = 0): AssignmentRow {
   const emailAnswer =
     row.status === 'signed' && row.emailChoice !== null
       ? {
@@ -140,6 +145,7 @@ export function toAssignmentRow(row: AssignmentTableRow): AssignmentRow {
     displayStatus: row.displayStatus,
     statusLabel: STATUS_LABELS[row.displayStatus],
     locked: row.locked,
+    unlocksLeft: Math.max(0, MAX_UNLOCKS - unlocksUsed),
     sentAt: iso(row.sentAt),
     firstOpenedAt: iso(row.firstOpenedAt),
     signedAt: iso(row.signedAt),

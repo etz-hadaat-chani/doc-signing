@@ -17,9 +17,10 @@ import { dashboardKeys } from '../../dashboard/dashboard.api';
 import { employeeKeys } from '../../employees/employees.api';
 import { templateKeys } from '../../templates/templates.api';
 import { cancelRound, createRound, roundKeys, sendRound } from '../rounds.api';
+import { DraftPanel, OutdatedPanel } from '../send-panels';
 import { runSend, type SendOutcome } from './send-flow';
 import type { RoundSettings } from './settings-form';
-import { reasonTexts, summaryTiles } from './summary-view';
+import { summaryTiles } from './summary-view';
 import { createBody, previewTemplates, type WizardAction, type WizardState } from './wizard-state';
 
 const texts = he.newRound.send;
@@ -70,91 +71,6 @@ function Review({ state, settings }: { state: WizardState; settings: RoundSettin
         </Box>
       ))}
     </Box>
-  );
-}
-
-function OutdatedPanel({
-  outcome,
-  busy,
-  onSend,
-  onStop,
-}: {
-  outcome: Extract<SendOutcome, { kind: 'outdated' }>;
-  busy: boolean;
-  onSend: () => void;
-  onStop: () => void;
-}) {
-  return (
-    <Alert severity="warning" role="alert" data-testid="round-outdated">
-      <AlertTitle>{texts.outdatedTitle}</AlertTitle>
-      <Typography sx={{ mb: 1 }}>{texts.outdatedText}</Typography>
-      <Box component="ul" sx={{ m: 0, mb: 2, paddingInlineStart: 3 }}>
-        {outcome.templates.map((template) => (
-          <li key={template.id}>
-            {texts.outdatedLine(
-              template.name,
-              template.version,
-              texts.outdatedReasons[template.reason](template.newestVersion),
-              template.assignmentCount,
-              formatNumber(template.assignmentCount),
-            )}
-          </li>
-        ))}
-      </Box>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-        <Button variant="contained" color="warning" onClick={onSend} disabled={busy}>
-          {busy ? texts.sending : texts.sendOutdated}
-        </Button>
-        <Button variant="outlined" color="inherit" onClick={onStop} disabled={busy}>
-          {texts.stop}
-        </Button>
-      </Box>
-    </Alert>
-  );
-}
-
-function DraftPanel({
-  outcome,
-  busy,
-  onRetry,
-  onCancel,
-}: {
-  outcome: Extract<SendOutcome, { kind: 'draft' }>;
-  busy: boolean;
-  onRetry: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <Alert severity="error" role="alert" data-testid="round-draft">
-      <AlertTitle>{texts.draftTitle}</AlertTitle>
-      <Typography sx={{ mb: 1 }}>{outcome.message}</Typography>
-      {outcome.templates.length > 0 && (
-        <>
-          <Typography sx={{ fontWeight: 700 }}>{texts.notReadyTitle}</Typography>
-          <Box component="ul" sx={{ m: 0, mb: 1, paddingInlineStart: 3 }}>
-            {outcome.templates.map((template) => (
-              <li key={template.id}>
-                {he.newRound.summary.templateName(template.name, template.version)}
-                <Box component="ul" sx={{ m: 0, paddingInlineStart: 3 }}>
-                  {reasonTexts(template.reasons).map((reason) => (
-                    <li key={reason}>{reason}</li>
-                  ))}
-                </Box>
-              </li>
-            ))}
-          </Box>
-        </>
-      )}
-      <Typography sx={{ mb: 2 }}>{texts.draftText}</Typography>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-        <Button variant="contained" onClick={onRetry} disabled={busy}>
-          {busy ? texts.sending : texts.retry}
-        </Button>
-        <Button variant="outlined" color="error" onClick={onCancel} disabled={busy}>
-          {texts.cancelDraft}
-        </Button>
-      </Box>
-    </Alert>
   );
 }
 

@@ -37,6 +37,10 @@ export function TemplatePreview({ item }: { item: TemplateItem }) {
   const check = useQuery({
     queryKey: templateKeys.check(item.id),
     queryFn: ({ signal }) => fetchPreviewCheck(item.id, signal),
+    // Each fetch is an audit row (`template.preview_checked`): never again on window focus, only
+    // after a change invalidates the template queries.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
   let report;

@@ -18,6 +18,8 @@ interface ConfirmDialogProps {
   danger?: boolean;
   /** The action is running: Confirm is disabled and the dialog can't be closed. */
   busy?: boolean;
+  /** Confirm stays disabled until the fields below are filled in (a required note, a typed word). */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onClose: () => void;
   /** More fields between the text and the buttons, e.g. a required note. */
@@ -36,6 +38,7 @@ export function ConfirmDialog({
   cancelLabel = he.common.cancel,
   danger = false,
   busy = false,
+  confirmDisabled = false,
   onConfirm,
   onClose,
   children,
@@ -69,7 +72,7 @@ export function ConfirmDialog({
           variant="contained"
           color={danger ? 'error' : 'primary'}
           onClick={onConfirm}
-          disabled={busy}
+          disabled={busy || confirmDisabled}
           autoFocus={!danger}
           startIcon={busy ? <CircularProgress size={16} color="inherit" aria-hidden /> : undefined}
         >

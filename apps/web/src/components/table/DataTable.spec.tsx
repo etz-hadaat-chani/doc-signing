@@ -53,6 +53,22 @@ describe('DataTable', () => {
     expect(screen.getByText('שורה 1')).toBeInTheDocument();
   });
 
+  it('a sticky column stays on the end edge, header and cells; the others scroll', () => {
+    renderTable({
+      columns: [
+        ...columns,
+        { key: 'actions', header: 'פעולות', sticky: 'end', render: () => 'פעולה' },
+      ],
+    });
+    const table = screen.getByRole('table', { name: 'טבלת בדיקה' });
+    const header = within(table).getByRole('columnheader', { name: 'פעולות' });
+    expect(header).toHaveStyle({ position: 'sticky' });
+    expect(within(table).getAllByText('פעולה')[0]).toHaveStyle({ position: 'sticky' });
+    expect(within(table).getByRole('columnheader', { name: 'שם' })).not.toHaveStyle({
+      position: 'sticky',
+    });
+  });
+
   it('shows the Hebrew range and the page-size label', () => {
     renderTable();
     expect(screen.getByText(he.table.displayedRows(1, 25, 60))).toBeInTheDocument();

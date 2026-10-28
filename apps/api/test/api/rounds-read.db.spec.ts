@@ -341,6 +341,34 @@ describe('counts and filters', () => {
     expect(page.items[0]?.locked).toBe(true);
   });
 
+  it("shows the unlocks left per row from the unlock rule's own count (0 / 1 / 2 used)", async () => {
+    const roundId = await insertRound(prisma, world.managerId);
+    const [never, once, twice] = await Promise.all(
+      ['1001', '1002', '1003'].map((n) => insertAssignment(prisma, roundId, world.emp[n] ?? '')),
+    );
+    const unlock = async (assignmentId: string | undefined) => {
+      await setState(prisma, assignmentId ?? '', world.managerId, {
+        status: 'opened',
+        locked: true,
+      });
+      const response = await request(httpServer(app))
+        .post(`/api/assignments/${assignmentId}/unlock`)
+        .set('Cookie', world.managerCookie);
+      expect(response.status, JSON.stringify(response.body)).toBe(200);
+    };
+    await setState(prisma, never ?? '', world.managerId, { status: 'opened', locked: true });
+    await unlock(once);
+    await unlock(twice);
+    await unlock(twice);
+    const page = await table(roundId);
+    expect(rowOf(page.items, never).unlocksLeft).toBe(2);
+    expect(rowOf(page.items, once).unlocksLeft).toBe(1);
+    expect(rowOf(page.items, twice).unlocksLeft).toBe(0);
+    // An officer reads the same number (the buttons are hidden, the data is not).
+    const officer = await get(`/api/rounds/${roundId}/assignments`, world.officerCookie);
+    expect(rowOf(pagedRows.parse(officer.body).items, twice).unlocksLeft).toBe(0);
+  });
+
   it('counts and filters an employee in her department at send time, after she moved', async () => {
     const { roundId, a } = await sentRound(['1001', '1002']);
     await prisma.employee.update({

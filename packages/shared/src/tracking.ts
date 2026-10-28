@@ -208,6 +208,8 @@ export const assignmentRowSchema = z.object({
   statusLabel: z.string(),
   /** 5 wrong ID attempts (also when "expired" hides it): the manager may unlock. */
   locked: z.boolean(),
+  /** Unlocks still allowed (MAX_UNLOCKS in all, the unlock rule's count); 0 → handle at the office. */
+  unlocksLeft: z.int().min(0),
   sentAt: z.iso.datetime().nullable(),
   firstOpenedAt: z.iso.datetime().nullable(),
   signedAt: z.iso.datetime().nullable(),

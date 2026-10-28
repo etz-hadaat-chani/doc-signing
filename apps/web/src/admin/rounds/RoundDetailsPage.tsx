@@ -14,6 +14,8 @@ import { useNotify } from '../../components/notifications/notify-context';
 import { RoundStatusChip } from '../../components/status/StatusChip';
 import { isApiRequestError } from '../../api/api-error';
 import { he } from '../../i18n/he';
+import { useAuthUser } from '../auth/session';
+import { RoundActions } from './actions/RoundActions';
 import { AssignmentsTable } from './AssignmentsTable';
 import { RoundCounts, RoundDepartments, SendProgress } from './RoundCounts';
 import { RoundHeader } from './RoundHeader';
@@ -37,7 +39,8 @@ function NotFound() {
 /**
  * Round details (A4): the header, sending progress, counts by status and by department, and the
  * employee table with export and ZIP. Managers and officers see the same data. Refreshed by
- * "רענון", on window focus (the details, not the table) and after actions; while the round is
+ * "רענון", on window focus (the details, not the table) and after actions (RoundActions, the
+ * table's row actions); while the round is
  * sending, its details also every few seconds, capped (`sendingRefetchInterval`).
  */
 export function RoundDetailsPage() {
@@ -45,6 +48,7 @@ export function RoundDetailsPage() {
   const validId = isUuid(roundId);
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const isManager = useAuthUser().role === 'manager';
   // Fetches of the details counted from here; "רענון" starts the count again.
   const pollStart = useRef(0);
 
@@ -52,6 +56,8 @@ export function RoundDetailsPage() {
     queryKey: roundKeys.details(roundId),
     queryFn: ({ signal }) => fetchRound(roundId, signal),
     enabled: validId,
+    // Always stale: every window focus fetches the details again (the table never: audit rows).
+    staleTime: 0,
     refetchOnWindowFocus: true,
     refetchInterval: (query) =>
       sendingRefetchInterval(
@@ -118,6 +124,8 @@ export function RoundDetailsPage() {
       </Box>
 
       {round.status === 'draft' && <Typography color="text.secondary">{text.draftHint}</Typography>}
+      {/* Managers only: the role hides the buttons, the API decides. */}
+      {isManager && <RoundActions round={round} />}
       <RoundHeader round={round} />
       {round.status === 'sending' && round.progress && <SendProgress progress={round.progress} />}
       <RoundCounts round={round} />

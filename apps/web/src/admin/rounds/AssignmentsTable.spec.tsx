@@ -55,12 +55,13 @@ async function openTable(entry = `/rounds/${ROUND_ID}`) {
   return { ...rendered, ...stub, table };
 }
 
-const rowOf = (number: string) => screen.getByText(number).closest('tr') as HTMLElement;
+const rowOf = (number: string) =>
+  screen.getByText(text.employeeNumber(number)).closest('tr') as HTMLElement;
 
 describe('AssignmentsTable (A4 employee table)', () => {
   it('shows each employee: number, name, department, status, dates and reminders', async () => {
     await openTable();
-    await screen.findByText(row.employeeNumber);
+    await screen.findByText(text.employeeNumber(row.employeeNumber));
     const sent = rowOf(row.employeeNumber);
     expect(within(sent).getByRole('link', { name: 'עובדת לדוגמה' })).toHaveAttribute(
       'href',
@@ -74,7 +75,8 @@ describe('AssignmentsTable (A4 employee table)', () => {
 
   it('a signed row: the email answer with the address given and the "differs" mark', async () => {
     await openTable();
-    const signed = rowOf((await screen.findByText(signedRow.employeeNumber)).textContent ?? '');
+    await screen.findByText(text.employeeNumber(signedRow.employeeNumber));
+    const signed = rowOf(signedRow.employeeNumber);
     expect(signed).toHaveTextContent('מייל');
     expect(signed).toHaveTextContent('given@example.test');
     expect(signed).toHaveTextContent(text.emailDiffers);
@@ -82,7 +84,7 @@ describe('AssignmentsTable (A4 employee table)', () => {
 
   it('opens the signed document on click only, in a new tab without a referrer', async () => {
     const { calls } = await openTable();
-    await screen.findByText(signedRow.employeeNumber);
+    await screen.findByText(text.employeeNumber(signedRow.employeeNumber));
     const links = screen.getAllByRole('link', { name: text.openDocument });
     expect(links).toHaveLength(2);
     expect(links[0]).toHaveAttribute('href', `/api/assignments/${signedRow.assignmentId}/document`);
@@ -96,7 +98,7 @@ describe('AssignmentsTable (A4 employee table)', () => {
 
   it('a returned row links to the round it was sent again in', async () => {
     await openTable();
-    await screen.findByText(returnedRow.employeeNumber);
+    await screen.findByText(text.employeeNumber(returnedRow.employeeNumber));
     const returned = rowOf(returnedRow.employeeNumber);
     expect(returned).toHaveTextContent(STATUS_LABELS.returned_for_correction);
     expect(returned).toHaveTextContent(text.sentAgainIn);
@@ -107,15 +109,48 @@ describe('AssignmentsTable (A4 employee table)', () => {
 
   it('shows "locked" next to "expired" when the expiry hides the lock', async () => {
     await openTable();
-    await screen.findByText(expiredLockedRow.employeeNumber);
+    await screen.findByText(text.employeeNumber(expiredLockedRow.employeeNumber));
     const expired = rowOf(expiredLockedRow.employeeNumber);
     expect(expired).toHaveTextContent(STATUS_LABELS.expired);
     expect(expired).toHaveTextContent(STATUS_LABELS.locked);
   });
 
+  it('has seven columns, the last one with the document, the answers and the actions', async () => {
+    const { table } = await openTable();
+    await screen.findByText(text.employeeNumber(row.employeeNumber));
+    const headers = within(table)
+      .getAllByRole('columnheader')
+      .map((cell) => cell.textContent);
+    expect(headers).toEqual([
+      text.columns.employee,
+      text.columns.department,
+      text.columns.status,
+      text.columns.dates,
+      text.columns.updates,
+      text.columns.emailAnswer,
+      text.columns.actions,
+    ]);
+    const signed = rowOf(signedRow.employeeNumber);
+    const last = within(signed).getAllByRole('cell').at(-1) as HTMLElement;
+    expect(within(last).getByRole('link', { name: text.openDocument })).toBeInTheDocument();
+  });
+
+  it('shows only the dates a row has, and the last update with the reminders', async () => {
+    await openTable();
+    await screen.findByText(text.employeeNumber(row.employeeNumber));
+    const sent = rowOf(row.employeeNumber);
+    expect(sent).toHaveTextContent(`${text.dates.sent}01/10/2026`);
+    expect(sent).not.toHaveTextContent(text.dates.opened);
+    expect(sent).not.toHaveTextContent(text.dates.signed);
+    expect(sent).toHaveTextContent(`${text.lastUpdate} 04/10/2026`);
+    const signed = rowOf(signedRow.employeeNumber);
+    expect(signed).toHaveTextContent(`${text.dates.opened}02/10/2026`);
+    expect(signed).toHaveTextContent(`${text.dates.signed}02/10/2026`);
+  });
+
   it('never shows an ID number', async () => {
     const { table } = await openTable();
-    await screen.findByText(row.employeeNumber);
+    await screen.findByText(text.employeeNumber(row.employeeNumber));
     expect(table.textContent).not.toMatch(ID_LIKE);
   });
 

@@ -6,7 +6,7 @@ import {
   type TemplatePreviewReport,
 } from '@doc-signing/shared';
 import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { he } from '../../i18n/he';
 import { apiErrorResponse, jsonResponse, stubApi } from '../../test/fetch-stub';
 import { managerUser, meAnswer, renderRoutes } from '../../test/render';
@@ -151,6 +151,21 @@ describe('TemplateDetailsPage: what it shows', () => {
     ).toBeInTheDocument();
     const urls = fetchMock.mock.calls.map(([url]) => (typeof url === 'string' ? url : ''));
     expect(urls.some((url) => url.startsWith('/api/templates'))).toBe(false);
+  });
+
+  it('a window focus never runs the preview check again (each one is an audit row)', async () => {
+    const mock = stubDetails();
+    await openDetails();
+    const calls = (url: string) => mock.mock.calls.filter(([called]) => called === url).length;
+    const itemPath = `/api/templates/${TEMPLATE_ID}`;
+    const checkPath = `${itemPath}/preview/check`;
+    await waitFor(() => expect(calls(checkPath)).toBe(1));
+    // Past the default 30 s staleTime: other queries do refetch on this focus.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000);
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => expect(calls(itemPath)).toBe(2));
+    expect(calls(checkPath)).toBe(1);
+    vi.restoreAllMocks();
   });
 });
 

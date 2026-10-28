@@ -955,23 +955,136 @@ export const he = {
       returnedOnly: 'הוחזרו לתיקון בלבד',
       empty: 'אין עובדים שמתאימים לסינון.',
       columns: {
-        employeeNumber: 'מספר עובד',
-        name: 'שם',
+        employee: 'עובד',
         department: 'מחלקה',
         status: 'סטטוס',
-        lastUpdate: 'עדכון אחרון',
-        reminders: 'תזכורות',
-        sentAt: 'נשלח',
-        openedAt: 'נפתח',
-        signedAt: 'נחתם',
+        dates: 'תאריכים',
+        updates: 'עדכון ותזכורות',
         emailAnswer: 'קבלת העותק',
-        document: 'מסמך',
+        actions: 'פעולות',
       },
+      employeeNumber: (number: string) => `מס׳ עובד ${number}`,
+      dates: { sent: 'נשלח', opened: 'נפתח', signed: 'נחתם' },
+      lastUpdate: 'עודכן',
+      remindersLabel: 'תזכורות',
       reminders: (count: number, last: string | null) =>
         count === 0 ? '—' : last === null ? String(count) : `${count} (אחרונה ${last})`,
       emailDiffers: 'שונה מהמייל במערכת',
       sentAgainIn: 'הוחזר לתיקון ← נשלח שוב בסבב',
+      notSentAgain: 'הוחזר לתיקון ועדיין לא נשלח שוב',
       openDocument: 'צפייה במסמך',
+    },
+    actions: {
+      menu: 'פעולות',
+      menuFor: (name: string) => `פעולות עבור ${name}`,
+      answers: 'תשובות',
+      answersFor: (name: string) => `התשובות של ${name}`,
+      manual: 'לטיפול ידני',
+      manualHint: 'הדפסה, סריקה או עמדת חתימה במשרד',
+      keep: 'חזרה',
+      remind: {
+        label: 'שליחת תזכורת',
+        text: (name: string) =>
+          `תישלח תזכורת במייל אל ${name}, עם קישור חדש. הקישורים הקודמים ימשיכו לעבוד.`,
+        done: 'התזכורת בדרך לעובד',
+      },
+      resend: {
+        label: 'שליחה חוזרת',
+        text: (name: string) =>
+          `המסמך יישלח שוב אל ${name}, לכתובת המייל שבכרטיס העובד, עם קישור חדש.`,
+        done: 'המסמך בדרך לעובד',
+      },
+      unlock: {
+        label: 'ביטול נעילה',
+        left: (left: number, max: number) => `נותרו ${left} מתוך ${max}`,
+        text: (name: string) =>
+          `לפני ביטול הנעילה יש לוודא עם ${name} שהניסיונות השגויים היו שלה או שלו, ולא של מישהו אחר. אחרי ביטול הנעילה יש שוב 5 ניסיונות.`,
+        leftLine: (left: number, max: number) =>
+          `ביטולי נעילה לשליחה הזו: נותרו ${left} מתוך ${max}.`,
+        done: 'הנעילה בוטלה',
+      },
+      officeCancel: {
+        label: 'ביטול וטיפול במשרד',
+        text: (name: string) =>
+          `הגישה של ${name} ננעלה שוב אחרי שתי פתיחות, ואי אפשר לפתוח אותה עוד. השליחה תבוטל וכל הקישורים יציגו "בוטל". את המסמך יש להחתים במשרד: הדפסה וסריקה, או עמדת חתימה במשרד.`,
+        confirm: 'ביטול השליחה',
+      },
+      cancel: {
+        label: 'ביטול השליחה',
+        text: (name: string) =>
+          `השליחה אל ${name} תבוטל, וכל הקישורים שנשלחו יציגו "בוטל". אי אפשר לבטל את הפעולה.`,
+        done: 'השליחה בוטלה',
+      },
+      remindAll: {
+        label: 'תזכורת לכולם',
+        title: 'תזכורת לכל מי שלא חתם',
+        text: 'תישלח תזכורת לכל עובד שקיבל את המסמך ועדיין לא חתם. מי שקיבל מייל ב-24 השעות האחרונות, מי שהגישה שלו נעולה ומי שאין לו מייל תקין לא יקבלו תזכורת.',
+        confirm: 'שליחת תזכורות',
+        queued: (count: number, text: string) =>
+          count === 0
+            ? 'לא נשלחו תזכורות.'
+            : count === 1
+              ? 'נשלחה תזכורת אחת.'
+              : `נשלחו ${text} תזכורות.`,
+        skippedTitle: 'לא נשלחו:',
+        skipped: {
+          locked: (text: string) => `${text} שהגישה שלהם נעולה`,
+          noValidEmail: (text: string) => `${text} בלי מייל תקין`,
+          emailQueued: (text: string) => `${text} שמייל אליהם כבר בדרך`,
+          recentlyEmailed: (text: string) => `${text} שקיבלו מייל ב-24 השעות האחרונות`,
+        },
+        close: 'סגירת ההודעה',
+      },
+      cancelRound: {
+        label: 'ביטול הסבב',
+        text: 'כל השליחות שעדיין לא נחתמו יבוטלו, וכל הקישורים יציגו "בוטל". מסמכים שכבר נחתמו יישארו כמו שהם. אי אפשר לבטל את הפעולה.',
+        word: 'ביטול',
+        typeLabel: (word: string) => `לאישור יש להקליד "${word}"`,
+        done: (cancelled: string, signed: string) =>
+          `הסבב בוטל: ${cancelled} שליחות בוטלו, ${signed} מסמכים חתומים נשארו כמו שהם.`,
+      },
+      draft: {
+        send: 'שליחת הסבב',
+        sendText: (count: string) => `המסמך יישלח עכשיו לכל ${count} העובדים בסבב.`,
+        confirm: 'שליחה',
+        sent: 'הסבב נשלח',
+        cancel: 'ביטול הטיוטה',
+        cancelText: 'הטיוטה תבוטל, והעובדים שבה יתפנו לסבב אחר. אי אפשר לבטל את הפעולה.',
+        cancelled: 'הטיוטה בוטלה',
+      },
+      panel: {
+        close: 'סגירה',
+        empty: 'לא מולאו שדות במסמך.',
+        needsApproval: 'דורש אישור',
+        yes: 'כן',
+        no: 'לא',
+        drawingAlt: (label: string) => `ציור: ${label}`,
+        emailTitle: 'קבלת העותק',
+        waiting: 'ממתין לאישור',
+        approved: 'התשובות אושרו',
+        returned: (date: string) => `הוחזר לתיקון ב-${date}`,
+        returnNote: 'ההערה לעובד:',
+      },
+      approve: {
+        label: 'אישור',
+        title: 'אישור התשובות',
+        text: 'התשובות יאושרו. המסמך החתום לא משתנה.',
+        done: 'התשובות אושרו',
+      },
+      returnForCorrection: {
+        label: 'החזרה לתיקון',
+        text: 'השליחה תבוטל והמסמך החתום יישמר. בסבב התיקון העובד יראה את ההערה אחרי הקלדת מספר הזהות.',
+        note: 'הערה לעובד',
+        noteHelp: (used: number, max: number) => `חובה. ${used}/${max} תווים`,
+        done: 'המסמך הוחזר לתיקון',
+      },
+      sendAgain: {
+        label: 'שליחה חוזרת לתיקון',
+        text: 'ייווצר סבב תיקון לעובד הזה בלבד, עם הגרסה העדכנית של המסמך, והוא יישלח מיד.',
+        done: 'סבב התיקון נשלח',
+        exists: 'המסמך המתוקן כבר נשלח בסבב תיקון.',
+        toRound: 'לסבב התיקון',
+      },
     },
     files: {
       label: 'קבצים',

@@ -152,7 +152,10 @@ export class RoundsReadService {
       },
       now,
     );
-    const items = rows.map(toAssignmentRow);
+    const unlocks = await this.repository.unlockCounts(
+      rows.map(({ assignmentId }) => assignmentId),
+    );
+    const items = rows.map((row) => toAssignmentRow(row, unlocks.get(row.assignmentId) ?? 0));
     const emailAnswersShown = items.filter(({ emailAnswer }) => emailAnswer?.email).length;
     if (emailAnswersShown > 0) {
       await this.audit.record({

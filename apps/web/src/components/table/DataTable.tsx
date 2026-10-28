@@ -2,6 +2,7 @@ import type { Paged } from '@doc-signing/shared';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
 import Paper from '@mui/material/Paper';
+import type { Theme } from '@mui/material/styles';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -23,6 +24,29 @@ export interface Column<T> {
   header: string;
   render: (row: T) => ReactNode;
   width?: number | string;
+  /**
+   * `end`: the column stays on the end edge (the left in RTL) while a wide table scrolls, so
+   * its actions are always in view.
+   */
+  sticky?: 'end';
+}
+
+/** A sticky column needs its own background and a line where the scrolled cells pass under it. */
+function stickySx(column: Pick<Column<unknown>, 'sticky'>, header: boolean) {
+  if (column.sticky !== 'end') return {};
+  return {
+    position: 'sticky',
+    insetInlineEnd: 0,
+    zIndex: header ? 3 : 2,
+    bgcolor: 'background.paper',
+    borderInlineStart: 1,
+    borderInlineStartColor: 'divider',
+    // The row's hover shade over the opaque background, as the other cells show it.
+    '.MuiTableRow-hover:hover > &': {
+      backgroundImage: (theme: Theme) =>
+        `linear-gradient(${theme.palette.action.hover}, ${theme.palette.action.hover})`,
+    },
+  } as const;
 }
 
 export interface TableSelection<T> {
@@ -57,6 +81,8 @@ interface DataTableProps<T> {
   onPageSizeChange: (pageSize: number) => void;
   emptyText?: string;
   selection?: TableSelection<T>;
+  /** Half the side padding in every cell: a wide table (many columns) that must fit 1280 px. */
+  compact?: boolean;
 }
 
 /**
@@ -77,6 +103,7 @@ export function DataTable<T>({
   onPageSizeChange,
   emptyText = he.table.empty,
   selection,
+  compact = false,
 }: DataTableProps<T>) {
   useClearSelectionOn(selection, `${selection?.resetKey ?? ''}|${pageSize}`);
 
@@ -123,7 +150,9 @@ export function DataTable<T>({
             </TableCell>
           )}
           {columns.map((column) => (
-            <TableCell key={column.key}>{column.render(row)}</TableCell>
+            <TableCell key={column.key} sx={stickySx(column, false)}>
+              {column.render(row)}
+            </TableCell>
           ))}
         </TableRow>
       );
@@ -153,7 +182,10 @@ export function DataTable<T>({
         </Box>
       )}
       <TableContainer>
-        <Table aria-label={caption}>
+        <Table
+          aria-label={caption}
+          sx={compact ? { '& .MuiTableCell-root': { paddingInline: 1 } } : undefined}
+        >
           <TableHead>
             <TableRow>
               {selection && (
@@ -172,7 +204,11 @@ export function DataTable<T>({
               {columns.map((column) => (
                 <TableCell
                   key={column.key}
-                  sx={{ fontWeight: tokens.font.weight.semibold, width: column.width }}
+                  sx={{
+                    fontWeight: tokens.font.weight.semibold,
+                    width: column.width,
+                    ...stickySx(column, true),
+                  }}
                 >
                   {column.header}
                 </TableCell>

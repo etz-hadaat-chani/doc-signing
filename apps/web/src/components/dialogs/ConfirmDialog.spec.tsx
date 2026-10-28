@@ -89,4 +89,15 @@ describe('ConfirmDialog', () => {
     await openDialog({ children: <label htmlFor="note">הערה</label> });
     expect(screen.getByText('הערה')).toBeInTheDocument();
   });
+
+  it('confirmDisabled: Confirm stays disabled (a required field is empty), Cancel still works', async () => {
+    const onConfirm = vi.fn();
+    const onClose = vi.fn();
+    const { user } = await openDialog({ confirmDisabled: true, onConfirm, onClose });
+    expect(confirmButton()).toBeDisabled();
+    expect(confirmButton()).not.toHaveTextContent(he.common.working);
+    await user.click(screen.getByRole('button', { name: he.common.cancel }));
+    expect(onClose).toHaveBeenCalled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
 });

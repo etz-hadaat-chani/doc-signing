@@ -1,5 +1,4 @@
 import { type RoundDetails, STATUS_LABELS } from '@doc-signing/shared';
-import { focusManager } from '@tanstack/react-query';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { he } from '../../i18n/he';
@@ -166,19 +165,20 @@ describe('RoundDetailsPage (A4)', () => {
     await waitFor(() => expect(callsTo(fetchMock, tablePath())).toBe(2));
   });
 
-  it('on window focus fetches the details again but never the table (audit rows)', async () => {
+  it('a real window focus fetches the details again at once, never the table (audit rows)', async () => {
     const { fetchMock } = await openDetails();
     await waitFor(() => expect(callsTo(fetchMock, tablePath())).toBe(1));
-    // Both are older than the 30 s staleTime now.
-    const later = Date.now() + 60_000;
-    vi.spyOn(Date, 'now').mockReturnValue(later);
+    // The window comes back from another window (the tab stayed visible): no time has to pass.
     act(() => {
-      focusManager.setFocused(false);
-      focusManager.setFocused(true);
+      window.dispatchEvent(new Event('focus'));
     });
     await waitFor(() => expect(callsTo(fetchMock, detailsPath)).toBe(2));
+    // A tab that becomes visible again counts as well.
+    act(() => {
+      window.dispatchEvent(new Event('visibilitychange'));
+    });
+    await waitFor(() => expect(callsTo(fetchMock, detailsPath)).toBe(3));
     expect(callsTo(fetchMock, tablePath())).toBe(1);
-    act(() => focusManager.setFocused(undefined));
   });
 
   it('never polls an active round: no interval, nothing fetched while time passes', async () => {
