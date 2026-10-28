@@ -14,6 +14,7 @@ export const templateKeys = {
   list: (query: TemplateListQuery) => ['staff', 'templates', 'list', query] as const,
   item: (id: string) => ['staff', 'templates', 'item', id] as const,
   versions: ['staff', 'templates', 'versions'] as const,
+  active: ['staff', 'templates', 'active'] as const,
   check: (id: string) => ['staff', 'templates', 'check', id] as const,
   previewPdf: (id: string) => ['staff', 'templates', 'preview-pdf', id] as const,
 };
@@ -40,20 +41,30 @@ export function fetchTemplates(query: TemplateListQuery, signal?: AbortSignal) {
   });
 }
 
-/**
- * Every template version, archived and old ones too, for the version history: the API has no
- * route per template, and templates are few (tens), so all pages are read.
- */
-export async function fetchAllTemplateVersions(signal?: AbortSignal): Promise<TemplateItem[]> {
+/** Every page of the list (templates are few, tens). */
+async function fetchAllTemplates(
+  includeArchived: boolean,
+  signal?: AbortSignal,
+): Promise<TemplateItem[]> {
   const items: TemplateItem[] = [];
   for (let page = 1; ; page += 1) {
-    const answer = await fetchTemplates(
-      { page, pageSize: MAX_PAGE_SIZE, includeArchived: true },
-      signal,
-    );
+    const answer = await fetchTemplates({ page, pageSize: MAX_PAGE_SIZE, includeArchived }, signal);
     items.push(...answer.items);
     if (answer.items.length === 0 || items.length >= answer.total) return items;
   }
+}
+
+/**
+ * Every template version, archived and old ones too, for the version history: the API has no
+ * route per template, so all pages are read.
+ */
+export function fetchAllTemplateVersions(signal?: AbortSignal): Promise<TemplateItem[]> {
+  return fetchAllTemplates(true, signal);
+}
+
+/** Every active template (not archived, latest version), for choosing a round's document. */
+export function fetchActiveTemplates(signal?: AbortSignal): Promise<TemplateItem[]> {
+  return fetchAllTemplates(false, signal);
 }
 
 /** Any version, also archived or old ones. */

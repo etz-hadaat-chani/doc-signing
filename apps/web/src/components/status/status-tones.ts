@@ -1,4 +1,9 @@
-import type { DisplayStatus, EmailStatus, RoundStatus } from '@doc-signing/shared';
+import type {
+  DisplayStatus,
+  EmailStatus,
+  RoundDepartmentStatus,
+  RoundStatus,
+} from '@doc-signing/shared';
 import BlockOutlined from '@mui/icons-material/BlockOutlined';
 import CancelScheduleSendOutlined from '@mui/icons-material/CancelScheduleSendOutlined';
 import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';
@@ -121,3 +126,13 @@ export const TEMPLATE_LOCKED_LOOK: StatusLook = { tone: 'info', icon: LockOutlin
 
 /** An inactive employee (A6, A7): neutral, never picked into a new round. */
 export const INACTIVE_LOOK: StatusLook = { tone: 'neutral', icon: PersonOffOutlined };
+
+/**
+ * A department in the round summary (A5): its template is settled, it has none (its employees
+ * are left out), or it waits for the manager's choice (blocks the round).
+ */
+export const ROUND_DEPARTMENT_LOOKS: Readonly<Record<RoundDepartmentStatus, StatusLook>> = {
+  ready: { tone: 'success', icon: TaskAltOutlined },
+  no_template: { tone: 'warning', icon: ReportProblemOutlined },
+  choice_needed: { tone: 'error', icon: ErrorOutlineOutlined },
+};

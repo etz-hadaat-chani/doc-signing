@@ -7,7 +7,6 @@ import {
   columnNames,
   confirmableUntil,
   needsNewUpload,
-  pageOf,
   parseChangeLine,
 } from './import-view';
 import { nothingToDo, preview } from './import.fixtures';
@@ -54,18 +53,6 @@ describe('parseChangeLine', () => {
       text: 'something else',
     });
     expect(parseChangeLine('unknownField: a → b', labels)).toMatchObject({ kind: 'raw' });
-  });
-});
-
-describe('pageOf', () => {
-  it('slices a list into the API list shape', () => {
-    const items = Array.from({ length: 30 }, (_, index) => index);
-    expect(pageOf(items, 2, 25)).toEqual({
-      items: [25, 26, 27, 28, 29],
-      total: 30,
-      page: 2,
-      pageSize: 25,
-    });
   });
 });
 

@@ -6,9 +6,8 @@ import Typography from '@mui/material/Typography';
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router';
 import { type Column, DataTable } from '../../components/table/DataTable';
-import { DEFAULT_PAGE_SIZE } from '../../components/table/paging';
+import { DEFAULT_PAGE_SIZE, pageOf } from '../../components/table/paging';
 import { he } from '../../i18n/he';
-import { pageOf } from '../employees/import/import-view';
 
 const text = he.templates.details;
 const none = he.templates.emptyValue;

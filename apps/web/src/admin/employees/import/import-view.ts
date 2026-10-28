@@ -3,17 +3,10 @@ import {
   type ErrorCode,
   IMPORT_PREVIEW_MAX_AGE_HOURS,
   type ImportPreview,
-  type Paged,
 } from '@doc-signing/shared';
 import { isApiRequestError } from '../../../api/api-error';
 import { he } from '../../../i18n/he';
 import { emailStatusLabel } from '../email-status';
-
-/** One page of a list kept in memory, in the API's list shape (for DataTable). */
-export function pageOf<T>(items: readonly T[], page: number, pageSize: number): Paged<T> {
-  const start = (page - 1) * pageSize;
-  return { items: items.slice(start, start + pageSize), total: items.length, page, pageSize };
-}
 
 /**
  * Confirming does something only with new or updated employees or a department change; a file

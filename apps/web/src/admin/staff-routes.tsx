@@ -20,6 +20,9 @@ const PAGE_COMPONENTS: Partial<Record<string, ComponentType>> = {
   '/': lazy(() =>
     import('./dashboard/DashboardPage').then((module) => ({ default: module.DashboardPage })),
   ),
+  '/rounds/new': lazy(() =>
+    import('./rounds/new/NewRoundPage').then((module) => ({ default: module.NewRoundPage })),
+  ),
   '/employees': lazy(() =>
     import('./employees/EmployeesPage').then((module) => ({ default: module.EmployeesPage })),
   ),

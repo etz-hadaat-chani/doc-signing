@@ -4,13 +4,13 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import { type ReactNode, useId, useMemo, useState } from 'react';
-import { type Column, DataTable } from '../../../components/table/DataTable';
-import { DEFAULT_PAGE_SIZE } from '../../../components/table/paging';
+import type { Column } from '../../../components/table/DataTable';
+import { MemoryTable } from '../../../components/table/MemoryTable';
 import { formatNumber } from '../../../i18n/format';
 import { he } from '../../../i18n/he';
 import { EmailStatusMark } from '../EmailStatusMark';
 import { useDepartments } from '../use-departments';
-import { type ChangeLine, pageOf, parseChangeLine } from './import-view';
+import { type ChangeLine, parseChangeLine } from './import-view';
 
 const texts = he.employeeImport;
 const headers = texts.tableColumns;
@@ -64,35 +64,13 @@ function ChangeText({ line }: { line: ChangeLine }) {
   );
 }
 
-/** A list kept in memory, shown a page at a time (nothing in the address). */
-function MemoryTable<T extends { key: string }>({
-  caption,
-  columns,
-  items,
-}: {
+/** A list kept in memory, its rows told apart by their place in the list. */
+function KeyedTable<T extends { key: string }>(props: {
   caption: string;
   columns: readonly Column<T>[];
   items: readonly T[];
 }) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  return (
-    <DataTable
-      caption={caption}
-      columns={columns}
-      getRowId={(row) => row.key}
-      data={pageOf(items, page, pageSize)}
-      isLoading={false}
-      error={null}
-      page={page}
-      pageSize={pageSize}
-      onPageChange={setPage}
-      onPageSizeChange={(size) => {
-        setPageSize(size);
-        setPage(1);
-      }}
-    />
-  );
+  return <MemoryTable {...props} getRowId={(row) => row.key} />;
 }
 
 function DepartmentList({ title, children }: { title: string; children: ReactNode }) {
@@ -191,21 +169,21 @@ export function ImportReport({ preview }: { preview: ImportPreview }) {
 
   const panels: Record<TabKind, () => ReactNode> = {
     new: () => (
-      <MemoryTable
+      <KeyedTable
         caption={texts.tabs.new}
         columns={NEW_COLUMNS}
         items={keyed(preview.newEmployees)}
       />
     ),
     updated: () => (
-      <MemoryTable
+      <KeyedTable
         caption={texts.tabs.updated}
         columns={updatedColumns}
         items={keyed(preview.updatedEmployees)}
       />
     ),
     errors: () => (
-      <MemoryTable
+      <KeyedTable
         caption={texts.tabs.errors}
         columns={ISSUE_COLUMNS}
         items={keyed(preview.errors)}
@@ -216,7 +194,7 @@ export function ImportReport({ preview }: { preview: ImportPreview }) {
         <Typography color="text.secondary" sx={{ mb: 2 }}>
           {texts.warningsHint}
         </Typography>
-        <MemoryTable
+        <KeyedTable
           caption={texts.tabs.warnings}
           columns={ISSUE_COLUMNS}
           items={keyed(preview.warnings)}

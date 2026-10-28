@@ -89,6 +89,16 @@ describe('staff routes', () => {
     ]);
   });
 
+  it('shows "no permission" to an officer on the new round wizard (its chunk never loads)', async () => {
+    const fetchMock = stubApi({ 'GET /api/auth/me': meAnswer(officerUser) });
+    renderRoutes('/rounds/new');
+    await pageTitle(he.feedback.noPermissionTitle);
+    expect(screen.queryByRole('button', { name: he.newRound.next })).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([url]) => (typeof url === 'string' ? url : ''))).toEqual([
+      '/api/auth/me',
+    ]);
+  });
+
   it('lets an officer open the read-only pages', async () => {
     stubApi({ 'GET /api/auth/me': meAnswer(officerUser) });
     renderRoutes('/manual/approvals');
