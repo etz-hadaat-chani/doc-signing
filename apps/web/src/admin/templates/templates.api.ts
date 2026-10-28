@@ -1,4 +1,5 @@
 import {
+  invitationPreviewSchema,
   pagedSchema,
   type TemplateItem,
   templateItemSchema,
@@ -15,8 +16,13 @@ export const templateKeys = {
   item: (id: string) => ['staff', 'templates', 'item', id] as const,
   versions: ['staff', 'templates', 'versions'] as const,
   active: ['staff', 'templates', 'active'] as const,
-  check: (id: string) => ['staff', 'templates', 'check', id] as const,
-  previewPdf: (id: string) => ['staff', 'templates', 'preview-pdf', id] as const,
+  /** No employee = the made-up sample. */
+  check: (id: string, employeeId: string | null = null) =>
+    ['staff', 'templates', 'check', id, employeeId] as const,
+  previewPdf: (id: string, employeeId: string | null = null) =>
+    ['staff', 'templates', 'preview-pdf', id, employeeId] as const,
+  invitationPreview: (id: string, linkExpiryDays: number) =>
+    ['staff', 'templates', 'invitation-preview', id, linkExpiryDays] as const,
 };
 
 const templatePageSchema = pagedSchema(templateItemSchema);
@@ -110,26 +116,47 @@ export function archiveTemplate(id: string) {
   });
 }
 
-/** What the sample preview found: missing values, boxes left for the employee, warnings. */
-export function fetchPreviewCheck(id: string, signal?: AbortSignal) {
-  return staffRequest(`/api/templates/${encodeURIComponent(id)}/preview/check`, {
-    schema: templatePreviewReportSchema,
-    signal,
-  });
+/** `?employeeId=` (an id, never personal data); none = the made-up sample employee. */
+const employeeQuery = (employeeId: string | null) =>
+  employeeId === null ? '' : `?${new URLSearchParams({ employeeId }).toString()}`;
+
+/** What the preview found: missing values, boxes left for the employee, warnings. */
+export function fetchPreviewCheck(
+  id: string,
+  signal?: AbortSignal,
+  employeeId: string | null = null,
+) {
+  return staffRequest(
+    `/api/templates/${encodeURIComponent(id)}/preview/check${employeeQuery(employeeId)}`,
+    { schema: templatePreviewReportSchema, signal },
+  );
 }
 
 /**
  * The sample preview PDF, opened in a new tab: the API forbids showing its answers in a frame
  * (X-Frame-Options), and it is never cached.
  */
-export function previewPath(id: string): `/api/${string}` {
-  return `/api/templates/${encodeURIComponent(id)}/preview`;
+export function previewPath(id: string, employeeId: string | null = null): `/api/${string}` {
+  return `/api/templates/${encodeURIComponent(id)}/preview${employeeQuery(employeeId)}`;
 }
 
 /**
- * The same sample preview as bytes, for pdf.js on the position editor (5.4 part B). The API draws
- * the saved positions only; the editor outlines the unsaved ones on top.
+ * The same preview as bytes, for pdf.js: the position editor (5.4 part B; the API draws the saved
+ * positions only, the editor outlines the unsaved ones on top) and the round wizard's preview.
  */
-export function fetchPreviewPdf(id: string, signal?: AbortSignal): Promise<ArrayBuffer> {
-  return staffRequestBytes(previewPath(id), { signal });
+export function fetchPreviewPdf(
+  id: string,
+  signal?: AbortSignal,
+  employeeId: string | null = null,
+): Promise<ArrayBuffer> {
+  return staffRequestBytes(previewPath(id, employeeId), { signal });
+}
+
+/** The invitation as if sent now (Flow 3 step 6); nothing is sent or stored. */
+export function fetchInvitationPreview(id: string, linkExpiryDays: number, signal?: AbortSignal) {
+  const query = new URLSearchParams({ linkExpiryDays: String(linkExpiryDays) }).toString();
+  return staffRequest(`/api/templates/${encodeURIComponent(id)}/invitation-preview?${query}`, {
+    schema: invitationPreviewSchema,
+    signal,
+  });
 }

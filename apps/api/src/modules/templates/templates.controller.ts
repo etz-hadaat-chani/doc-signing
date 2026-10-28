@@ -1,4 +1,7 @@
 import {
+  type InvitationPreview,
+  type InvitationPreviewQuery,
+  invitationPreviewQuerySchema,
   type Paged,
   TEMPLATE_MAX_FILE_BYTES,
   type TemplateCreateInput,
@@ -38,6 +41,7 @@ import { contentDisposition } from '../../common/storage/content-disposition.js'
 import { ZodValidationPipe } from '../../common/validation/zod-validation.pipe.js';
 import { Roles } from '../auth/access.decorators.js';
 import type { AuthRequest } from '../auth/auth-request.js';
+import { InvitationPreviewService } from './invitation-preview.service.js';
 import { TemplatePreviewService } from './template-preview.service.js';
 import { type TemplateActor, TemplatesService } from './templates.service.js';
 
@@ -85,6 +89,7 @@ export class TemplatesController {
   constructor(
     private readonly templates: TemplatesService,
     private readonly previews: TemplatePreviewService,
+    private readonly invitations: InvitationPreviewService,
   ) {}
 
   @ApiOperation({
@@ -146,6 +151,22 @@ export class TemplatesController {
     @Req() request: AuthRequest,
   ): Promise<TemplatePreviewReport> {
     return this.previews.check(id, query.employeeId, actorOf(request));
+  }
+
+  @ApiOperation({
+    summary:
+      'Invitation email preview (Flow 3 step 6): the real invitation for this document, a ' +
+      'made-up employee and a placeholder link, as if sent now (expiry = now + linkExpiryDays, ' +
+      'default the setting). No recipient; nothing is sent, stored or logged',
+  })
+  @ApiZodQuery(invitationPreviewQuerySchema)
+  @Roles('manager')
+  @Get(':id/invitation-preview')
+  invitationPreview(
+    @Param('id', new ZodValidationPipe(z.uuid())) id: string,
+    @Query(new ZodValidationPipe(invitationPreviewQuerySchema)) query: InvitationPreviewQuery,
+  ): Promise<InvitationPreview> {
+    return this.invitations.preview(id, query.linkExpiryDays);
   }
 
   /** Multipart: `file`, `name`, `departmentIds` (repeated or comma-separated). */

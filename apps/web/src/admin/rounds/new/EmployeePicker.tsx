@@ -12,6 +12,7 @@ import { employeeColumns, fullName } from './employee-columns';
 import { pickedFrom, type PickedEmployee } from './wizard-state';
 
 const texts = he.newRound.recipients;
+const previewTexts = he.newRound.preview;
 const PAGE_SIZE = 10;
 
 /**
@@ -23,12 +24,22 @@ export function EmployeePicker({
   isPicked,
   canPick,
   onPick,
+  single = false,
 }: {
   isPicked: (employeeId: string) => boolean;
   /** False at the limit: nothing more can be added. */
   canPick: boolean;
   onPick: (employee: PickedEmployee) => void;
+  /** One employee at a time (the preview's "specific employee"): "choose" / "chosen". */
+  single?: boolean;
 }) {
+  const labels = single
+    ? {
+        pick: previewTexts.choose,
+        picked: previewTexts.chosen,
+        pickLabel: previewTexts.chooseLabel,
+      }
+    : { pick: texts.add, picked: texts.added, pickLabel: texts.addLabel };
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
@@ -50,10 +61,10 @@ export function EmployeePicker({
           size="small"
           variant="outlined"
           disabled={picked || !canPick}
-          aria-label={picked ? undefined : texts.addLabel(fullName(row))}
+          aria-label={picked ? undefined : labels.pickLabel(fullName(row))}
           onClick={() => onPick(row)}
         >
-          {picked ? texts.added : texts.add}
+          {picked ? labels.picked : labels.pick}
         </Button>
       );
     },

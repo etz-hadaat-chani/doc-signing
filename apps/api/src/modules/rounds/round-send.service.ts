@@ -1,4 +1,5 @@
 import {
+  linkExpiresAtFrom,
   type RoundOutdatedTemplate,
   type RoundSendInput,
   type RoundSent,
@@ -25,8 +26,6 @@ import { type CandidateTemplate, templateRef } from './round-templates.js';
 
 /** Like round creation: READ COMMITTED; the round row lock makes two sends run in turn. */
 const SEND_TRANSACTION = { maxWait: 10_000, timeout: 30_000 } as const;
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Sending a draft round (3.10, FR-RND-5, FR-RND-6, FR-RND-8): one transaction checks the round's
@@ -84,7 +83,7 @@ export class RoundSendService {
     const templates = await this.checkTemplates(rows, employerSignature !== null, input, tx);
 
     const sentAt = round.now;
-    const linkExpiresAt = new Date(sentAt.getTime() + round.linkExpiryDays * DAY_MS);
+    const linkExpiresAt = linkExpiresAtFrom(sentAt, round.linkExpiryDays);
     const textFitCache: TextFitCache = new Map();
     const plan = planRoundSend({
       assignments: rows.map((row) => ({

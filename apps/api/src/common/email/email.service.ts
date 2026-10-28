@@ -10,7 +10,7 @@ import { attachmentName } from './attachment-name.js';
 import { EmailAdapter, type EmailAttachment, type SendResult } from './email.adapter.js';
 import { EmailSendError } from './email.errors.js';
 import { SendRate } from './send-rate.js';
-import { signingLink } from './signing-link.js';
+import { exampleSigningLink, signingLink } from './signing-link.js';
 import { renderInvitation } from './templates/invitation.js';
 import type { RenderedEmail } from './templates/layout.js';
 import { renderReminder } from './templates/reminder.js';
@@ -33,6 +33,17 @@ export interface SigningEmailInput {
 export interface InvitationEmailInput extends SigningEmailInput {
   /** A correction round (FR-TRK-6): adds the "corrected document" line. Never the note. */
   readonly correction?: boolean;
+}
+
+export interface InvitationPreviewInput {
+  /** A made-up name, never a real employee's. */
+  readonly employeeName: string;
+  readonly documentName: string;
+  readonly expiresAt: Date;
+}
+
+export interface InvitationPreviewEmail extends RenderedEmail {
+  readonly senderName: string;
 }
 
 export interface SignedCopyEmailInput {
@@ -73,6 +84,26 @@ export class EmailService {
       correction: input.correction === true,
     });
     return this.send('invite', input.to, rendered, [], db);
+  }
+
+  /**
+   * The invitation as `sendInvitation` would render it, with a placeholder link
+   * (`exampleSigningLink`) and the From name. Never calls the adapter and takes no address:
+   * nothing is sent, and nothing is logged.
+   */
+  async renderInvitationPreview(
+    input: InvitationPreviewInput,
+    db: Db = this.prisma,
+  ): Promise<InvitationPreviewEmail> {
+    const rendered = renderInvitation({
+      employeeName: input.employeeName,
+      documentName: input.documentName,
+      link: exampleSigningLink(this.config.email.publicUrl),
+      expiresAt: input.expiresAt,
+      hrContact: await this.hrContact(db),
+      correction: false,
+    });
+    return { ...rendered, senderName: await this.settings.getSenderName(db) };
   }
 
   async sendReminder(input: SigningEmailInput, db: Db = this.prisma): Promise<SendResult> {

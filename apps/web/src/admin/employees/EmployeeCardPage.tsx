@@ -1,12 +1,13 @@
 import { type EmployeeCard, formatDayIL, formatDepartment } from '@doc-signing/shared';
 import EditOutlined from '@mui/icons-material/EditOutlined';
+import SendOutlined from '@mui/icons-material/SendOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { Link as RouterLink, useParams } from 'react-router';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router';
 import { z } from 'zod';
 import { errorContent } from '../../components/feedback/error-content';
 import { ErrorState } from '../../components/feedback/ErrorState';
@@ -122,6 +123,7 @@ const isUuid = (value: string) => z.uuid().safeParse(value).success;
 export function EmployeeCardPage() {
   const { employeeId = '' } = useParams();
   const { role } = useAuthUser();
+  const navigate = useNavigate();
   const validId = isUuid(employeeId);
   const card = useQuery({
     queryKey: employeeKeys.card(employeeId),
@@ -159,6 +161,16 @@ export function EmployeeCardPage() {
           </Box>
         </Box>
         <Box sx={{ flex: 1 }} />
+        {/* Only hides the button: the API refuses officers and inactive employees anyway. */}
+        {role === 'manager' && employee.isActive && (
+          <Button
+            variant="contained"
+            startIcon={<SendOutlined />}
+            onClick={() => void navigate('/rounds/new', { state: { employeeId: employee.id } })}
+          >
+            {he.employees.card.sendDocument}
+          </Button>
+        )}
         {role === 'manager' && (
           <Button
             variant="outlined"

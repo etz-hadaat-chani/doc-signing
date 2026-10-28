@@ -1,13 +1,14 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Link from '@mui/material/Link';
 import Step from '@mui/material/Step';
 import StepLabel from '@mui/material/StepLabel';
 import Stepper from '@mui/material/Stepper';
 import Typography from '@mui/material/Typography';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { type Dispatch, useEffect, useReducer, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router';
 import { z } from 'zod';
 import { ConfirmDialog } from '../../../components/dialogs/ConfirmDialog';
 import { useNotify } from '../../../components/notifications/notify-context';
@@ -16,12 +17,18 @@ import { employeeKeys, fetchEmployee } from '../../employees/employees.api';
 import { useUnsavedGuard } from '../../templates/editor/use-unsaved-guard';
 import { previewRecipients, type RoundSelectionBody } from '../rounds.api';
 import { DocumentStep } from './DocumentStep';
+import { DoneStep } from './DoneStep';
 import { NameModeStep } from './NameModeStep';
+import { PreviewStep } from './PreviewStep';
 import { RecipientsStep } from './RecipientsStep';
+import { SendStep, type SummaryNotice } from './SendStep';
+import { SettingsStep } from './SettingsStep';
+import { checkSettings } from './settings-form';
 import { StepSection } from './StepSection';
 import { SummaryStep } from './SummaryStep';
 import {
   canLeaveSummary,
+  guardsLeaving,
   initialWizardState,
   pickedFrom,
   previewStatus,
@@ -43,9 +50,9 @@ const STEP_TITLES: Record<WizardStep, string> = {
   document: texts.document.title,
   recipients: texts.recipients.title,
   summary: texts.summary.title,
-  settings: texts.steps[4],
-  preview: texts.steps[5],
-  send: texts.steps[6],
+  settings: texts.settings.title,
+  preview: texts.preview.title,
+  send: texts.send.title,
 };
 
 /**
@@ -74,6 +81,32 @@ function usePreselectedEmployee(dispatch: Dispatch<WizardAction>) {
   return card.isError;
 }
 
+/** Why the send step sent the manager back to the summary. */
+function SummaryNoticeAlert({ notice }: { notice: SummaryNotice }) {
+  if (notice === 'draftCancelled') {
+    return (
+      <Alert severity="info" role="status" sx={{ mb: 3 }}>
+        {texts.send.cancelled}
+      </Alert>
+    );
+  }
+  if (notice === 'notCreated') {
+    return (
+      <Alert severity="error" role="alert" sx={{ mb: 3 }}>
+        {texts.send.notCreatedSummary}
+      </Alert>
+    );
+  }
+  return (
+    <Alert severity="warning" role="alert" sx={{ mb: 3 }} data-testid="round-maybe-created">
+      {texts.send.maybeCreated}{' '}
+      <Link component={RouterLink} to="/rounds?status=draft">
+        {texts.send.draftsLink}
+      </Link>
+    </Alert>
+  );
+}
+
 /**
  * New round wizard (A5, Flow 3): name and mode → document → recipients → summary → settings →
  * preview → send. Everything entered stays in this component's memory: nothing in the address,
@@ -85,7 +118,8 @@ export function NewRoundPage() {
   const preselectFailed = usePreselectedEmployee(dispatch);
   const [tried, setTried] = useState<ReadonlySet<WizardStep>>(new Set());
   const [opened, setOpened] = useState(false);
-  const { blocker } = useUnsavedGuard(state.touched);
+  const [notice, setNotice] = useState<SummaryNotice | null>(null);
+  const { blocker } = useUnsavedGuard(guardsLeaving(state));
 
   // One preview at a time, also for two clicks before the next render.
   const previewing = useRef(false);
@@ -110,23 +144,42 @@ export function NewRoundPage() {
     dispatch({ type: 'goTo', step });
   };
 
+  const settingsCheck = state.settings === null ? null : checkSettings(state.settings);
+
   const next = () => {
     const step = state.step;
-    if (stepProblem(state, step) !== null) {
+    const settingsBlocked = step === 'settings' && !settingsCheck?.input;
+    if (stepProblem(state, step) !== null || settingsBlocked) {
       setTried(new Set(tried).add(step));
       return;
     }
     const following = WIZARD_STEPS[index + 1];
     if (!following) return;
+    setNotice(null);
     goTo(following);
     // The summary's preview: on entering it, only when there is none for this choice.
     if (following === 'summary' && previewStatus(state) !== 'current') runPreview();
   };
 
+  /** From the send step: the summary again, computed afresh (the data may have changed). */
+  const backToSummary = (reason: SummaryNotice) => {
+    setNotice(reason);
+    goTo('summary');
+    runPreview();
+  };
+
+  const startAgain = () => {
+    dispatch({ type: 'reset' });
+    setTried(new Set());
+    setNotice(null);
+    setOpened(true);
+  };
+
   const problem = (step: WizardStep) => (tried.has(step) ? stepProblem(state, step) : null);
-  const nextDisabled =
-    (state.step === 'summary' && !canLeaveSummary(state)) ||
-    index > WIZARD_STEPS.indexOf('summary');
+  const nextDisabled = state.step === 'summary' && !canLeaveSummary(state);
+  // Once the draft exists, the steps it was made from can't be changed: no way back.
+  const showBack = index > 0 && state.roundId === null && state.sent === null;
+  const showNext = state.step !== 'send';
 
   let content;
   switch (state.step) {
@@ -167,8 +220,34 @@ export function NewRoundPage() {
         />
       );
       break;
-    default:
-      content = <Typography>{texts.nextPart}</Typography>;
+    case 'settings':
+      content = (
+        <SettingsStep
+          values={state.settings}
+          errors={tried.has('settings') ? (settingsCheck?.errors ?? {}) : {}}
+          dispatch={dispatch}
+        />
+      );
+      break;
+    case 'preview':
+      content = settingsCheck?.input ? (
+        <PreviewStep
+          state={state}
+          linkExpiryDays={settingsCheck.input.linkExpiryDays}
+          dispatch={dispatch}
+        />
+      ) : null;
+      break;
+    case 'send':
+      content = settingsCheck?.input ? (
+        <SendStep
+          state={state}
+          settings={settingsCheck.input}
+          dispatch={dispatch}
+          onBackToSummary={backToSummary}
+        />
+      ) : null;
+      break;
   }
 
   return (
@@ -177,13 +256,13 @@ export function NewRoundPage() {
         {he.nav.newRound}
       </Typography>
       <Stepper
-        activeStep={index}
+        activeStep={state.sent ? WIZARD_STEPS.length : index}
         alternativeLabel
         aria-label={texts.stepsLabel}
         sx={{ mb: 4, maxWidth: 960 }}
       >
         {texts.steps.map((label, stepIndex) => (
-          <Step key={label} completed={stepIndex < index}>
+          <Step key={label} completed={state.sent !== null || stepIndex < index}>
             <StepLabel>{label}</StepLabel>
           </Step>
         ))}
@@ -194,30 +273,41 @@ export function NewRoundPage() {
           {texts.recipients.preselectFailed}
         </Alert>
       )}
+      {notice !== null && state.step === 'summary' && <SummaryNoticeAlert notice={notice} />}
 
-      <StepSection key={state.step} title={STEP_TITLES[state.step]} focusOnOpen={opened}>
-        {content}
-      </StepSection>
+      {state.sent ? (
+        <StepSection key="done" title={texts.done.title} focusOnOpen>
+          <DoneStep sent={state.sent} onNewRound={startAgain} />
+        </StepSection>
+      ) : (
+        <StepSection key={state.step} title={STEP_TITLES[state.step]} focusOnOpen={opened}>
+          {content}
+        </StepSection>
+      )}
 
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 4 }}>
-        {index > 0 && (
-          <Button
-            variant="outlined"
-            onClick={() => goTo(WIZARD_STEPS[index - 1] ?? 'name')}
-            disabled={preview.isPending}
-          >
-            {texts.back}
-          </Button>
-        )}
-        <Button variant="contained" onClick={next} disabled={nextDisabled || preview.isPending}>
-          {texts.next}
-        </Button>
-      </Box>
+      {state.sent === null && (showBack || showNext) && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 4 }}>
+          {showBack && (
+            <Button
+              variant="outlined"
+              onClick={() => goTo(WIZARD_STEPS[index - 1] ?? 'name')}
+              disabled={preview.isPending}
+            >
+              {texts.back}
+            </Button>
+          )}
+          {showNext && (
+            <Button variant="contained" onClick={next} disabled={nextDisabled || preview.isPending}>
+              {texts.next}
+            </Button>
+          )}
+        </Box>
+      )}
 
       <ConfirmDialog
         open={blocker.state === 'blocked'}
         title={texts.leaveTitle}
-        text={texts.leaveText}
+        text={state.roundId === null ? texts.leaveText : texts.leaveDraftText}
         confirmLabel={texts.leaveConfirm}
         cancelLabel={texts.stay}
         danger

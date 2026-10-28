@@ -129,12 +129,33 @@ describe('EmployeeCardPage (A7)', () => {
     );
   });
 
+  it('"send document" opens the wizard with the employee in router state, not the address', async () => {
+    stubCard();
+    const result = await openCard();
+    await result.user.click(screen.getByRole('button', { name: he.employees.card.sendDocument }));
+    await screen.findByRole('heading', { level: 1, name: he.nav.newRound }, { timeout: 5000 });
+    expect(result.router.state.location.pathname).toBe('/rounds/new');
+    expect(result.router.state.location.search).toBe('');
+  });
+
+  it('no "send document" for an inactive employee or an officer', async () => {
+    stubCard(managerUser, { [CARD]: () => jsonResponse(200, { ...card, isActive: false }) });
+    await openCard();
+    expect(screen.getByRole('link', { name: he.employees.edit })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: he.employees.card.sendDocument }),
+    ).not.toBeInTheDocument();
+  });
+
   it('an officer sees the card without the ID number and without "edit"', async () => {
     // JSON leaves the undefined field out, as the API does for officers.
     stubCard(officerUser, { [CARD]: () => jsonResponse(200, { ...card, idNumber: undefined }) });
     await openCard();
     expect(screen.queryByText(fields.idNumber, { selector: 'dt' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: he.employees.edit })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: he.employees.card.sendDocument }),
+    ).not.toBeInTheDocument();
     expect(detail(fields.city)).toHaveTextContent('עיר לדוגמה');
   });
 

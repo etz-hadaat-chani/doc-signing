@@ -2,13 +2,24 @@ import { ROUND_MAX_EMPLOYEE_IDS } from '@doc-signing/shared';
 import { describe, expect, it } from 'vitest';
 import { listItem } from '../../employees/employees.fixtures';
 import { readyTemplate } from '../../templates/templates.fixtures';
-import { DEPT_15, DEPT_19, OTHER_EMPLOYEE_ID, report, TEMPLATE_B_ID } from './rounds.fixtures';
+import {
+  byDepartmentReport,
+  DEPT_15,
+  DEPT_19,
+  OTHER_EMPLOYEE_ID,
+  report,
+  TEMPLATE_B_ID,
+} from './rounds.fixtures';
 import {
   canLeaveSummary,
+  createBody,
+  guardsLeaving,
   initialWizardState,
   nameProblem,
   pickedFrom,
   previewStatus,
+  previewTemplateId,
+  previewTemplates,
   selectionBody,
   stepProblem,
   type WizardAction,
@@ -211,3 +222,133 @@ describe('step problems', () => {
     expect(stepProblem(run({ type: 'all', all: true }), 'recipients')).toBeNull();
   });
 });
+
+describe('part B: settings, draft and send', () => {
+  const SETTINGS = {
+    remindersEnabled: true,
+    reminderIntervalDays: '3',
+    limitReminders: false,
+    maxReminders: '',
+    linkExpiryDays: '60',
+  };
+  const ROUND_SETTINGS = {
+    remindersEnabled: true,
+    reminderIntervalDays: 3,
+    maxReminders: null,
+    linkExpiryDays: 60,
+  };
+
+  function previewed(...actions: WizardAction[]): WizardState {
+    const state = run(
+      { type: 'name', name: 'חוזה שנתי' },
+      template,
+      { type: 'all', all: true },
+      ...actions,
+    );
+    const body = selectionBody(state);
+    if (!body) throw new Error('no body');
+    return wizardReducer(state, {
+      type: 'previewed',
+      result: { body, report: report(), receivedAt: new Date() },
+    });
+  }
+
+  it('the create body is the previewed selection + name + all four settings', () => {
+    const state = previewed();
+    expect(createBody(state, ROUND_SETTINGS)).toEqual({
+      ...state.preview?.body,
+      name: 'חוזה שנתי',
+      settings: ROUND_SETTINGS,
+    });
+    expect(createBody(run(), ROUND_SETTINGS)).toBeNull();
+  });
+
+  it('the loaded defaults never replace what the manager typed', () => {
+    let state = run({ type: 'settingsLoaded', values: SETTINGS });
+    expect(state.touched).toBe(false);
+    state = wizardReducer(state, {
+      type: 'settings',
+      values: { ...SETTINGS, linkExpiryDays: '30' },
+    });
+    state = wizardReducer(state, { type: 'settingsLoaded', values: SETTINGS });
+    expect(state.settings?.linkExpiryDays).toBe('30');
+    expect(state.touched).toBe(true);
+  });
+
+  it('settings do not make the preview stale', () => {
+    const state = wizardReducer(previewed(), { type: 'settings', values: SETTINGS });
+    expect(previewStatus(state)).toBe('current');
+  });
+
+  it('once the draft exists, nothing it was made from can change', () => {
+    const state = wizardReducer(previewed(), { type: 'created', roundId: OTHER_EMPLOYEE_ID });
+    for (const action of [
+      { type: 'name', name: 'אחר' },
+      { type: 'all', all: false },
+      { type: 'alreadySigned', choice: 'send_again' },
+      { type: 'settings', values: SETTINGS },
+    ] satisfies WizardAction[]) {
+      expect(wizardReducer(state, action)).toBe(state);
+    }
+    const cancelled = wizardReducer(state, { type: 'draftCancelled' });
+    expect(cancelled.roundId).toBeNull();
+    expect(wizardReducer(cancelled, { type: 'name', name: 'אחר' }).name).toBe('אחר');
+  });
+
+  it('guards leaving while something is entered or a draft is unsent, not after the send', () => {
+    expect(guardsLeaving(run())).toBe(false);
+    expect(guardsLeaving(run({ type: 'preselect', employee: picked }))).toBe(false);
+    expect(guardsLeaving(run({ type: 'created', roundId: OTHER_EMPLOYEE_ID }))).toBe(true);
+    const state = previewed();
+    expect(guardsLeaving(state)).toBe(true);
+    const sent = wizardReducer(state, { type: 'sent', sent: SENT });
+    expect(guardsLeaving(sent)).toBe(false);
+    expect(wizardReducer(sent, { type: 'reset' })).toEqual(initialWizardState());
+  });
+
+  it('the preview offers the chosen template, or each ready department template once', () => {
+    const single = previewed();
+    expect(previewTemplates(single).map(({ id }) => id)).toEqual([readyTemplate.id]);
+    expect(previewTemplateId(single)).toBe(readyTemplate.id);
+
+    const base = byDepartmentReport();
+    const ready = base.departments.map((department) => ({
+      ...department,
+      status: 'ready' as const,
+      template: department.options[0] ?? department.template,
+    }));
+    let state = run({ type: 'mode', mode: 'by_department' }, { type: 'all', all: true });
+    const body = selectionBody(state);
+    if (!body) throw new Error('no body');
+    state = wizardReducer(state, {
+      type: 'previewed',
+      result: { body, report: { ...base, departments: ready }, receivedAt: new Date() },
+    });
+    const templates = previewTemplates(state);
+    expect(new Set(templates.map(({ id }) => id)).size).toBe(templates.length);
+    expect(templates.flatMap(({ departments }) => departments).sort()).toEqual(
+      ready
+        .filter(({ template: ref }) => ref !== null)
+        .map(({ label }) => label)
+        .sort(),
+    );
+    const last = templates.at(-1)?.id ?? '';
+    expect(
+      previewTemplateId(wizardReducer(state, { type: 'previewTemplate', templateId: last })),
+    ).toBe(last);
+    // A pick that is no longer offered falls back to the first.
+    expect(
+      previewTemplateId(wizardReducer(state, { type: 'previewTemplate', templateId: 'gone' })),
+    ).toBe(templates[0]?.id);
+  });
+});
+
+const SENT = {
+  id: OTHER_EMPLOYEE_ID,
+  status: 'sending' as const,
+  sentAt: '2026-10-28T08:00:00.000Z',
+  linkExpiresAt: '2026-12-27T08:00:00.000Z',
+  counts: { queued: 1, noEmail: 0, missingData: 0, cancelledInactive: 0 },
+  outdatedTemplateIds: [],
+  textWarnings: { total: 0, truncated: false, items: [] },
+};

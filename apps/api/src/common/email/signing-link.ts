@@ -11,3 +11,11 @@ export function signingLink(publicUrl: string, token: string): string {
   }
   return `${publicUrl.replace(/\/+$/, '')}/sign/${token}`;
 }
+
+/**
+ * The link shown in the invitation preview: not a token (not 43 characters), so it never opens
+ * any document.
+ */
+export function exampleSigningLink(publicUrl: string): string {
+  return `${publicUrl.replace(/\/+$/, '')}/sign/example-link`;
+}

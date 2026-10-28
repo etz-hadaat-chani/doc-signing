@@ -8,86 +8,30 @@ import {
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { he } from '../../../i18n/he';
-import { apiErrorResponse, jsonResponse, stubApi } from '../../../test/fetch-stub';
-import { managerUser, meAnswer, renderRoutes } from '../../../test/render';
-import { card, DEPARTMENTS, EMPLOYEE_ID, listItem, page } from '../../employees/employees.fixtures';
-import { readyTemplate, template } from '../../templates/templates.fixtures';
+import { apiErrorResponse, jsonResponse } from '../../../test/fetch-stub';
+import { card, EMPLOYEE_ID, listItem, page } from '../../employees/employees.fixtures';
+import { readyTemplate } from '../../templates/templates.fixtures';
 import { byDepartmentReport, DEPT_15, DEPT_19, report, TEMPLATE_B_ID } from './rounds.fixtures';
+import {
+  bodyOf,
+  callsTo,
+  chooseAll,
+  nextButton,
+  notReady,
+  openWizard,
+  PREVIEW,
+  SEARCH,
+  stepTitle,
+  stub,
+  TEMPLATES,
+  text,
+  tile,
+  toDocument,
+  toRecipients,
+  toSummary,
+} from './wizard.test-utils';
 
 const texts = he.newRound;
-const PREVIEW = 'POST /api/rounds/recipients-preview';
-const SEARCH = 'POST /api/employees/search';
-const TEMPLATES = 'GET /api/templates?page=1&pageSize=100';
-const notReady = { ...template, id: TEMPLATE_B_ID, name: 'תבנית חלקית' };
-
-type Answer = (init: RequestInit) => Response | Promise<Response>;
-
-function stub(routes: Record<string, Answer> = {}) {
-  return stubApi({
-    'GET /api/auth/me': meAnswer(managerUser),
-    'GET /api/departments': () => jsonResponse(200, { items: DEPARTMENTS }),
-    [TEMPLATES]: () => jsonResponse(200, page([readyTemplate, notReady])),
-    [SEARCH]: () => jsonResponse(200, page([listItem])),
-    [PREVIEW]: () => jsonResponse(200, report()),
-    [`GET /api/employees/${EMPLOYEE_ID}`]: () => jsonResponse(200, card),
-    ...routes,
-  });
-}
-
-type FetchMock = ReturnType<typeof stub>;
-
-const callsTo = (mock: FetchMock, route: string) =>
-  mock.mock.calls.filter(
-    ([url, init]) => `${init?.method ?? 'GET'} ${typeof url === 'string' ? url : ''}` === route,
-  );
-
-const text = (value: unknown) => (typeof value === 'string' ? value : '');
-
-const bodyOf = (mock: FetchMock, route: string, index = 0): unknown =>
-  JSON.parse(text(callsTo(mock, route)[index]?.[1]?.body));
-
-type Rendered = ReturnType<typeof renderRoutes>;
-
-async function openWizard(entry: Parameters<typeof renderRoutes>[0] = '/rounds/new') {
-  const result = renderRoutes(entry);
-  await screen.findByRole('heading', { level: 1, name: he.nav.newRound }, { timeout: 5000 });
-  return result;
-}
-
-const nextButton = () => screen.getByRole('button', { name: texts.next });
-const stepTitle = (name: string) => screen.findByRole('heading', { level: 2, name });
-
-async function toDocument({ user }: Rendered, mode?: 'by_department') {
-  await user.type(screen.getByLabelText(texts.name.label, { exact: false }), 'חוזה שנתי');
-  if (mode)
-    await user.click(screen.getByRole('radio', { name: new RegExp(texts.name.modes[mode]) }));
-  await user.click(nextButton());
-  await stepTitle(texts.document.title);
-}
-
-async function toRecipients(result: Rendered) {
-  await toDocument(result);
-  await result.user.click(
-    await screen.findByRole('radio', { name: new RegExp(readyTemplate.name) }),
-  );
-  await result.user.click(nextButton());
-  await stepTitle(texts.recipients.title);
-}
-
-async function chooseAll({ user }: Rendered) {
-  await user.click(screen.getByRole('checkbox', { name: texts.recipients.all }));
-}
-
-async function toSummary(result: Rendered) {
-  await result.user.click(nextButton());
-  await stepTitle(texts.summary.title);
-  await screen.findByRole('list', { name: texts.summary.countsLabel });
-}
-
-function tile(key: string) {
-  const element = document.querySelector(`[data-count="${key}"] [data-value]`);
-  return element?.textContent;
-}
 
 describe('NewRoundPage (A5): steps 1–3', () => {
   it('each "next" checks its own step: name, then a ready template, then recipients', async () => {
@@ -217,6 +161,11 @@ describe('NewRoundPage (A5): summary', () => {
     expect(tile('willSendEmail')).toBe('1');
     expect(tile('inRound')).toBe('3');
     expect(tile('inactive')).toBe('1');
+    // The total chosen, so the tiles can be read against it.
+    const { recipients } = report().counts;
+    expect(screen.getByTestId('round-recipients-total')).toHaveTextContent(
+      texts.summary.recipientsTotal(recipients, String(recipients)),
+    );
     expect(screen.getByText(texts.summary.canCreate)).toBeInTheDocument();
     expect(nextButton()).toBeEnabled();
 

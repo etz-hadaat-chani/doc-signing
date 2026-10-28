@@ -209,6 +209,7 @@ export const he = {
       detailsTitle: 'פרטי העובד',
       employeeNumber: (number: string) => `מספר עובד ${number}`,
       birthDateWithAge: (date: string, age: number) => `${date} (גיל ${age})`,
+      sendDocument: 'שליחת מסמך',
       jobPercent: (percent: string) => `${percent}%`,
     },
     history: {
@@ -752,8 +753,139 @@ export const he = {
         inactivePicked: 'עובדים לא פעילים לא נכללים בסבב.',
       },
       moreRows: (count: string) => `ועוד ${count} עובדים שלא מוצגים כאן.`,
+      recipientsTotal: (count: number, formatted: string) =>
+        count === 1 ? 'נבחר עובד אחד' : `נבחרו ${formatted} עובדים`,
     },
-    nextPart: 'השלבים הבאים (הגדרות, תצוגה מקדימה ושליחה) ייבנו בהמשך המשימה.',
+    settings: {
+      title: 'הגדרות הסבב',
+      intro: 'ההגדרות מולאו מברירות המחדל של המערכת. שינוי כאן חל על הסבב הזה בלבד.',
+      loadFailed: 'לא ניתן לטעון את ברירות המחדל.',
+      remindersEnabled: 'לשלוח תזכורות אוטומטיות למי שעוד לא חתם',
+      remindersOff: 'לא יישלחו תזכורות אוטומטיות. עדיין אפשר לשלוח תזכורת ידנית מפרטי הסבב.',
+      reminderIntervalDays: 'כל כמה ימים תישלח תזכורת',
+      maxRemindersLabel: 'מספר התזכורות',
+      unlimited: 'ללא הגבלה, עד שהעובד חותם',
+      limited: 'עד מספר מסוים',
+      maxReminders: 'מספר התזכורות המרבי',
+      linkExpiryDays: 'תוקף הקישור (בימים)',
+      expiryHint: 'התוקף נספר מרגע השליחה, לא מיצירת הסבב.',
+      expiryExample: (date: string) => `אם יישלח היום: בתוקף עד ${date}`,
+      wholeNumber: 'יש להזין מספר שלם',
+      between: (min: number, max: number) => `יש להזין מספר בין ${min} ל-${max}`,
+    },
+    preview: {
+      title: 'תצוגה מקדימה',
+      intro:
+        'כך ייראה המסמך שהעובד יקבל. התצוגה לא נשמרת ולא נשלחת. תאריך המסמך הוא התאריך של היום.',
+      templateLabel: 'מסמך לתצוגה',
+      templateOption: (name: string, departments: string) =>
+        departments === '' ? name : `${name} — ${departments}`,
+      chosenTemplate: 'המסמך שנבחר',
+      employeeLabel: 'עבור מי להציג',
+      sample: 'עובד לדוגמה (פרטים מומצאים)',
+      specific: 'עובד מסוים',
+      choose: 'בחירה',
+      chosen: 'נבחר',
+      chooseLabel: (name: string) => `הצגה עבור ${name}`,
+      showingFor: (name: string) => `מוצג עבור: ${name}`,
+      documentTitle: 'המסמך',
+      documentLabel: 'תצוגה מקדימה של המסמך',
+      pdfFailed: 'לא ניתן להציג את המסמך.',
+      pageLabel: (page: number, pages: number) => `עמוד ${page} מתוך ${pages}`,
+      checkTitle: 'מה נמצא בתצוגה',
+      missingTitle: 'חסרים לעובד הזה:',
+      leftTitle: 'ימולאו על ידי העובד:',
+      noIssues: 'לא נמצאו בעיות במסמך הזה.',
+      checkFailed: 'לא ניתן לבדוק את התצוגה.',
+      emailTitle: 'המייל שהעובד יקבל',
+      emailIntro:
+        'עם שם לדוגמה וקישור לדוגמה. כל עובד יקבל קישור אישי משלו. הכתובת שלו לא מוצגת כאן.',
+      emailFrom: 'שם השולח',
+      emailSubject: 'נושא',
+      emailFrameTitle: 'תצוגה מקדימה של המייל',
+      emailFailed: 'לא ניתן להציג את המייל.',
+    },
+    send: {
+      title: 'שליחה',
+      intro: 'יש לבדוק את הפרטים. לחיצה על "שליחה" יוצרת את הסבב ושולחת את המיילים.',
+      reviewLabel: 'פרטי הסבב',
+      name: 'שם הסבב',
+      mode: 'סוג',
+      documents: 'מסמכים',
+      reminders: 'תזכורות',
+      remindersText: (days: number, max: number | null) =>
+        max === null ? `כל ${days} ימים, ללא הגבלה` : `כל ${days} ימים, עד ${max} תזכורות`,
+      remindersOff: 'ללא תזכורות אוטומטיות',
+      expiry: 'תוקף הקישור',
+      expiryText: (days: number, date: string) => `${days} ימים (אם יישלח היום: עד ${date})`,
+      send: 'שליחה',
+      sending: 'שולח…',
+      confirmTitle: 'לשלוח את הסבב?',
+      confirmText: (total: number, emails: number, formatted: (value: number) => string) => {
+        const who = total === 1 ? 'עובד אחד' : `${formatted(total)} עובדים`;
+        const mail =
+          emails === 0
+            ? 'אף אחד לא יקבל מייל עכשיו'
+            : emails === 1
+              ? 'עובד אחד יקבל מייל עכשיו'
+              : `${formatted(emails)} יקבלו מייל עכשיו`;
+        return `ייווצר סבב עם ${who}. ${mail}. אי אפשר לבטל שליחה של מייל.`;
+      },
+      confirm: 'שליחה',
+      notCreated: 'הסבב לא נוצר.',
+      notCreatedSummary: 'הסבב לא נוצר: הנתונים השתנו מאז הסיכום. הסיכום חושב מחדש, יש לבדוק אותו.',
+      maybeCreated:
+        'לא התקבלה תשובה ברורה מהשרת. ייתכן שהסבב נוצר כטיוטה. הסיכום חושב מחדש: עובדים שמופיעים כ"פתוח בסבב אחר" נמצאים בטיוטה הזו. אפשר לבדוק ולבטל אותה ברשימת הסבבים.',
+      draftsLink: 'לטיוטות ברשימת הסבבים',
+      outdatedTitle: 'יש גרסה חדשה יותר או שהתבנית הועברה לארכיון',
+      outdatedText:
+        'הסבב נוצר עם הגרסאות שלמטה. אפשר לשלוח אותן כמו שהן, או לעצור ולבטל את הטיוטה.',
+      outdatedLine: (
+        name: string,
+        version: number,
+        reason: string,
+        count: number,
+        formatted: string,
+      ) =>
+        `${name} (גרסה ${version}): ${reason}. ${count === 1 ? 'עובד אחד יקבל' : `${formatted} עובדים יקבלו`} את הגרסה הזו.`,
+      outdatedReasons: {
+        newer_version: (newest: number | null) =>
+          newest === null ? 'יש גרסה חדשה יותר' : `יש גרסה חדשה יותר (גרסה ${newest})`,
+        archived: () => 'התבנית הועברה לארכיון',
+      },
+      sendOutdated: 'שליחת הגרסה של הסבב',
+      stop: 'עצירה',
+      draftTitle: 'נוצרה טיוטה שלא נשלחה',
+      draftText:
+        'הטיוטה שומרת את העובדים שלה כ"פתוח בסבב אחר" עד שתישלח או תבוטל. אפשר לנסות לשלוח שוב, או לבטל אותה.',
+      notReadyTitle: 'תבנית אינה מוכנה לשליחה:',
+      retry: 'ניסיון שליחה נוסף',
+      cancelDraft: 'ביטול הטיוטה',
+      cancelTitle: 'לבטל את הטיוטה?',
+      cancelText: 'הטיוטה תבוטל ושום דבר לא יישלח ממנה. היא תישאר ברשימת הסבבים כ"בוטל".',
+      keepDraft: 'השארת הטיוטה',
+      stopped: 'השליחה נעצרה. הטיוטה לא נשלחה.',
+      cancelled: 'הטיוטה בוטלה. הסיכום חושב מחדש.',
+      alreadySent: 'הסבב כבר נשלח. התשובה לשליחה הקודמת לא הגיעה, אבל השליחה עברה.',
+      toRound: 'לפרטי הסבב',
+    },
+    done: {
+      title: 'הסבב נשלח',
+      intro: 'המיילים נשלחים ברקע. אפשר לעקוב אחרי ההתקדמות בפרטי הסבב.',
+      countsLabel: 'תוצאות השליחה',
+      counts: {
+        queued: 'מיילים בדרך',
+        noEmail: 'ללא מייל (לטיפול ידני)',
+        missingData: 'חסרים פרטים',
+        cancelledInactive: 'בוטלו (לא פעילים)',
+      },
+      expiry: (date: string) => `הקישורים בתוקף עד ${date}.`,
+      textWarningsTitle: 'טקסט שלא ייכנס כמו שצריך',
+      toRound: 'לפרטי הסבב',
+      newRound: 'סבב חדש',
+    },
+    leaveDraftText:
+      'נוצרה טיוטה שלא נשלחה. היא תישאר ותחסום את העובדים שלה מסבבים אחרים של המסמך עד שתבוטל.',
   },
 
   /** The components demo page (4.2, development only). Every name and number there is made up. */

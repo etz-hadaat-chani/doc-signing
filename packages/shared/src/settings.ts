@@ -17,6 +17,16 @@ export const SENDER_NAME_MAX_LENGTH = 100;
 export const reminderIntervalDaysSchema = z.int().min(1).max(REMINDER_INTERVAL_DAYS_MAX);
 export const maxRemindersSchema = z.int().min(1).max(MAX_REMINDERS_MAX).nullable();
 export const linkExpiryDaysSchema = z.int().min(1).max(LINK_EXPIRY_DAYS_MAX);
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * When a round's links expire: the send moment + `linkExpiryDays` × 24 hours (3.10). The one rule
+ * for the send, the wizard's "valid until" and the invitation preview; shown with `formatDate`.
+ */
+export function linkExpiresAtFrom(sentAt: Date, linkExpiryDays: number): Date {
+  return new Date(sentAt.getTime() + linkExpiryDays * DAY_MS);
+}
 /** A display name for the From header: one line, not empty after trimming. */
 export const senderNameSchema = z
   .string()

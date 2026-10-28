@@ -67,6 +67,7 @@ describe('Swagger page outside production', () => {
         'GET /api/settings/employer-signature',
         'GET /api/templates',
         'GET /api/templates/{id}',
+        'GET /api/templates/{id}/invitation-preview',
         'GET /api/templates/{id}/preview',
         'GET /api/templates/{id}/preview/check',
         'GET /api/users',

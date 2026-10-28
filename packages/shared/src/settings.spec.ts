@@ -1,11 +1,34 @@
 import { describe, expect, it } from 'vitest';
+import { formatDate } from './field-values.js';
 import {
   hrContactSchema,
+  linkExpiresAtFrom,
   REMINDER_SKIP_DATES_MAX,
   reminderSkipDatesSchema,
   senderNameSchema,
   settingsUpdateSchema,
 } from './settings.js';
+
+describe('linkExpiresAtFrom', () => {
+  it('adds the days as 24-hour periods to the send moment', () => {
+    const sentAt = new Date('2026-11-02T08:15:00Z');
+    expect(linkExpiresAtFrom(sentAt, 60).toISOString()).toBe('2027-01-01T08:15:00.000Z');
+  });
+
+  it('shows the Israeli day near midnight, not the UTC one', () => {
+    // 23:30 in Israel (UTC+2): the same day in UTC too.
+    expect(formatDate(linkExpiresAtFrom(new Date('2026-10-28T21:30:00Z'), 3))).toBe('31/10/2026');
+    // 00:30 in Israel is still the day before in UTC: Israel's day is shown.
+    expect(formatDate(linkExpiresAtFrom(new Date('2026-10-28T22:30:00Z'), 3))).toBe('01/11/2026');
+  });
+
+  it('keeps 24-hour days across the end of summer time', () => {
+    // Sent 23:30 Israel (UTC+3) on 20/10; summer time ends 25/10, so 7 × 24 h is 22:30 (UTC+2).
+    const expiresAt = linkExpiresAtFrom(new Date('2026-10-20T20:30:00Z'), 7);
+    expect(expiresAt.toISOString()).toBe('2026-10-27T20:30:00.000Z');
+    expect(formatDate(expiresAt)).toBe('27/10/2026');
+  });
+});
 
 describe('settingsUpdateSchema', () => {
   it('accepts each value at its limits', () => {

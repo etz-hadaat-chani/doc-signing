@@ -2,16 +2,15 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import { useEffect, useRef, useState } from 'react';
 import { PageLoader } from '../../../components/feedback/PageLoader';
 import { he } from '../../../i18n/he';
-import { isCancelled, type LoadedPdf } from './pdf-document';
+import type { LoadedPdf } from './pdf-document';
 import { footerRect, type PageSize, type PointBox, scaleToFit, toPixels } from './pdf-geometry';
+import { PdfPageCanvas } from './PdfPageCanvas';
 import type { PdfState } from './use-pdf';
+import { useWidth } from './use-width';
 
 const text = he.templates.editor;
-/** Used before the width is known (and in tests, where nothing has a size). */
-const FALLBACK_WIDTH = 600;
 
 /** One outline: where an unsaved position is now, with its box's Hebrew name. */
 export interface Outline extends PointBox {
@@ -20,37 +19,6 @@ export interface Outline extends PointBox {
   page: number;
   name: string;
   inFooter: boolean;
-}
-
-function useWidth() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(FALLBACK_WIDTH);
-  useEffect(() => {
-    const element = ref.current;
-    if (!element || typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(([entry]) => {
-      const next = entry?.contentRect.width ?? 0;
-      if (next > 0) setWidth(next);
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  return { ref, width };
-}
-
-function PageCanvas({ pdf, number, scale }: { pdf: LoadedPdf; number: number; scale: number }) {
-  const canvas = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    if (!canvas.current) return undefined;
-    const job = pdf.render(number, canvas.current, scale);
-    job.done.catch((error: unknown) => {
-      // Cancelled: a newer draw replaced this one. Anything else leaves the page blank; the
-      // outlines and the numbers still work.
-      if (!isCancelled(error)) console.warn('pdf.js could not draw page', number);
-    });
-    return () => job.cancel();
-  }, [pdf, number, scale]);
-  return <canvas ref={canvas} aria-hidden="true" style={{ display: 'block' }} />;
 }
 
 function PdfPage({
@@ -82,7 +50,7 @@ function PdfPage({
           boxShadow: 1,
         }}
       >
-        <PageCanvas pdf={pdf} number={number} scale={scale} />
+        <PdfPageCanvas pdf={pdf} number={number} scale={scale} />
         <Box
           aria-hidden="true"
           sx={(theme) => ({

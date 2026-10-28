@@ -23,6 +23,7 @@ import { ToneChip } from '../../../components/status/StatusChip';
 import { ROUND_DEPARTMENT_LOOKS } from '../../../components/status/status-tones';
 import type { Column } from '../../../components/table/DataTable';
 import { MemoryTable } from '../../../components/table/MemoryTable';
+import { formatNumber } from '../../../i18n/format';
 import { he } from '../../../i18n/he';
 import { SummaryLists } from './SummaryLists';
 import {
@@ -234,6 +235,9 @@ export function SummaryStep({
         </Alert>
       )}
 
+      <Typography sx={{ fontWeight: 700 }} data-testid="round-recipients-total">
+        {texts.recipientsTotal(report.counts.recipients, formatNumber(report.counts.recipients))}
+      </Typography>
       <CountTiles label={texts.countsLabel} tiles={summaryTiles(report)} fit />
 
       <FormControl disabled={pending}>

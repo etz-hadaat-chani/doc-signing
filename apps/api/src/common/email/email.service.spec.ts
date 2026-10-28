@@ -148,6 +148,30 @@ describe('EmailService', () => {
     expect(adapter.sent[1]?.subject).toBe(adapter.sent[0]?.subject);
   });
 
+  it('renders the invitation preview like the real one, with a placeholder link', async () => {
+    const sendSpy = vi.spyOn(adapter, 'send');
+    const preview = await service.renderInvitationPreview({
+      employeeName: 'שירה דוגמה',
+      documentName: 'הצהרת סודיות',
+      expiresAt: new Date('2026-12-11T22:30:00Z'),
+    });
+
+    await service.sendInvitation({ ...request, expiresAt: new Date('2026-12-11T22:30:00Z') });
+    const real = adapter.sent[0];
+    expect(preview.senderName).toBe('משאבי אנוש');
+    expect(preview.subject).toBe(real?.subject);
+    expect(preview.text).toContain('https://sign.example.org/sign/example-link');
+    expect(preview.html).toContain('https://sign.example.org/sign/example-link');
+    expect(preview.text).toContain('הקישור בתוקף עד 12/12/2026.');
+    expect(preview.text).toContain('שירה דוגמה');
+    expect(preview.text).toBe(
+      real?.text.replace(`/sign/${token}`, '/sign/example-link').replace('ישראל כהן', 'שירה דוגמה'),
+    );
+    // Only the real invitation reached the adapter; the preview logged nothing.
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(logLines).toHaveLength(1);
+  });
+
   it('never logs the link, the token, the address or the subject', async () => {
     await service.sendInvitation(request);
     adapter.failure = new EmailSendError('permanent', '550', 'not_sent');

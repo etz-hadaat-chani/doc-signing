@@ -6,6 +6,7 @@ import {
   templateKindSchema,
 } from './enums.js';
 import { optionalQuery, pageQuerySchema } from './pagination.js';
+import { linkExpiryDaysSchema } from './settings.js';
 import {
   assignBoxKeys,
   checkFieldSettings,
@@ -236,3 +237,26 @@ export const templatePreviewReportSchema = z.object({
   ),
 });
 export type TemplatePreviewReport = z.infer<typeof templatePreviewReportSchema>;
+
+/**
+ * `GET /api/templates/:id/invitation-preview?linkExpiryDays=` (Flow 3 step 6). Left out = the
+ * `link_expiry_days` setting.
+ */
+export const invitationPreviewQuerySchema = z.strictObject({
+  linkExpiryDays: optionalQuery(z.coerce.number().pipe(linkExpiryDaysSchema)),
+});
+export type InvitationPreviewQuery = z.output<typeof invitationPreviewQuerySchema>;
+
+/**
+ * The invitation as the employee would get it if the round were sent now, for a made-up employee
+ * and a placeholder link. No recipient: nothing is sent, stored or queued.
+ */
+export const invitationPreviewSchema = z.object({
+  senderName: z.string(),
+  subject: z.string(),
+  html: z.string(),
+  text: z.string(),
+  /** Send now + `linkExpiryDays` × 24 h (`linkExpiresAtFrom`). */
+  expiresAt: z.iso.datetime(),
+});
+export type InvitationPreview = z.infer<typeof invitationPreviewSchema>;
