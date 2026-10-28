@@ -141,8 +141,32 @@ test('manager: upload, see why it is not ready, change a setting, find it, archi
   await includeArchived.click();
   await expect(includeArchived).toBeChecked();
   await expect(page).toHaveURL(/includeArchived=true/);
-  await expect(page.getByRole('row').filter({ hasText: NAME })).toContainText('בארכיון');
+  // Earlier runs left many archived templates with the same name: open the page that holds this
+  // one and find its row by its link.
+  const listPage = await pageOfTemplate(id ?? '');
+  await page.goto(
+    `/templates?dept=${department.id}&includeArchived=true&pageSize=100&page=${String(listPage)}`,
+  );
+  const archivedRow = page
+    .getByRole('row')
+    .filter({ has: page.locator(`a[href="/templates/${id ?? ''}"]`) });
+  await expect(archivedRow).toContainText('בארכיון');
 });
+
+/** The list page (100 per page, archived included) that holds the template, through the API. */
+async function pageOfTemplate(id: string): Promise<number> {
+  for (let listPage = 1; ; listPage += 1) {
+    const answer = await api.get(
+      `/api/templates?dept=${department.id}&includeArchived=true&pageSize=100&page=${String(listPage)}`,
+    );
+    expect(answer.status()).toBe(200);
+    const { items, total } = (await answer.json()) as { items: { id: string }[]; total: number };
+    if (items.some((item) => item.id === id)) return listPage;
+    if (items.length === 0 || listPage * 100 >= total) {
+      throw new Error('The archived template is on no page of the list');
+    }
+  }
+}
 
 test('manager: a file that is not a real PDF is refused with the reason in Hebrew', async ({
   page,

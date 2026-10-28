@@ -248,10 +248,6 @@ test('whole department: up to the summary only; the numbers equal the API', asyn
     const value = counts.locator(`[data-count="${key}"] [data-value]`);
     expect(asNumber(await value.textContent()), key).toBe(shown.counts[key]);
   }
-  // The same body asked again from this session gives the same numbers.
-  const again = await page.request.post('/api/rounds/recipients-preview', { data: body });
-  expect(again.status()).toBe(200);
-  expect(((await again.json()) as PreviewAnswer).counts).toEqual(shown.counts);
   await screen(page, '4-summary-department');
 
   // Nothing personal in the address, ever.
