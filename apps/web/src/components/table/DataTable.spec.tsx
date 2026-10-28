@@ -132,7 +132,7 @@ describe('DataTable', () => {
 
 describe('DataTable selection', () => {
   /** A screen in miniature: a filter (resetKey) and a page size it can change. */
-  function SelectableTable() {
+  function SelectableTable({ selectable }: { selectable?: (row: Row) => boolean }) {
     const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
     const [filter, setFilter] = useState('all');
     const [pageSize, setPageSize] = useState(25);
@@ -160,6 +160,7 @@ describe('DataTable selection', () => {
             onChange: setSelected,
             rowLabel: (row) => row.name,
             resetKey: filter,
+            selectable,
           }}
         />
       </>
@@ -180,6 +181,17 @@ describe('DataTable selection', () => {
     expect(screen.getByRole('status')).toHaveTextContent(he.table.selectedCount(3));
     await user.click(all);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('lets only the selectable rows be checked, one by one or by the page checkbox', async () => {
+    const { user } = renderComponent(
+      <SelectableTable selectable={(row) => row.name !== 'שורה 2'} />,
+    );
+    expect(rowBox('שורה 2')).toBeDisabled();
+    await user.click(screen.getByRole('checkbox', { name: he.table.selectAllOnPage }));
+    expect(screen.getByRole('status')).toHaveTextContent(he.table.selectedCount(2));
+    expect(rowBox('שורה 2')).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: he.table.selectAllOnPage })).toBeChecked();
   });
 
   it('clears the selection when a filter / the search (resetKey) or the page size change', async () => {

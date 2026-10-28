@@ -67,7 +67,7 @@ describe('RowActions', () => {
     ]);
     expect(within(menu).getByRole('menuitem', { name: new RegExp(text.manual) })).toHaveAttribute(
       'href',
-      '/manual',
+      `/manual?roundId=${ROUND_ID}`,
     );
   });
 
@@ -125,7 +125,7 @@ describe('RowActions', () => {
     expect(callsTo(mock, actionPath('unlock'), 'POST')).toBe(1);
   });
 
-  it('at 0 unlocks left: "cancel and handle at the office" replaces unlock and cancels', async () => {
+  it('at 0 unlocks left: "handle at the office" links to the row in manual handling, no cancel', async () => {
     const lockedOut: AssignmentRow = {
       ...row,
       status: 'opened',
@@ -133,22 +133,18 @@ describe('RowActions', () => {
       locked: true,
       unlocksLeft: 0,
     };
-    const mock = stubRow(lockedOut, {
-      [`POST ${actionPath('cancel')}`]: () =>
-        jsonResponse(200, {
-          assignmentId: row.assignmentId,
-          roundId: ROUND_ID,
-          status: 'cancelled',
-        }),
-    });
-    const { user } = await openMenu();
-    expect(screen.queryByRole('menuitem', { name: new RegExp(text.unlock.label) })).toBeNull();
-    await user.click(screen.getByRole('menuitem', { name: text.officeCancel.label }));
-    const dialog = screen.getByRole('dialog', { name: text.officeCancel.label });
-    expect(dialog).toHaveTextContent(text.officeCancel.text(NAME));
-    await user.click(within(dialog).getByRole('button', { name: text.officeCancel.confirm }));
-    expect(await screen.findByText(text.cancel.done)).toBeInTheDocument();
-    expect(callsTo(mock, actionPath('cancel'), 'POST')).toBe(1);
+    const mock = stubRow(lockedOut);
+    await openMenu();
+    const menu = screen.getByRole('menu');
+    expect(
+      within(menu).queryByRole('menuitem', { name: new RegExp(text.unlock.label) }),
+    ).toBeNull();
+    const office = within(menu).getByRole('menuitem', { name: new RegExp(text.office.label) });
+    expect(office).toHaveAttribute('href', `/manual?roundId=${ROUND_ID}&kind=locked`);
+    expect(office).toHaveTextContent(text.office.hint);
+    // The ordinary cancel stays, like on every open row; the office link cancels nothing.
+    expect(within(menu).getByRole('menuitem', { name: text.cancel.label })).toBeInTheDocument();
+    expect(callsTo(mock, actionPath('cancel'), 'POST')).toBe(0);
   });
 
   it('cancel can be stopped: "חזרה" sends nothing', async () => {

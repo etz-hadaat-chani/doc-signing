@@ -15,21 +15,27 @@ import {
   resendAssignment,
   unlockAssignment,
 } from './actions.api';
-import { type RowAction, rowActions } from './row-actions';
+import { manualLink, type RowAction, rowActions } from './row-actions';
 import { useAction } from './use-action';
 
 const text = he.rounds.actions;
 
-type ConfirmedAction = Exclude<RowAction, 'manual'>;
+type LinkAction = 'manual' | 'office';
+type ConfirmedAction = Exclude<RowAction, LinkAction>;
+
+const isLink = (action: RowAction): action is LinkAction =>
+  action === 'manual' || action === 'office';
 
 const LABELS: Record<RowAction, string> = {
   remind: text.remind.label,
   resend: text.resend.label,
   unlock: text.unlock.label,
-  officeCancel: text.officeCancel.label,
+  office: text.office.label,
   cancel: text.cancel.label,
   manual: text.manual,
 };
+
+const HINTS: Record<LinkAction, string> = { manual: text.manualHint, office: text.office.hint };
 
 /** What each confirmed action calls, says when done, and whether the card's history changes. */
 const RUN: Record<
@@ -39,7 +45,6 @@ const RUN: Record<
   remind: { call: remindAssignment, done: text.remind.done, employees: false },
   resend: { call: resendAssignment, done: text.resend.done, employees: true },
   unlock: { call: unlockAssignment, done: text.unlock.done, employees: true },
-  officeCancel: { call: cancelAssignment, done: text.cancel.done, employees: true },
   cancel: { call: cancelAssignment, done: text.cancel.done, employees: true },
 };
 
@@ -58,8 +63,6 @@ function confirmText(action: ConfirmedAction, row: AssignmentRow, name: string) 
           </Typography>
         </>
       );
-    case 'officeCancel':
-      return text.officeCancel.text(name);
     case 'cancel':
       return text.cancel.text(name);
   }
@@ -69,7 +72,15 @@ function confirmText(action: ConfirmedAction, row: AssignmentRow, name: string) 
  * The row's "פעולות" menu (managers only; the API decides): the actions its display status allows
  * (`rowActions`), each behind a confirmation. Nothing when no action fits.
  */
-export function RowActions({ row, roundStatus }: { row: AssignmentRow; roundStatus: RoundStatus }) {
+export function RowActions({
+  row,
+  roundId,
+  roundStatus,
+}: {
+  row: AssignmentRow;
+  roundId: string;
+  roundStatus: RoundStatus;
+}) {
   const menuId = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [confirming, setConfirming] = useState<ConfirmedAction | null>(null);
@@ -105,9 +116,9 @@ export function RowActions({ row, roundStatus }: { row: AssignmentRow; roundStat
       </Button>
       <Menu id={menuId} anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
         {actions.map((action) =>
-          action === 'manual' ? (
-            <MenuItem key={action} component={RouterLink} to="/manual">
-              <ListItemText primary={LABELS.manual} secondary={text.manualHint} />
+          isLink(action) ? (
+            <MenuItem key={action} component={RouterLink} to={manualLink(roundId, row, action)}>
+              <ListItemText primary={LABELS[action]} secondary={HINTS[action]} />
             </MenuItem>
           ) : (
             <MenuItem key={action} onClick={() => choose(action)}>
@@ -126,11 +137,9 @@ export function RowActions({ row, roundStatus }: { row: AssignmentRow; roundStat
           open
           title={LABELS[confirming]}
           text={confirmText(confirming, row, name)}
-          confirmLabel={
-            confirming === 'officeCancel' ? text.officeCancel.confirm : LABELS[confirming]
-          }
+          confirmLabel={LABELS[confirming]}
           cancelLabel={text.keep}
-          danger={confirming === 'cancel' || confirming === 'officeCancel'}
+          danger={confirming === 'cancel'}
           busy={busy}
           onConfirm={() => void confirm()}
           onClose={() => setConfirming(null)}

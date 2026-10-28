@@ -7,6 +7,7 @@ import {
   canSendAgain,
   drawingsExpireAt,
   hasAnswersPanel,
+  manualLink,
   rowActions,
 } from './row-actions';
 
@@ -35,11 +36,22 @@ describe('rowActions', () => {
     expect(rowActions(as(status, display), 'active')).toEqual(expected);
   });
 
-  it('locked: unlock while one is left, "cancel and handle at the office" at 0', () => {
+  it('locked: unlock while one is left, "handle at the office" (a link, no cancel) at 0', () => {
     const locked = (unlocksLeft: number) => as('opened', 'locked', { locked: true, unlocksLeft });
     expect(rowActions(locked(2), 'active')).toEqual(['unlock', 'manual', 'cancel']);
     expect(rowActions(locked(1), 'sending')).toEqual(['unlock', 'manual', 'cancel']);
-    expect(rowActions(locked(0), 'active')).toEqual(['officeCancel', 'manual']);
+    expect(rowActions(locked(0), 'active')).toEqual(['office', 'cancel']);
+  });
+
+  it('links to manual handling by round id and kind only', () => {
+    const roundId = '11111111-1111-4111-8111-111111111111';
+    expect(manualLink(roundId, as('sent', 'sent'), 'manual')).toBe(`/manual?roundId=${roundId}`);
+    expect(manualLink(roundId, as('opened', 'locked'), 'office')).toBe(
+      `/manual?roundId=${roundId}&kind=locked`,
+    );
+    expect(manualLink(roundId, as('no_email', 'no_email'), 'office')).toBe(
+      `/manual?roundId=${roundId}&kind=no_email`,
+    );
   });
 
   it('a no-email row locked at the kiosk can be unlocked too; an expired one cannot', () => {

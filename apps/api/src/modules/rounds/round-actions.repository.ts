@@ -130,6 +130,26 @@ export class RoundActionsRepository {
     });
   }
 
+  /**
+   * Earlier unlocks of these assignments, from their `assignment.unlocked` audit rows (the same
+   * count as the unlock rule, `unlockCount`): one grouped query per page
+   * (the round table, 3.11, and the manual-handling list, 5.7).
+   * Assignments never unlocked are left out.
+   */
+  async unlockCounts(assignmentIds: readonly string[]): Promise<Map<string, number>> {
+    if (assignmentIds.length === 0) return new Map();
+    const rows = await this.prisma.auditLog.groupBy({
+      by: ['entityId'],
+      where: {
+        entityType: 'assignment',
+        action: 'assignment.unlocked',
+        entityId: { in: [...assignmentIds] },
+      },
+      _count: { _all: true },
+    });
+    return new Map(rows.map((row) => [row.entityId ?? '', row._count._all]));
+  }
+
   /** Lifts the lock: `locked_at` NULL and `failed_attempts` back to 0 (the CHECK allows 0–5). */
   async unlock(assignmentId: string, db: Db): Promise<void> {
     await db.assignment.updateMany({

@@ -5,6 +5,7 @@ import {
   type ManualRow,
   type ManualSendInput,
   type ManualSent,
+  MAX_UNLOCKS,
   type Paged,
   type SavedEmployerSignature,
   todayInIsrael,
@@ -94,8 +95,11 @@ export class ManualHandlingService {
       .filter((row) => row.kind === 'missing_data')
       .map((row) => row.assignmentId);
     const resolved = await this.resolveDetails(missingIds, rows[0]?.now ?? new Date(), this.prisma);
+    const unlocks = await this.actions.unlockCounts(rows.map(({ assignmentId }) => assignmentId));
     return {
-      items: rows.map((row) => toItem(row, resolved.get(row.assignmentId) ?? null)),
+      items: rows.map((row) =>
+        toItem(row, resolved.get(row.assignmentId) ?? null, unlocks.get(row.assignmentId) ?? 0),
+      ),
       total,
       page: query.page,
       pageSize: query.pageSize,
@@ -292,8 +296,15 @@ function sendStep(row: ActionRow, completed: ResolvedRecipient | null): SendStep
   throw new Error(`Unexpected outcome ${resolved.outcome} in a manual send`);
 }
 
-/** One list row: the send's rule on the row's facts says whether it is ready. */
-function toItem(row: ManualListRow, resolved: ResolvedRecipient | null): ManualRow {
+/**
+ * One list row: the send's rule on the row's facts says whether it is ready (never a
+ * `locked` or `email_corrected` row: their statuses aren't sendable).
+ */
+function toItem(
+  row: ManualListRow,
+  resolved: ResolvedRecipient | null,
+  unlocksUsed: number,
+): ManualRow {
   const target: ManualSendTarget = {
     status: row.status,
     locked: row.locked,
@@ -331,6 +342,7 @@ function toItem(row: ManualListRow, resolved: ResolvedRecipient | null): ManualR
       firstName: row.firstName,
       lastName: row.lastName,
       isActive: row.employeeActive,
+      emailStatus: row.emailStatus,
     },
     ready,
     newEmail: emailReady ? row.validEmail : null,
@@ -340,6 +352,7 @@ function toItem(row: ManualListRow, resolved: ResolvedRecipient | null): ManualR
         ? { stored: row.storedEmail, given: must(row.givenEmail) }
         : null,
     locked: row.locked,
+    unlocksLeft: Math.max(0, MAX_UNLOCKS - unlocksUsed),
     linkExpired: row.linkExpiresAt !== null && row.linkExpiresAt.getTime() <= row.now.getTime(),
     sentAt: row.sentAt?.toISOString() ?? null,
     signedAt: row.signedAt?.toISOString() ?? null,

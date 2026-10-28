@@ -53,6 +53,11 @@ const PAGE_COMPONENTS: Partial<Record<string, ComponentType>> = {
       default: module.EmployeeFormPage,
     })),
   ),
+  '/manual': lazy(() =>
+    import('./manual/ManualHandlingPage').then((module) => ({
+      default: module.ManualHandlingPage,
+    })),
+  ),
   '/templates': lazy(() =>
     import('./templates/TemplatesPage').then((module) => ({ default: module.TemplatesPage })),
   ),

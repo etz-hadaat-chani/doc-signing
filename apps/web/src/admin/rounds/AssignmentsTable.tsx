@@ -120,6 +120,7 @@ function DatesCell({ row }: { row: AssignmentRow }) {
 
 interface ColumnContext {
   isManager: boolean;
+  roundId: string;
   roundStatus: RoundStatus;
   openAnswers: (row: AssignmentRow) => void;
 }
@@ -129,7 +130,7 @@ interface ColumnContext {
  * 1280 px screen shows them all; the last one (document, answers, actions) stays in view on the
  * left edge when a narrower screen scrolls.
  */
-function columnsFor({ isManager, roundStatus, openAnswers }: ColumnContext) {
+function columnsFor({ isManager, roundId, roundStatus, openAnswers }: ColumnContext) {
   const columns: Column<AssignmentRow>[] = [
     {
       key: 'employee',
@@ -205,7 +206,7 @@ function columnsFor({ isManager, roundStatus, openAnswers }: ColumnContext) {
               {he.rounds.actions.answers}
             </Button>
           )}
-          {isManager && <RowActions row={row} roundStatus={roundStatus} />}
+          {isManager && <RowActions row={row} roundId={roundId} roundStatus={roundStatus} />}
         </Box>
       ),
     },
@@ -249,7 +250,12 @@ export function AssignmentsTable({ round }: { round: RoundDetails }) {
     value: department.id,
     label: department.label,
   }));
-  const columns = columnsFor({ isManager, roundStatus: round.status, openAnswers: setAnswersRow });
+  const columns = columnsFor({
+    isManager,
+    roundId: round.id,
+    roundStatus: round.status,
+    openAnswers: setAnswersRow,
+  });
   // The open row as the table shows it now (after an action), else the copy taken on opening.
   const openRow =
     answersRow === null

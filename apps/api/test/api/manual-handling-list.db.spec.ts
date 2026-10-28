@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaService } from '../../src/common/prisma/prisma.service.js';
 import { createTestApp } from '../setup/app.js';
 import { getList, manualRound, postManual } from '../setup/manual-handling.js';
-import { errorOf, type SentRound } from '../setup/round-actions.js';
+import { errorOf, postAction, type SentRound } from '../setup/round-actions.js';
 import { freshEmail, type RoundsWorld, seedRoundsWorld } from '../setup/rounds.js';
 import { setState } from '../setup/tracking.js';
 import { clearQueueJobs } from '../setup/worker.js';
@@ -146,6 +146,36 @@ describe('GET /api/manual-handling', () => {
       email: { choice: 'office' },
     });
     expect(rowOf(await list(), '1003')).toBeUndefined();
+  });
+
+  it('lists a locked sent / opened row as "locked" with its unlocks left (5.7), never ready', async () => {
+    expect(rowOf(await list(), '1003')).toBeUndefined();
+    const lock = (status: 'sent' | 'opened') =>
+      setState(prisma, idOf('1003'), world.managerId, { status, locked: true });
+    await lock('sent');
+    expect(rowOf(await list('?kind=locked'), '1003')).toMatchObject({
+      kind: 'locked',
+      status: 'sent',
+      locked: true,
+      ready: null,
+      unlocksLeft: 2,
+      employee: { emailStatus: 'valid' },
+    });
+    // Through the real unlock route: unlocked → gone; locked again → one unlock left.
+    const unlocked = await postAction(
+      app,
+      `/api/assignments/${idOf('1003')}/unlock`,
+      world.managerCookie,
+    );
+    expect(unlocked.status, JSON.stringify(unlocked.body)).toBe(200);
+    expect(rowOf(await list(), '1003')).toBeUndefined();
+    await lock('opened');
+    expect(rowOf(await list(), '1003')).toMatchObject({ kind: 'locked', unlocksLeft: 1 });
+    // Other kinds carry the count and the email status too.
+    expect(rowOf(await list(), '1001')).toMatchObject({
+      unlocksLeft: 2,
+      employee: { emailStatus: 'missing' },
+    });
   });
 
   it('filters by kind, round and department (at send time), and pages', async () => {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { normalizeSearchText, SEARCH_MAX_LENGTH } from './employees.js';
-import { type AssignmentStatus, assignmentStatusSchema } from './enums.js';
+import { type AssignmentStatus, assignmentStatusSchema, emailStatusSchema } from './enums.js';
 import { optionalQuery, pageQuerySchema } from './pagination.js';
 
 /**
@@ -11,14 +11,17 @@ import { optionalQuery, pageQuerySchema } from './pagination.js';
  */
 
 /**
- * Why a row is in the list: its status (`no_email`, `invalid_email`, `missing_data`), or a signed
- * document whose employee gave another email than the stored one (FR-SGN-9).
+ * Why a row is in the list: its status (`no_email`, `invalid_email`, `missing_data`), a signed
+ * document whose employee gave another email than the stored one (FR-SGN-9), or a `pending` /
+ * `sent` / `opened` row locked after 5 wrong ID numbers (5.7: print, scan or the office kiosk;
+ * never sent from here).
  */
 export const MANUAL_KINDS = [
   'no_email',
   'invalid_email',
   'missing_data',
   'email_corrected',
+  'locked',
 ] as const;
 export type ManualKind = (typeof MANUAL_KINDS)[number];
 
@@ -110,6 +113,8 @@ export const manualRowSchema = z.object({
     firstName: z.string(),
     lastName: z.string(),
     isActive: z.boolean(),
+    /** The stored email's status (never the address itself unless the row needs it). */
+    emailStatus: emailStatusSchema,
   }),
   /** Ready for the one-click send, or null. */
   ready: z.enum(MANUAL_READY).nullable(),
@@ -120,6 +125,8 @@ export const manualRowSchema = z.object({
   /** `email_corrected`: the stored email (null when none) and the one she gave when signing. */
   emailCorrection: z.object({ stored: z.string().nullable(), given: z.string() }).nullable(),
   locked: z.boolean(),
+  /** Unlocks still allowed (MAX_UNLOCKS in all, the unlock rule's count); 0 → the office. */
+  unlocksLeft: z.int().min(0),
   linkExpired: z.boolean(),
   sentAt: z.iso.datetime().nullable(),
   signedAt: z.iso.datetime().nullable(),

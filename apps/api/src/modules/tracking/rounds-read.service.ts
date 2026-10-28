@@ -11,6 +11,7 @@ import {
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service.js';
 import { AppException } from '../../common/errors/app.exception.js';
+import { RoundActionsRepository } from '../rounds/round-actions.repository.js';
 import { RoundSendRepository } from '../rounds/round-send.repository.js';
 import type { TemplateActor } from '../templates/templates.service.js';
 import {
@@ -39,6 +40,7 @@ export class RoundsReadService {
   constructor(
     private readonly repository: TrackingRepository,
     private readonly sending: RoundSendRepository,
+    private readonly actions: RoundActionsRepository,
     private readonly audit: AuditService,
   ) {}
 
@@ -152,9 +154,7 @@ export class RoundsReadService {
       },
       now,
     );
-    const unlocks = await this.repository.unlockCounts(
-      rows.map(({ assignmentId }) => assignmentId),
-    );
+    const unlocks = await this.actions.unlockCounts(rows.map(({ assignmentId }) => assignmentId));
     const items = rows.map((row) => toAssignmentRow(row, unlocks.get(row.assignmentId) ?? 0));
     const emailAnswersShown = items.filter(({ emailAnswer }) => emailAnswer?.email).length;
     if (emailAnswersShown > 0) {

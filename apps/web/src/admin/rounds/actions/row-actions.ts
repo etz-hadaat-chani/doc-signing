@@ -16,12 +16,14 @@ import { he } from '../../../i18n/he';
  * - `resend`: "send failed" or a wrong email.
  * - `unlock`: locked and the link not expired (the API's rule: also a `no_email` row locked at
  *   the kiosk, whose display status stays "no email" with the locked chip), while an unlock is
- *   left; `officeCancel` replaces it at 0.
+ *   left; `office` replaces it at 0.
+ * - `office`: a link to this row in manual handling (print, scan, the office kiosk; 5.7), in
+ *   place of `manual`. Nothing is cancelled.
  * - `cancel`: every open row (also a draft's, also locked or expired).
- * - `manual`: a link to manual handling (print, scan, office signing; 5.7).
+ * - `manual`: a link to manual handling (print, scan, office signing; 5.7), for this round.
  * Approve / return / send again live with the answers (AnswersPanel).
  */
-export type RowAction = 'remind' | 'resend' | 'unlock' | 'officeCancel' | 'cancel' | 'manual';
+export type RowAction = 'remind' | 'resend' | 'unlock' | 'office' | 'cancel' | 'manual';
 
 type ActionRow = Pick<AssignmentRow, 'status' | 'displayStatus' | 'locked' | 'unlocksLeft'>;
 
@@ -38,16 +40,31 @@ export function rowActions(row: ActionRow, roundStatus: RoundStatus): RowAction[
   if (sent && REMIND.includes(row.displayStatus)) actions.push('remind');
   if (sent && RESEND.includes(row.displayStatus)) actions.push('resend');
   if (sent && row.locked && row.displayStatus !== 'expired') {
-    actions.push(row.unlocksLeft > 0 ? 'unlock' : 'officeCancel');
+    actions.push(row.unlocksLeft > 0 ? 'unlock' : 'office');
   }
-  if (sent && MANUAL.includes(row.status)) actions.push('manual');
-  if (
-    (CANCELLABLE_STATUSES as readonly AssignmentStatus[]).includes(row.status) &&
-    !actions.includes('officeCancel')
-  ) {
+  if (sent && MANUAL.includes(row.status) && !actions.includes('office')) actions.push('manual');
+  if ((CANCELLABLE_STATUSES as readonly AssignmentStatus[]).includes(row.status)) {
     actions.push('cancel');
   }
   return actions;
+}
+
+/** The manual-handling kinds a row of these statuses is listed under (else `locked`). */
+const OWN_KIND: readonly AssignmentStatus[] = ['no_email', 'invalid_email', 'missing_data'];
+
+/**
+ * Manual handling filtered to this round: ids and kinds only, never a name or a number. `office`
+ * also narrows to the row's own kind (a locked sent / opened row is listed as `locked`).
+ */
+export function manualLink(
+  roundId: string,
+  row: Pick<AssignmentRow, 'status'>,
+  action: 'manual' | 'office',
+): string {
+  const params = new URLSearchParams({ roundId });
+  if (action === 'office')
+    params.set('kind', OWN_KIND.includes(row.status) ? row.status : 'locked');
+  return `/manual?${params.toString()}`;
 }
 
 /** The answers can be opened: she filled in boxes, or the row is in the approval flow. */

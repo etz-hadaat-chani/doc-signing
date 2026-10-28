@@ -1,6 +1,7 @@
 import type {
   DisplayStatus,
   EmailStatus,
+  ManualKind,
   RoundDepartmentStatus,
   RoundStatus,
 } from '@doc-signing/shared';
@@ -136,3 +137,18 @@ export const ROUND_DEPARTMENT_LOOKS: Readonly<Record<RoundDepartmentStatus, Stat
   no_template: { tone: 'warning', icon: ReportProblemOutlined },
   choice_needed: { tone: 'error', icon: ErrorOutlineOutlined },
 };
+
+/**
+ * Why a row is in manual handling (A10): needs handling (no / wrong email), needs a look (missing
+ * details, locked), or a note to fix it in Har Gal (the email she gave).
+ */
+export const MANUAL_KIND_LOOKS: Readonly<Record<ManualKind, StatusLook>> = {
+  no_email: { tone: 'error', icon: UnsubscribeOutlined },
+  invalid_email: { tone: 'error', icon: UnsubscribeOutlined },
+  missing_data: { tone: 'warning', icon: EditOutlined },
+  email_corrected: { tone: 'info', icon: MarkEmailReadOutlined },
+  locked: { tone: 'warning', icon: LockOutlined },
+};
+
+/** Ready for the one-click send ("email added", "email fixed", "details completed"). */
+export const MANUAL_READY_LOOK: StatusLook = { tone: 'success', icon: SendOutlined };

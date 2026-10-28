@@ -1,6 +1,7 @@
 import {
   type AssignmentStatus,
   EMAIL_ANSWER_KEY,
+  type EmailStatus,
   EMAIL_CHOICE_KEY,
   type FieldValues,
   type ManualKind,
@@ -47,6 +48,7 @@ export interface ManualListRow {
   firstName: string;
   lastName: string;
   employeeActive: boolean;
+  emailStatus: EmailStatus;
   locked: boolean;
   validEmail: string | null;
   emailQueued: boolean;
@@ -89,16 +91,22 @@ export interface ManualSignedWrite {
 /** The statuses that put a row in the list (signed: only when she corrected her email). */
 const LISTED_STATUSES = ['no_email', 'invalid_email', 'missing_data', 'signed'];
 
+/** Statuses listed only while locked (5.7): print, scan or the office kiosk, never a send. */
+const LOCKED_ONLY_STATUSES = ['pending', 'sent', 'opened'];
+
 /**
  * Why the row is listed, or NULL. The three open kinds only in a sent round that is still open
  * (draft rows go with the round's send; closed or cancelled rounds are over). A corrected email
- * (FR-SGN-9) in any round: the address still has to be fixed in Har Gal.
+ * (FR-SGN-9) in any round: the address still has to be fixed in Har Gal. A locked `pending` /
+ * `sent` / `opened` row of an open sent round (5.7): handled at the office, never sent from here.
  */
 const KIND_SQL = Prisma.sql`CASE
   WHEN a.status IN ('no_email', 'invalid_email', 'missing_data')
        AND r.status IN ('sending', 'active') THEN a.status::text
   WHEN a.status = 'signed' AND rc.value = 'email' AND re.value IS NOT NULL
        AND lower(btrim(re.value)) IS DISTINCT FROM lower(btrim(e.email)) THEN 'email_corrected'
+  WHEN a.status IN ('pending', 'sent', 'opened') AND a.locked_at IS NOT NULL
+       AND r.status IN ('sending', 'active') THEN 'locked'
 END`;
 
 /**
@@ -115,7 +123,12 @@ export class ManualHandlingRepository {
    * one filters by kind, orders (round sent newest first, department, name) and pages.
    */
   async listPage(filter: ManualListFilter): Promise<{ rows: ManualListRow[]; total: number }> {
-    const conditions = [Prisma.sql`a.status::text = ANY(${LISTED_STATUSES}::text[])`];
+    // The locked-only statuses are most rows of a round: the index on the status alone would
+    // read them all, so they are kept to the locked ones here, before the joins.
+    const conditions = [
+      Prisma.sql`(a.status::text = ANY(${LISTED_STATUSES}::text[])
+        OR (a.status::text = ANY(${LOCKED_ONLY_STATUSES}::text[]) AND a.locked_at IS NOT NULL))`,
+    ];
     if (filter.roundId !== undefined) {
       conditions.push(Prisma.sql`a.round_id = ${filter.roundId}::uuid`);
     }
@@ -132,7 +145,8 @@ export class ManualHandlingRepository {
              d.id AS "departmentId", d.code AS "departmentCode", d.name AS "departmentName",
              e.id AS "employeeId", e.employee_number AS "employeeNumber",
              e.first_name AS "firstName", e.last_name AS "lastName",
-             e.is_active AS "employeeActive", a.locked_at IS NOT NULL AS locked,
+             e.is_active AS "employeeActive", e.email_status::text AS "emailStatus",
+             a.locked_at IS NOT NULL AS locked,
              CASE WHEN e.email_status = 'valid' AND btrim(coalesce(e.email, '')) <> ''
                   THEN e.email END AS "validEmail",
              EXISTS (SELECT 1 FROM email_messages q

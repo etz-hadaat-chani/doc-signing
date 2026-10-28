@@ -4,6 +4,7 @@ import { errorContent } from '../../../components/feedback/error-content';
 import { useNotify } from '../../../components/notifications/notify-context';
 import { dashboardKeys } from '../../dashboard/dashboard.api';
 import { employeeKeys } from '../../employees/employees.api';
+import { manualKeys } from '../../manual/manual.api';
 import { roundKeys } from '../rounds.api';
 
 interface RunOptions<T> {
@@ -18,7 +19,8 @@ interface RunOptions<T> {
 /**
  * Runs one manager action: one at a time (a ref, so a double click sends once even before the
  * next render), `busy` while it runs, the error as a Hebrew notice by code. Success or refusal,
- * the round's queries and the dashboard are fetched again (a 409 means the row changed too);
+ * the round's queries, manual handling (A10) and the dashboard are fetched again (a 409 means the
+ * row changed too);
  * the answers panel has its own key and is never refetched by this.
  */
 export function useAction() {
@@ -28,7 +30,12 @@ export function useAction() {
   const [busy, setBusy] = useState(false);
 
   const refresh = (employees: boolean) => {
-    const keys = [roundKeys.all, dashboardKeys.all, ...(employees ? [employeeKeys.all] : [])];
+    const keys = [
+      roundKeys.all,
+      manualKeys.all,
+      dashboardKeys.all,
+      ...(employees ? [employeeKeys.all] : []),
+    ];
     for (const queryKey of keys) void queryClient.invalidateQueries({ queryKey });
   };
 

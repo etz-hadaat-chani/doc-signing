@@ -62,6 +62,8 @@ export interface TableSelection<T> {
   resetKey: string;
   /** Buttons for the selected rows, shown above the table while some are selected. */
   actions?: ReactNode;
+  /** Rows the action can take (default all); the others show a disabled checkbox. */
+  selectable?: (row: T) => boolean;
 }
 
 interface DataTableProps<T> {
@@ -136,12 +138,14 @@ export function DataTable<T>({
     body = rows.map((row, index) => {
       const id = pageIds[index] ?? '';
       const isSelected = selection?.selected.has(id) ?? false;
+      const canSelect = selection?.selectable?.(row) ?? true;
       return (
         <TableRow key={id} hover selected={isSelected}>
           {selection && (
             <TableCell padding="checkbox">
               <Checkbox
                 checked={isSelected}
+                disabled={!canSelect && !isSelected}
                 onChange={() => selection.onChange(toggled(selection.selected, [id], !isSelected))}
                 slotProps={{
                   input: { 'aria-label': `${he.table.selectRow} ${selection.rowLabel(row)}` },
@@ -159,8 +163,13 @@ export function DataTable<T>({
     });
   }
 
-  const selectedOnPage = selection ? pageIds.filter((id) => selection.selected.has(id)).length : 0;
-  const allOnPage = pageIds.length > 0 && selectedOnPage === pageIds.length;
+  // The page checkbox takes only the rows the action can take.
+  const selectable = selection?.selectable;
+  const selectableIds = selectable ? rows.filter(selectable).map(getRowId) : pageIds;
+  const selectedOnPage = selection
+    ? selectableIds.filter((id) => selection.selected.has(id)).length
+    : 0;
+  const allOnPage = selectableIds.length > 0 && selectedOnPage === selectableIds.length;
   const lastPage = data ? Math.max(0, Math.ceil(data.total / pageSize) - 1) : 0;
 
   return (
@@ -193,9 +202,9 @@ export function DataTable<T>({
                   <Checkbox
                     checked={allOnPage}
                     indeterminate={selectedOnPage > 0 && !allOnPage}
-                    disabled={pageIds.length === 0}
+                    disabled={selectableIds.length === 0}
                     onChange={() =>
-                      selection.onChange(toggled(selection.selected, pageIds, !allOnPage))
+                      selection.onChange(toggled(selection.selected, selectableIds, !allOnPage))
                     }
                     slotProps={{ input: { 'aria-label': he.table.selectAllOnPage } }}
                   />

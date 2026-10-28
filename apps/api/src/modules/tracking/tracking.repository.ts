@@ -314,25 +314,6 @@ export class TrackingRepository {
   }
 
   /**
-   * Earlier unlocks of these assignments, from their `assignment.unlocked` audit rows (the same
-   * count as the unlock rule, `RoundActionsRepository.unlockCount`): one grouped query per page.
-   * Assignments never unlocked are left out.
-   */
-  async unlockCounts(assignmentIds: readonly string[]): Promise<Map<string, number>> {
-    if (assignmentIds.length === 0) return new Map();
-    const rows = await this.prisma.auditLog.groupBy({
-      by: ['entityId'],
-      where: {
-        entityType: 'assignment',
-        action: 'assignment.unlocked',
-        entityId: { in: [...assignmentIds] },
-      },
-      _count: { _all: true },
-    });
-    return new Map(rows.map((row) => [row.entityId ?? '', row._count._all]));
-  }
-
-  /**
    * Every row of the employee table that matches the filters, in the table's order, in one
    * query (the status export, 3.17): the same columns, display status and department at send.
    */

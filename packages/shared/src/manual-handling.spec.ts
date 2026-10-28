@@ -27,6 +27,10 @@ describe('manualListQuerySchema', () => {
     expect(manualListQuerySchema.parse({ dept: '' }).dept).toBeUndefined();
   });
 
+  it('takes the locked kind (5.7: rows sent to the office)', () => {
+    expect(manualListQuerySchema.parse({ kind: 'locked' }).kind).toEqual(['locked']);
+  });
+
   it('never takes search text in the address', () => {
     expect(manualListQuerySchema.safeParse({ q: 'כהן' }).success).toBe(false);
   });
