@@ -72,6 +72,19 @@ export class SessionService {
     return { sessionId: session.id, user: { id, email, fullName, role } };
   }
 
+  /**
+   * Whether the token is a staff session that `authenticate` would accept now, without touching
+   * it: no idle-timer extension, nothing revoked. The office kiosk's routes refuse such a
+   * request (5.7), and must never keep a manager's session alive.
+   */
+  async isSignedIn(token: unknown, now = new Date()): Promise<boolean> {
+    if (!isSessionTokenShape(token)) return false;
+    const session = await this.repository.findSessionWithUser(hashSessionToken(token));
+    if (!session) return false;
+    const idle = now.getTime() - session.lastUsedAt.getTime();
+    return session.expiresAt > now && idle < IDLE_TIMEOUT_MS && session.user.isActive;
+  }
+
   /** Ends a session. Already gone is fine. */
   async revoke(sessionId: string, db: Db = this.prisma): Promise<void> {
     await db.session.deleteMany({ where: { id: sessionId } });

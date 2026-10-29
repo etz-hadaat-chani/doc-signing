@@ -7,8 +7,8 @@ import { corrected, emailAdded, lockedOut, missingData, noEmail } from './manual
 
 describe('manualActions', () => {
   it.each([
-    ['no email', noEmail, ['fixEmail', 'print', 'scan']],
-    ['email added', emailAdded, ['send', 'fixEmail', 'print', 'scan']],
+    ['no email', noEmail, ['fixEmail', 'print', 'scan', 'kiosk']],
+    ['email added', emailAdded, ['send', 'fixEmail', 'print', 'scan', 'kiosk']],
     ['missing data', missingData, ['editCard']],
     [
       'details completed',
@@ -16,7 +16,7 @@ describe('manualActions', () => {
       ['send', 'editCard'],
     ],
     ['email corrected (signed)', corrected, ['useGiven']],
-    ['locked, no unlocks left', lockedOut, ['print', 'scan']],
+    ['locked, no unlocks left', lockedOut, ['print', 'scan', 'kiosk']],
   ])('%s → %j', (_, row, expected) => {
     expect(manualActions(row)).toEqual(expected);
   });

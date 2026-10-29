@@ -78,6 +78,11 @@ export const SIGN_RATE_SCOPES = [
   'form',
   'fit',
   'submit',
+  // The office short code (5.7): every try per IP (loose: the office computers may share one
+  // public IP), wrong ones per IP (tight), and wrong ones from all IPs together (one bucket).
+  'kiosk_code',
+  'kiosk_code_wrong_ip',
+  'kiosk_code_wrong',
 ] as const;
 export type SignRateScope = (typeof SIGN_RATE_SCOPES)[number];
 export const SIGN_RATE_WINDOW_MINUTES = 15;
@@ -92,6 +97,9 @@ export const SIGN_RATE_LIMITS: Readonly<
   form: { min: 100, default: 1000 },
   fit: { min: 300, default: 4000 },
   submit: { min: 30, default: 300 },
+  kiosk_code: { min: 30, default: 120 },
+  kiosk_code_wrong_ip: { min: 3, default: 10 },
+  kiosk_code_wrong: { min: 20, default: 100 },
 };
 
 /** `POST /api/sign/:token/verify`. The shape and check digit are checked by the server. */
@@ -135,6 +143,16 @@ export interface SignLinkStateResult {
   state: SignLinkState;
   hrContact: SignHrContact;
 }
+
+/** The same answer, checked by the signing pages (also `POST /api/kiosk/state`). */
+export const signLinkStateResultSchema = z.object({
+  state: z.enum(SIGN_LINK_STATES),
+  hrContact: z.object({
+    name: z.string(),
+    phone: z.string().nullable(),
+    email: z.string().nullable(),
+  }),
+}) satisfies z.ZodType<SignLinkStateResult>;
 
 /** `POST …/verify` when correct. */
 export interface SignVerifiedResult {

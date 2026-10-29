@@ -30,6 +30,7 @@ import { useDepartments } from '../employees/use-departments';
 import { fetchRounds, roundKeys } from '../rounds/rounds.api';
 import { fetchManual, manualKeys, type ManualRequest } from './manual.api';
 import { ManualRowActions } from './ManualRowActions';
+import { ManualTabs } from './ManualTabs';
 import { SendDialog } from './SendDialog';
 
 const text = he.manual;
@@ -162,7 +163,7 @@ function columnsFor(onSent: () => void): readonly Column<ManualRow>[] {
 }
 
 /**
- * Manual handling (A10, FR-MAN-1 to FR-MAN-3, Flow 7), managers only: everyone who can't sign
+ * Manual handling (A10, FR-MAN-1 to FR-MAN-4, Flow 7), managers only: everyone who can't sign
  * through a link, across rounds. Filters (round, department at send, kind) in the address; the
  * search text only in memory and a POST body. Ready rows can be sent one by one or together
  * (the selection clears when a filter or the search changes).
@@ -207,6 +208,7 @@ export function ManualHandlingPage() {
       <Typography variant="h1" sx={{ mb: 1 }}>
         {he.nav.manual}
       </Typography>
+      <ManualTabs current="/manual" />
       <Typography color="text.secondary" sx={{ mb: 4 }}>
         {text.intro}
       </Typography>

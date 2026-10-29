@@ -84,10 +84,11 @@ export class ManualAssignmentsController {
   @ApiOperation({
     summary: 'Open the office signing station for this employee (FR-MAN-4); logged',
     description:
-      'A one-time code (only its SHA-256 is stored), valid 10 minutes until her correct ID ' +
-      'number; open `kioskPath#code` in a new window. Ends any earlier kiosk session of the ' +
-      'row. Same statuses as print, also after the link expired; 409 ASSIGNMENT_LOCKED: ' +
-      'unlock first.',
+      'A one-time 8-character short code (only its SHA-256 is stored), valid 10 minutes, typed ' +
+      'at `kioskPath` on a separate office computer (POST /api/kiosk/code). Ends any earlier ' +
+      'kiosk session of the row. Same statuses as print, also after the link expired; 409 ' +
+      'ASSIGNMENT_LOCKED: unlock first, while an unlock is left. Locked for good (no unlock ' +
+      'left, or the link expired): the kiosk session gets its own 5 ID attempts.',
   })
   @Roles('manager')
   @Post(':id/kiosk')

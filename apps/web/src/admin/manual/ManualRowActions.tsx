@@ -8,6 +8,7 @@ import { useId, useState } from 'react';
 import { Link as RouterLink } from 'react-router';
 import { he } from '../../i18n/he';
 import { FixEmailDialog } from './FixEmailDialog';
+import { KioskCodeDialog } from './KioskCodeDialog';
 import { type ManualAction, manualActions } from './manual-row';
 import { printPath } from './manual.api';
 import { ScanUploadDialog } from './ScanUploadDialog';
@@ -15,12 +16,13 @@ import { SendDialog } from './SendDialog';
 
 const text = he.manual;
 
-type DialogAction = Extract<ManualAction, 'send' | 'scan' | 'fixEmail' | 'useGiven'>;
+type DialogAction = Extract<ManualAction, 'send' | 'scan' | 'kiosk' | 'fixEmail' | 'useGiven'>;
 
 const LABELS: Record<ManualAction, string> = {
   send: text.send.label,
   print: text.print.label,
   scan: text.scan.label,
+  kiosk: text.kiosk.label,
   fixEmail: text.fixEmail.label,
   useGiven: text.fixEmail.useGiven,
   editCard: text.editCard,
@@ -28,7 +30,8 @@ const LABELS: Record<ManualAction, string> = {
 
 /**
  * A row's "פעולות" menu (managers; the API decides): send, print (the personalized PDF in a new
- * tab, fetched only on the click), upload a scan, fix the email, or complete the card.
+ * tab, fetched only on the click), upload a scan, the office signing station's short code, fix
+ * the email, or complete the card.
  */
 export function ManualRowActions({ row, onSent }: { row: ManualRow; onSent: () => void }) {
   const menuId = useId();
@@ -101,6 +104,7 @@ export function ManualRowActions({ row, onSent }: { row: ManualRow; onSent: () =
         />
       )}
       {open === 'scan' && <ScanUploadDialog row={row} onClose={() => setOpen(null)} />}
+      {open === 'kiosk' && <KioskCodeDialog row={row} onClose={() => setOpen(null)} />}
       {(open === 'fixEmail' || open === 'useGiven') && (
         <FixEmailDialog row={row} useGiven={open === 'useGiven'} onClose={() => setOpen(null)} />
       )}

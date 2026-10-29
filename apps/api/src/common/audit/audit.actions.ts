@@ -85,6 +85,8 @@ export const AUDIT_ACTIONS = [
   'sign.document_viewed',
   'sign.form_viewed',
   'sign.rate_limited',
+  'kiosk.code_entered',
+  'kiosk.code_failed',
   'settings.updated',
   'settings.employer_signature_uploaded',
   'settings.employer_signature_viewed',
@@ -381,6 +383,8 @@ export interface AuditDetailsMap {
     roundId: string;
     emailMessageId: string | null;
     kioskSessionId?: string;
+    /** At the kiosk: its own 5 attempts on a row locked for good (5.7 D2). */
+    ownAttempts?: boolean;
     fromStatus: AssignmentStatus;
   };
   /** A wrong ID number; `failedAttempts` counts it. */
@@ -388,6 +392,8 @@ export interface AuditDetailsMap {
     roundId: string;
     emailMessageId: string | null;
     kioskSessionId?: string;
+    /** At the kiosk: its own 5 attempts on a row locked for good (5.7 D2). */
+    ownAttempts?: boolean;
     failedAttempts: number;
   };
   /** The 5th wrong ID number locked the assignment (FR-SGN-2). */
@@ -395,6 +401,8 @@ export interface AuditDetailsMap {
     roundId: string;
     emailMessageId: string | null;
     kioskSessionId?: string;
+    /** At the kiosk: its own 5 attempts on a row locked for good (5.7 D2). */
+    ownAttempts?: boolean;
     failedAttempts: number;
   };
   /** An ID number sent to a link that is signed, cancelled, expired or locked; not compared. */
@@ -402,6 +410,8 @@ export interface AuditDetailsMap {
     roundId: string;
     emailMessageId: string | null;
     kioskSessionId?: string;
+    /** At the kiosk: its own 5 attempts on a row locked for good (5.7 D2). */
+    ownAttempts?: boolean;
     state: SignLinkState;
   };
   /** The personalized document was viewed (B2). */
@@ -409,12 +419,16 @@ export interface AuditDetailsMap {
     roundId: string;
     emailMessageId: string | null;
     kioskSessionId?: string;
+    /** At the kiosk: its own 5 attempts on a row locked for good (5.7 D2). */
+    ownAttempts?: boolean;
   };
   /** The form was read (B3); `correction`: a correction round, so the note was shown. */
   'sign.form_viewed': {
     roundId: string;
     emailMessageId: string | null;
     kioskSessionId?: string;
+    /** At the kiosk: its own 5 attempts on a row locked for good (5.7 D2). */
+    ownAttempts?: boolean;
     correction: boolean;
   };
   /**
@@ -422,6 +436,16 @@ export interface AuditDetailsMap {
    * `ip`). Logged once per IP, scope and window, to tune the limits.
    */
   'sign.rate_limited': { scope: SignRateScope; limit: number };
+  /**
+   * The office short code was typed on the office computer (5.7) and traded for the kiosk
+   * session's long code; the ID check comes next. Never either code.
+   */
+  'kiosk.code_entered': { roundId: string; kioskSessionId: string };
+  /**
+   * A short code that opens nothing was typed (wrong, used, replaced, old or badly shaped; entity
+   * id NULL, the IP in `ip`). Never what was typed.
+   */
+  'kiosk.code_failed': Record<string, never>;
   /**
    * Signed (NFR-SIG-2, NFR-SIG-4): the stored file's SHA-256 and size, the email choice and the
    * keys answered, never the values or the address. `fileReused`: a retry found the file
@@ -443,6 +467,8 @@ export interface AuditDetailsMap {
     userAgent: string | null;
     /** Kiosk only (3.16): the kiosk session, the manager who opened it, the copy's email row. */
     kioskSessionId?: string;
+    /** At the kiosk: its own 5 attempts on a row locked for good (5.7 D2). */
+    ownAttempts?: boolean;
     handledById?: string;
     signedCopyEmailId?: string | null;
   };
@@ -484,6 +510,8 @@ export interface AuditDetailsMap {
     kioskSessionId: string;
     expiresAt: string;
     replaced: number;
+    /** Opened on a row locked for good: the kiosk session has its own 5 attempts (5.7 D2). */
+    ownAttempts: boolean;
   };
   /**
    * A scanned paper document was stored: `signed_manual` (FR-MAN-3). No answers, no signed copy.

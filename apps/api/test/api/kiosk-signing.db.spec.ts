@@ -214,18 +214,45 @@ describe('the kiosk still guards like a link', () => {
     expect((await rowOf(who.assignmentId)).status).toBe('sent');
   });
 
-  it('a staff cookie alone gives nothing; the two signing cookies never cross', async () => {
+  it('a signed-in staff user is refused on every kiosk route (409); an old staff cookie is not', async () => {
     const who = person('1001');
-    for (const path of ['/api/kiosk/document', '/api/kiosk/form']) {
-      const response = await kiosk().get(path).set('Cookie', world.managerCookie);
-      expect(response.status, path).toBe(401);
+    const { code, cookie: kioskCookie } = await atKiosk('1001');
+    const both = `${world.managerCookie}; ${kioskCookie}`;
+    const session = () => prisma.session.findFirstOrThrow({ where: { userId: world.managerId } });
+    const lastUsed = (await session()).lastUsedAt;
+    const requests = [
+      kiosk()
+        .post('/api/kiosk/code')
+        .set('Cookie', world.managerCookie)
+        .send({ code: 'ABCD-EFGH' }),
+      kiosk().post('/api/kiosk/state').set('Cookie', world.managerCookie).send({ code }),
+      kiosk()
+        .post('/api/kiosk/verify')
+        .set('Cookie', world.officerCookie)
+        .send({ code, idNumber: who.idNumber }),
+      kiosk().get('/api/kiosk/document').set('Cookie', both),
+      kiosk().get('/api/kiosk/form').set('Cookie', both),
+      kiosk().post('/api/kiosk/fit').set('Cookie', both).send({ answers: {} }),
+      submitWith(both),
+    ];
+    for (const [index, response] of (await Promise.all(requests)).entries()) {
+      expect(response.status, `request ${String(index)}`).toBe(409);
+      expect(errorOf(response).code).toBe('KIOSK_STAFF_SIGNED_IN');
     }
-    expect((await submitWith(world.managerCookie)).status).toBe(401);
-    const noCode = await kiosk()
-      .post('/api/kiosk/state')
-      .set('Cookie', world.managerCookie)
-      .send({});
-    expect(noCode.status).toBe(400);
+    // The check never keeps the staff session alive, and nothing was signed.
+    expect((await session()).lastUsedAt).toEqual(lastUsed);
+    expect((await rowOf(who.assignmentId)).signedAt).toBeNull();
+    // A staff cookie that no longer opens anything is not a signed-in user.
+    const stale = await kiosk()
+      .get('/api/kiosk/form')
+      .set('Cookie', `sid=${'x'.repeat(43)}`);
+    expect(stale.status).toBe(401);
+    expect(errorOf(stale).code).toBe('SIGN_SESSION_EXPIRED');
+    expect((await kiosk().get('/api/kiosk/form').set('Cookie', kioskCookie)).status).toBe(200);
+  });
+
+  it('the two signing cookies never cross', async () => {
+    const who = person('1001');
 
     const linkCookie = await verifiedCookie(app, who);
     expect((await kiosk().get('/api/kiosk/form').set('Cookie', linkCookie)).status).toBe(401);
@@ -304,6 +331,72 @@ describe('the kiosk still guards like a link', () => {
       'sign.locked',
     ]);
     expect(actions.at(-1)?.details).toMatchObject({ emailMessageId: null, failedAttempts: 5 });
+  });
+
+  it('a row locked for good: the kiosk has its own 5 attempts, her link stays locked (D2)', async () => {
+    const who = person('1001');
+    const lock = () =>
+      prisma.assignment.update({
+        where: { id: who.assignmentId },
+        data: { lockedAt: new Date(), failedAttempts: 5 },
+      });
+    for (let unlock = 0; unlock < 2; unlock += 1) {
+      await lock();
+      const unlocked = await postAction(
+        app,
+        `/api/assignments/${who.assignmentId}/unlock`,
+        world.managerCookie,
+      );
+      expect(unlocked.status).toBe(200);
+    }
+    await lock();
+    const lockedAt = (await rowOf(who.assignmentId)).lockedAt;
+
+    const first = await openKiosk(app, who.assignmentId, world.managerCookie);
+    const verify = (code: string, idNumber: string) =>
+      kiosk().post('/api/kiosk/verify').send({ code, idNumber });
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const wrong = await verify(first.code, '039337423');
+      expect(wrong.status).toBe(401);
+      expect(errorOf(wrong).details).toEqual({ attemptsLeft: 5 - attempt });
+    }
+    const fifth = await verify(first.code, '039337423');
+    expect(fifth.status).toBe(423);
+    expect(errorOf(fifth).code).toBe('SIGN_LOCKED');
+    const ended = await prisma.kioskSession.findFirstOrThrow({
+      where: { assignmentId: who.assignmentId },
+    });
+    expect(ended).toMatchObject({ ownAttempts: true, failedAttempts: 5, endReason: 'locked' });
+    // Her row: the same lock and count; her link still reads locked.
+    expect(await rowOf(who.assignmentId)).toMatchObject({ failedAttempts: 5, lockedAt });
+    const link = await signServer(app).get(`/api/sign/${who.token}`);
+    expect(link.body).toMatchObject({ state: 'locked' });
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { entityId: who.assignmentId, action: 'sign.locked' },
+    });
+    expect(audit.details).toMatchObject({
+      kioskSessionId: ended.id,
+      ownAttempts: true,
+      failedAttempts: 5,
+    });
+
+    // A new kiosk session gets 5 fresh attempts and signs; the link's lock is left as it was.
+    const again = await openKiosk(app, who.assignmentId, world.managerCookie);
+    const wrong = await verify(again.code, '039337423');
+    expect(errorOf(wrong).details).toEqual({ attemptsLeft: 4 });
+    const cookie = await kioskVerified(app, again.code, who.idNumber);
+    expect((await kiosk().get('/api/kiosk/form').set('Cookie', cookie)).status).toBe(200);
+    const signed = await submitWith(cookie);
+    expect(signed.status).toBe(201);
+    expect(await rowOf(who.assignmentId)).toMatchObject({
+      status: 'signed',
+      signMethod: 'kiosk',
+      failedAttempts: 5,
+      lockedAt,
+    });
+    expect((await signServer(app).get(`/api/sign/${who.token}`)).body).toMatchObject({
+      state: 'signed',
+    });
   });
 
   it('a no-email row signs at the kiosk; it stays no_email until it signs', async () => {

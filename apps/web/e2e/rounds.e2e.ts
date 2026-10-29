@@ -415,12 +415,19 @@ const rowNamed = (page: Page, index: number) =>
 const menuOf = (page: Page, index: number) =>
   page.getByRole('button', { name: `פעולות עבור ${nameOf(index)}` });
 
-/** A kiosk session for the assignment (manager), then its own cookie-less context. */
+/**
+ * A kiosk session for the assignment (manager), then the office computer's own cookie-less
+ * context (a staff cookie there is refused): the short code typed there → the long kiosk code.
+ * Neither code is ever printed.
+ */
 async function openKiosk(assignmentId: string) {
   const opened = await api.post(`/api/assignments/${assignmentId}/kiosk`);
   expect(opened.status()).toBe(201);
-  const { code } = (await opened.json()) as { code: string };
+  const { shortCode } = (await opened.json()) as { shortCode: string };
   const kiosk = await request.newContext({ baseURL: BASE_URL });
+  const entered = await kiosk.post('/api/kiosk/code', { data: { code: shortCode } });
+  expect(entered.status()).toBe(200);
+  const { code } = (await entered.json()) as { code: string };
   return { code, kiosk };
 }
 
@@ -610,6 +617,22 @@ test('kiosk signature waiting for approval; an officer sees it without buttons',
   await expect(panel.getByRole('button', { name: 'אישור' })).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'החזרה לתיקון' })).toHaveCount(0);
   await screen(page, 'b-4-officer-answers');
+
+  // The officer's part of A10: "waiting for approval", no tabs, the same panel without buttons.
+  await page.goto(`/manual/approvals?roundId=${approvalRound.id}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'ממתינים לאישור' })).toBeVisible();
+  await expect(page.getByRole('tablist')).toHaveCount(0);
+  const waiting = page
+    .getByRole('table', { name: 'מסמכים שממתינים לאישור' })
+    .locator('tbody tr')
+    .filter({ hasText: nameOf(6) });
+  await expect(waiting).toContainText('יש לי מחלה כרונית');
+  await expect(waiting).toContainText('במשרד');
+  await waiting.getByRole('button', { name: `התשובות של ${nameOf(6)}` }).click();
+  const tabPanel = page.getByRole('presentation');
+  await expect(tabPanel).toContainText('ממתין לאישור');
+  await expect(tabPanel.getByRole('button', { name: 'אישור' })).toHaveCount(0);
+  await screen(page, 'b-4b-officer-approvals-tab');
 });
 
 test('manager: return for correction with a note, send again, links both ways', async ({
@@ -617,6 +640,16 @@ test('manager: return for correction with a note, send again, links both ways', 
 }) => {
   await logIn(page, 'manager@doc-signing.local', seedPassword());
   await expect(page.getByRole('heading', { level: 1, name: 'לוח בקרה' })).toBeVisible();
+  // The manager's A10 tab lists it too, with the two tabs.
+  await page.goto(`/manual/approvals?roundId=${approvalRound.id}`);
+  await expect(page.getByRole('tab', { name: 'ממתינים לאישור' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(
+    page.getByRole('table', { name: 'מסמכים שממתינים לאישור' }).locator('tbody tr'),
+  ).toContainText([nameOf(6)]);
+  await screen(page, 'b-4c-manager-approvals-tab');
   await page.goto(`/rounds/${approvalRound.id}`);
   await expect(page.getByRole('heading', { level: 1, name: approvalRound.name })).toBeVisible();
   await page.getByRole('button', { name: `התשובות של ${nameOf(6)}` }).click();

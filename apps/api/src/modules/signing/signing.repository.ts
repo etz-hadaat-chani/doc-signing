@@ -45,6 +45,8 @@ export interface SignedWrite {
   handledById: string | null;
   /** The statuses it may be signed from (the caller's state rule). */
   fromStatuses: readonly AssignmentStatus[];
+  /** A kiosk session with its own attempts (5.7 D2) signs a row whose links stay locked. */
+  allowLocked: boolean;
   signedAt: Date;
   fileKey: string;
   fileSha256: string;
@@ -167,7 +169,8 @@ export class SigningRepository {
   /**
    * Signed (FR-SGN-5, NFR-SIG-2): status, time, method, who handled it (kiosk), the stored file
    * and its hash, IP, user agent, approval flag. Only from one of `fromStatuses` and while not
-   * locked (the caller holds the row lock and checked the state); throws otherwise.
+   * locked, unless `allowLocked` (the caller holds the row lock and checked the state); throws
+   * otherwise. The lock itself stays (a signed row reads "signed" anyway).
    */
   async markSigned(write: SignedWrite, db: Db): Promise<void> {
     const count = await db.$executeRaw`
@@ -177,7 +180,7 @@ export class SigningRepository {
           signed_file_key = ${write.fileKey}, signed_file_sha256 = ${write.fileSha256},
           signer_ip = ${write.ip}::inet, signer_user_agent = ${write.userAgent},
           needs_approval = ${write.needsApproval}, updated_at = now()
-      WHERE id = ${write.assignmentId}::uuid AND locked_at IS NULL
+      WHERE id = ${write.assignmentId}::uuid AND (locked_at IS NULL OR ${write.allowLocked}::boolean)
         AND status::text = ANY(${[...write.fromStatuses]}::text[])`;
     if (count !== 1) throw new Error('Assignment changed while signing');
   }

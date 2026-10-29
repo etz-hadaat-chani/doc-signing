@@ -1,4 +1,5 @@
 import {
+  type KioskCodeEntered,
   type KioskCodeInput,
   kioskCodeSchema,
   type KioskVerifyInput,
@@ -23,6 +24,7 @@ import {
   Req,
   Res,
   StreamableFile,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -30,6 +32,7 @@ import { ApiZodBody } from '../../common/api-docs/api-docs.js';
 import { contentDisposition } from '../../common/storage/content-disposition.js';
 import { ZodValidationPipe } from '../../common/validation/zod-validation.pipe.js';
 import { Public } from '../auth/access.decorators.js';
+import { KioskNoStaffGuard } from './kiosk-no-staff.guard.js';
 import { KioskSigningService } from './kiosk-signing.service.js';
 import { KIOSK_COOKIE, kioskCookieOptions } from './signing.constants.js';
 import type { SigningClient } from './signing-steps.service.js';
@@ -45,16 +48,36 @@ function clientOf(request: Request): SigningClient {
 }
 
 /**
- * The office signing station (3.16, PRD §11, FR-MAN-4): the signing routes of a link, reached
- * with the one-time code a manager opened. The code travels only in a POST body (the page's
- * address is just /kiosk), the session in the `kiosk_sid` cookie. @Public: no staff session is
- * read or needed; a staff cookie gives nothing more. HTTP only here.
+ * The office signing station (3.16, 5.7, PRD §11, FR-MAN-4): the signing routes of a link,
+ * reached on a separate office computer with the short code a manager opened (`code`), traded
+ * for the long kiosk code. Codes travel only in POST bodies (the page's address is just
+ * /kiosk), the session in the `kiosk_sid` cookie. @Public: no staff session is needed, and a
+ * request carrying a valid one is refused (`KioskNoStaffGuard`, 409). HTTP only here.
  */
 @ApiTags('kiosk')
 @Public()
+@UseGuards(KioskNoStaffGuard)
 @Controller('kiosk')
 export class KioskSigningController {
   constructor(private readonly kiosk: KioskSigningService) {}
+
+  @ApiOperation({
+    summary: 'The short code typed on the office computer → the long kiosk code (one use)',
+    description:
+      'Body { code } (8 characters; case, spaces and hyphens ignored). 200 { code }: the long ' +
+      'code for state / verify, valid 10 minutes. Wrong, used, replaced or old → 404 ' +
+      'KIOSK_CODE_NOT_FOUND. 429 after too many wrong codes (per IP and from all IPs). 409 ' +
+      'KIOSK_STAFF_SIGNED_IN on every kiosk route when a staff user is signed in.',
+  })
+  @ApiZodBody(kioskCodeSchema)
+  @Post('code')
+  @HttpCode(HttpStatus.OK)
+  enterCode(
+    @Body(new ZodValidationPipe(kioskCodeSchema)) body: KioskCodeInput,
+    @Req() request: Request,
+  ): Promise<KioskCodeEntered> {
+    return this.kiosk.enterCode(body.code, clientOf(request));
+  }
 
   @ApiOperation({
     summary: 'State only (valid, signed, cancelled, expired or locked); code in body',

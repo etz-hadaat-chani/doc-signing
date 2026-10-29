@@ -75,18 +75,36 @@ export function manualDocumentRefusal(
   return null;
 }
 
+/** The lock of a row as the kiosk sees it: locked, and how many unlocks are left (3.12). */
+export interface KioskLock {
+  locked: boolean;
+  unlocksLeft: number;
+}
+
 /**
  * The office signing station (FR-MAN-4): the print statuses, also when the link expired (a
- * manager is there and no emailed link is used), but a locked row must be unlocked first through
- * the logged unlock action (3.12), so the 5-attempt guard is never skipped.
+ * manager is there and no emailed link is used). A locked row that can still be unlocked is
+ * unlocked first through the logged unlock action (3.12). A row locked for good (no unlocks left,
+ * or the link expired, so no unlock is possible) opens with the kiosk session's own 5 ID attempts
+ * (5.7 decision D2; `kioskOwnAttempts`).
  */
 export function kioskRefusal(
   status: AssignmentStatus,
-  locked: boolean,
+  lock: KioskLock,
   round: ActionRound,
 ): Refusal | null {
   const refusal = manualDocumentRefusal(status, round);
   if (refusal) return refusal;
-  if (locked) return { code: 'ASSIGNMENT_LOCKED' };
+  if (lock.locked && lock.unlocksLeft > 0 && !isExpired(round)) {
+    return { code: 'ASSIGNMENT_LOCKED' };
+  }
   return null;
+}
+
+/**
+ * After `kioskRefusal` let it open: a locked row is locked for good, so the kiosk session counts
+ * its own wrong ID numbers and her links stay locked. An open row shares the link's 5 attempts.
+ */
+export function kioskOwnAttempts(lock: KioskLock): boolean {
+  return lock.locked;
 }

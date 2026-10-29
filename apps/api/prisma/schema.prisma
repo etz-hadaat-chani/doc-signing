@@ -658,6 +658,13 @@ model KioskSession {
   endedAt      DateTime?       @map("ended_at") @db.Timestamptz(3)
   endReason    KioskEndReason? @map("end_reason")
   createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  // The short code typed on the office computer (5.7); traded once for the long code above.
+  shortCodeHash   String?   @map("short_code_hash") @db.Char(64)
+  shortCodeUsedAt DateTime? @map("short_code_used_at") @db.Timestamptz(3)
+  // Opened on a row locked for good (no unlocks left, or the link expired): the session counts
+  // its own wrong ID numbers, and her links' lock is never touched (5.7 decision D2).
+  ownAttempts     Boolean   @default(false) @map("own_attempts")
+  failedAttempts  Int       @default(0) @map("failed_attempts")
 
   assignment      Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   openedBy        User             @relation(fields: [openedById], references: [id], onDelete: Restrict)

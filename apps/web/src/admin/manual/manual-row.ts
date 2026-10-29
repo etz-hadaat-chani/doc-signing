@@ -17,12 +17,13 @@ const text = he.manual;
 /**
  * A row's actions (3.16 rules; the API still decides):
  * - `send`: the row is ready ("email added", "email fixed", "details completed").
- * - `print` / `scan`: open rows with saved values (`MANUAL_PRINTABLE_STATUSES`), also locked or
- *   expired.
+ * - `print` / `scan` / `kiosk`: open rows with saved values (`MANUAL_PRINTABLE_STATUSES`), also
+ *   locked or expired (the kiosk asks for an unlock first while one is left).
  * - `fixEmail`: no email or a wrong one; `useGiven`: the employee gave another email when signing.
  * - `editCard`: missing data is filled in on the employee card.
  */
-export type ManualAction = 'send' | 'print' | 'scan' | 'fixEmail' | 'useGiven' | 'editCard';
+export type ManualAction =
+  'send' | 'print' | 'scan' | 'kiosk' | 'fixEmail' | 'useGiven' | 'editCard';
 
 const PRINTABLE: readonly AssignmentStatus[] = MANUAL_PRINTABLE_STATUSES;
 
@@ -32,7 +33,7 @@ export function manualActions(row: Pick<ManualRow, 'kind' | 'status' | 'ready'>)
   if (row.kind === 'missing_data') actions.push('editCard');
   if (row.kind === 'no_email' || row.kind === 'invalid_email') actions.push('fixEmail');
   if (row.kind === 'email_corrected') actions.push('useGiven');
-  if (PRINTABLE.includes(row.status)) actions.push('print', 'scan');
+  if (PRINTABLE.includes(row.status)) actions.push('print', 'scan', 'kiosk');
   return actions;
 }
 

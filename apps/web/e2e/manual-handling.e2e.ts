@@ -1,10 +1,17 @@
-import { type APIRequestContext, expect, type Page, request, test } from '@playwright/test';
+import {
+  type APIRequestContext,
+  expect,
+  type Locator,
+  type Page,
+  request,
+  test,
+} from '@playwright/test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { logIn, seedPassword } from './helpers';
 
-// Task 5.7 part A: manual handling (A10): the list, fix email → ready → send, print, a scanned
-// paper signature, and a row locked with no unlocks left reached from round details
-// ("טיפול במשרד").
+// Task 5.7 parts A and B: manual handling (A10): the list, fix email → ready → send, print, a
+// scanned paper signature, a row locked with no unlocks left reached from round details
+// ("טיפול במשרד"), the office kiosk's short code typed on a second browser, the approvals tab.
 // DANGER rules (nothing is ever deleted in this system):
 // - The template is built here (pdf-lib), named "בדיקה אוטומטית …" and ARCHIVED in afterAll with
 //   every version, also after a failure.
@@ -12,7 +19,7 @@ import { logIn, seedPassword } from './helpers';
 //   and is CANCELLED in afterAll.
 // - Fake employees: Hebrew-letter names, unique numbers, generated ID numbers, NO email; one
 //   unique @example.test address is added by the "fix email" step. All are made INACTIVE in
-//   afterAll. ID numbers stay in memory (the kiosk ID check); nothing is printed.
+//   afterAll. ID numbers and kiosk codes stay in memory; nothing is printed.
 
 test.describe.configure({ mode: 'serial' });
 
@@ -179,14 +186,21 @@ test.afterAll(async () => {
   for (const [what, status] of statuses) expect(status, what).toBe(200);
 });
 
-/** The page in viewport-sized parts: Chromium draws Hebrew in another font in a tall capture. */
-async function screen(page: Page, name: string) {
+/**
+ * The page in viewport-sized parts: Chromium draws Hebrew in another font in a tall capture.
+ * `mask` covers what must never be in a file (a kiosk code).
+ */
+async function screen(page: Page, name: string, mask: Locator[] = []) {
   const height = Number(await page.evaluate('document.documentElement.scrollHeight'));
   const view = page.viewportSize()?.height ?? 720;
   for (let part = 0; part * view < height; part += 1) {
     await page.evaluate(`window.scrollTo(0, ${String(part * view)})`);
     const suffix = part === 0 ? '' : `-${String(part + 1)}`;
-    await page.screenshot({ path: `${SCREENS}/${name}${suffix}.png`, animations: 'disabled' });
+    await page.screenshot({
+      path: `${SCREENS}/${name}${suffix}.png`,
+      animations: 'disabled',
+      mask,
+    });
   }
   await page.evaluate('window.scrollTo(0, 0)');
 }
@@ -218,12 +232,19 @@ const rowNamed = (page: Page, index: number) =>
 const menuOf = (page: Page, index: number) =>
   page.getByRole('button', { name: `פעולות עבור ${nameOf(index)}` });
 
-/** Five wrong (valid-looking) ID numbers at the office kiosk lock the row (through the API). */
+/**
+ * Five wrong (valid-looking) ID numbers at the office kiosk lock the row (through the API): the
+ * short code is typed in the office computer's own cookie-less context (a staff cookie there is
+ * refused). Neither code is ever printed.
+ */
 async function lockAtKiosk(employeeId: string, assignmentId: string) {
   const opened = await api.post(`/api/assignments/${assignmentId}/kiosk`);
   expect(opened.status()).toBe(201);
-  const { code } = (await opened.json()) as { code: string };
+  const { shortCode } = (await opened.json()) as { shortCode: string };
   const kiosk = await request.newContext({ baseURL: BASE_URL });
+  const entered = await kiosk.post('/api/kiosk/code', { data: { code: shortCode } });
+  expect(entered.status()).toBe(200);
+  const { code } = (await entered.json()) as { code: string };
   const realId = idNumbers.get(employeeId) ?? '';
   for (let attempt = 0; attempt < 5; attempt += 1) {
     let wrong = fakeIdNumber();
@@ -378,9 +399,79 @@ test('manager: a row locked with no unlocks left → "טיפול במשרד" →
   expect((await roundRow(people.fixed)).status).toBe('sent');
 });
 
-test('officer: manual handling says "no permission"', async ({ page }) => {
+test('manager: the office kiosk code in a dialog, typed on a second browser at /kiosk', async ({
+  page,
+  browser,
+}) => {
+  // The row locked for good (previous test): the kiosk opens with its own 5 attempts (D2).
+  await logIn(page, 'manager@doc-signing.local', seedPassword());
+  await expect(page.getByRole('heading', { level: 1, name: 'לוח בקרה' })).toBeVisible();
+  await page.goto(`/manual?roundId=${round.id}&kind=locked`);
+  await expect(table(page).locator('tbody tr')).toHaveCount(1);
+  const before = page.url();
+  await menuOf(page, 0).click();
+  await page.getByRole('menuitem', { name: /חתימה במחשב המשרד/ }).click();
+  const dialog = page.getByRole('dialog', { name: `חתימה במשרד: ${nameOf(0)}` });
+  await dialog.getByRole('button', { name: 'חתימה במחשב המשרד' }).click();
+  const shown = dialog.getByText(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  await expect(shown).toBeVisible();
+  await expect(dialog).toContainText(/בתוקף עד \d{2}:\d{2}/);
+  await expect(dialog).toContainText('/kiosk');
+  await expect(dialog).toContainText('5 ניסיונות משלו');
+  await screen(page, 'd-1-kiosk-code', [shown]);
+  // Kept in memory only: not printed, not in the address or the browser's storage.
+  const shortCode = (await shown.textContent()) ?? '';
+  expect(page.url()).toBe(before);
+  const stored = String(
+    await page.evaluate('JSON.stringify([{ ...localStorage }, { ...sessionStorage }])'),
+  );
+  expect(stored.includes(shortCode)).toBe(false);
+  await dialog.getByRole('button', { name: 'סגירה' }).click();
+  await expect(dialog).toHaveCount(0);
+
+  // The manager's own browser (signed in) is refused on the kiosk routes.
+  const refused = await page.request.post('/api/kiosk/code', { data: { code: shortCode } });
+  expect(refused.status()).toBe(409);
+  expect(((await refused.json()) as { error: { code: string } }).error.code).toBe(
+    'KIOSK_STAFF_SIGNED_IN',
+  );
+
+  // The office computer: a separate browser with no staff user; the code still works.
+  const office = await browser.newContext({ baseURL: BASE_URL });
+  try {
+    const kioskPage = await office.newPage();
+    const calls: string[] = [];
+    kioskPage.on('request', (sent) => {
+      if (sent.url().startsWith(`${BASE_URL}/api/`)) calls.push(`${sent.method()} ${sent.url()}`);
+    });
+    await kioskPage.goto('/kiosk');
+    await expect(kioskPage.getByRole('heading', { level: 1, name: 'חתימה במשרד' })).toBeVisible();
+    await kioskPage.getByRole('textbox', { name: 'קוד' }).fill(shortCode.toLowerCase());
+    await kioskPage.getByRole('button', { name: 'המשך' }).click();
+    await expect(kioskPage.getByText('הקוד התקבל.')).toBeVisible();
+    await screen(kioskPage, 'd-2-kiosk-page');
+    expect(kioskPage.url()).toBe(`${BASE_URL}/kiosk`);
+    expect(calls).toEqual([`POST ${BASE_URL}/api/kiosk/code`, `POST ${BASE_URL}/api/kiosk/state`]);
+
+    // One use: typing it again is refused in Hebrew.
+    await kioskPage.getByRole('button', { name: 'הקלדת קוד אחר' }).click();
+    await kioskPage.getByRole('textbox', { name: 'קוד' }).fill(shortCode);
+    await kioskPage.getByRole('button', { name: 'המשך' }).click();
+    await expect(kioskPage.getByRole('alert')).toContainText('הקוד שגוי או שאינו בתוקף');
+  } finally {
+    await office.close();
+  }
+  // Her row and its lock are as they were.
+  expect(await roundRow(people.fixed)).toMatchObject({ status: 'sent', unlocksLeft: 0 });
+});
+
+test('officer: manual handling says "no permission"; the approvals tab opens', async ({ page }) => {
   await logIn(page, 'officer@doc-signing.local', seedPassword());
   await expect(page.getByRole('heading', { level: 1, name: 'לוח בקרה' })).toBeVisible();
   await page.goto('/manual');
   await expect(page.getByRole('heading', { level: 1, name: 'אין לך הרשאה' })).toBeVisible();
+  await page.goto('/manual/approvals');
+  await expect(page.getByRole('heading', { level: 1, name: 'ממתינים לאישור' })).toBeVisible();
+  await expect(page.getByRole('tablist')).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'מסמכים שממתינים לאישור' })).toBeVisible();
 });

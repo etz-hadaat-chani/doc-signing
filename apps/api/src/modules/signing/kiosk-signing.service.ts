@@ -1,15 +1,24 @@
-import type {
-  SignFitInput,
-  SignFitResult,
-  SignFormResult,
-  SignLinkStateResult,
-  SignRateScope,
-  SignSubmitInput,
-  SignSubmittedResult,
+import {
+  isKioskShortCodeShape,
+  type KioskCodeEntered,
+  normalizeKioskShortCode,
+  type SignFitInput,
+  type SignFitResult,
+  type SignFormResult,
+  type SignLinkStateResult,
+  type SignRateScope,
+  type SignSubmitInput,
+  type SignSubmittedResult,
 } from '@doc-signing/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { hashSigningToken, isSigningTokenShape } from '../../common/email/signing-token.js';
+import { AuditService } from '../../common/audit/audit.service.js';
+import {
+  hashSigningToken,
+  isSigningTokenShape,
+  newSigningToken,
+} from '../../common/email/signing-token.js';
 import { AppException } from '../../common/errors/app.exception.js';
+import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { SettingsService } from '../../common/settings/settings.service.js';
 import { type KioskAccessRow, KioskRepository } from './kiosk.repository.js';
 import { kioskState, linkStateError } from './link-state.js';
@@ -31,8 +40,12 @@ function kioskAccess(row: KioskAccessRow): SigningAccess {
     roundId: row.roundId,
     kioskSessionId: row.kioskSessionId,
     handledById: row.openedById,
+    ownAttempts: row.ownAttempts,
   };
 }
+
+/** The bucket of wrong short codes from every IP together: counted under no IP. */
+const ALL_IPS = null;
 
 /**
  * The office signing station (3.16, FR-MAN-4): the same signing steps as a link, reached with
@@ -44,12 +57,65 @@ function kioskAccess(row: KioskAccessRow): SigningAccess {
 @Injectable()
 export class KioskSigningService {
   constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
     private readonly kiosks: KioskRepository,
     private readonly rateLimit: SigningRateLimitService,
     private readonly sessions: SigningSessionService,
     private readonly settings: SettingsService,
     private readonly steps: SigningStepsService,
   ) {}
+
+  /**
+   * `POST /api/kiosk/code` (5.7): the short code typed on the office computer → the long code
+   * for `state` / `verify` (in the answer only; the page keeps it in memory). One use: the trade
+   * marks it typed, sets the long code's hash and gives the ID step its own
+   * `KIOSK_CODE_MINUTES`. Limits: every try per IP (loose: the office computers may share one
+   * public IP), wrong ones per IP (tight) and wrong ones from every IP together. A wrong, used,
+   * replaced, old or badly shaped code → 404, counted and audited, never what was typed.
+   */
+  async enterCode(typed: string, client: SigningClient): Promise<KioskCodeEntered> {
+    await this.rateLimit.hit(['all', 'kiosk_code'], client.ip);
+    await this.rateLimit.assertUnder('kiosk_code_wrong_ip', client.ip);
+    await this.rateLimit.assertUnder('kiosk_code_wrong', ALL_IPS);
+    const shortCode = normalizeKioskShortCode(typed);
+    const waiting = isKioskShortCodeShape(shortCode)
+      ? await this.kiosks.findWaitingShortCode(hashSigningToken(shortCode))
+      : null;
+    const code = newSigningToken();
+    const entered =
+      waiting !== null &&
+      (await this.prisma.$transaction(async (tx) => {
+        const redeemed = await this.kiosks.redeemShortCode(
+          waiting.kioskSessionId,
+          hashSigningToken(code),
+          tx,
+        );
+        if (!redeemed) return false;
+        await this.audit.record(
+          {
+            actor: { type: 'employee' },
+            action: 'kiosk.code_entered',
+            entity: { type: 'assignment', id: waiting.assignmentId },
+            ip: client.ip,
+            details: { roundId: waiting.roundId, kioskSessionId: waiting.kioskSessionId },
+          },
+          tx,
+        );
+        return true;
+      }));
+    if (entered) return { code };
+    await this.audit.record({
+      actor: { type: 'employee' },
+      action: 'kiosk.code_failed',
+      entity: { type: 'assignment', id: null },
+      ip: client.ip,
+      details: {},
+    });
+    await this.rateLimit.add('kiosk_code_wrong_ip', client.ip);
+    await this.rateLimit.add('kiosk_code_wrong', ALL_IPS);
+    throw kioskGone();
+  }
 
   /** `POST /api/kiosk/state`: the state and the HR contact, nothing about her. */
   async state(code: string, client: SigningClient): Promise<SignLinkStateResult> {

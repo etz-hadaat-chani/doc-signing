@@ -198,13 +198,21 @@ function ApprovalButtons({ assignmentId }: { assignmentId: string }) {
   );
 }
 
+/**
+ * The row the panel opens for: a round table row (A4), or an approvals-tab row (A10), which has
+ * no `returned`: after a return there, "send again" shows and the API answers a 409 with the
+ * correction round's link if one exists.
+ */
+export type AnswersRow = Pick<AssignmentRow, 'assignmentId' | 'firstName' | 'lastName'> &
+  Partial<Pick<AssignmentRow, 'returned'>>;
+
 function ApprovalState({
   data,
   row,
   isManager,
 }: {
   data: AssignmentResponses;
-  row: AssignmentRow;
+  row: AnswersRow;
   isManager: boolean;
 }) {
   if (data.returnedAt !== null) {
@@ -228,7 +236,10 @@ function ApprovalState({
               </Link>
             </Typography>
           ) : (
-            isManager && canSendAgain(row) && <SendAgainButton assignmentId={row.assignmentId} />
+            isManager &&
+            (row.returned === undefined || canSendAgain({ returned: row.returned })) && (
+              <SendAgainButton assignmentId={row.assignmentId} />
+            )
           )}
         </Box>
       </Alert>
@@ -246,7 +257,7 @@ function ApprovalState({
   return null;
 }
 
-function PanelBody({ row, isManager }: { row: AssignmentRow; isManager: boolean }) {
+function PanelBody({ row, isManager }: { row: AnswersRow; isManager: boolean }) {
   const answers = useQuery({
     queryKey: answersKeys.one(row.assignmentId),
     queryFn: ({ signal }) => fetchResponses(row.assignmentId, signal),
@@ -287,7 +298,7 @@ export function AnswersPanel({
   isManager,
   onClose,
 }: {
-  row: AssignmentRow | null;
+  row: AnswersRow | null;
   isManager: boolean;
   onClose: () => void;
 }) {

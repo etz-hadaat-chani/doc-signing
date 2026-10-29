@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { KIOSK_CODE_MINUTES, kioskCodeSchema, kioskVerifySchema } from './kiosk.js';
+import {
+  formatKioskShortCode,
+  isKioskShortCodeShape,
+  KIOSK_CODE_MINUTES,
+  KIOSK_SHORT_CODE_ALPHABET,
+  kioskCodeSchema,
+  kioskVerifySchema,
+  normalizeKioskShortCode,
+} from './kiosk.js';
 import { SIGN_SESSION_MINUTES } from './signing.js';
 
 const CODE = 'a'.repeat(43);
@@ -27,5 +35,29 @@ describe('kiosk schemas', () => {
 
   it('a kiosk code lives shorter than the signing session it opens', () => {
     expect(KIOSK_CODE_MINUTES).toBeLessThanOrEqual(SIGN_SESSION_MINUTES);
+  });
+});
+
+describe('the office short code', () => {
+  it('reads as typed: any case, spaces and hyphens ignored', () => {
+    expect(normalizeKioskShortCode(' abcd-efgh ')).toBe('ABCDEFGH');
+    expect(normalizeKioskShortCode('AB CD	EF-GH')).toBe('ABCDEFGH');
+  });
+
+  it('has 8 characters of the alphabet, without look-alikes', () => {
+    expect(isKioskShortCodeShape('ABCDEFGH')).toBe(true);
+    expect(isKioskShortCodeShape('23456789')).toBe(true);
+    expect(isKioskShortCodeShape('ABCDEFG')).toBe(false);
+    expect(isKioskShortCodeShape('ABCDEFGHJ')).toBe(false);
+    for (const lookAlike of ['0', 'O', '1', 'I', 'L']) {
+      expect(KIOSK_SHORT_CODE_ALPHABET).not.toContain(lookAlike);
+      expect(isKioskShortCodeShape(`ABCDEFG${lookAlike}`)).toBe(false);
+    }
+    expect(isKioskShortCodeShape('abcdefgh')).toBe(false);
+  });
+
+  it('shows as two groups of four, which reads back as the same code', () => {
+    expect(formatKioskShortCode('ABCDEFGH')).toBe('ABCD-EFGH');
+    expect(normalizeKioskShortCode(formatKioskShortCode('ABCDEFGH'))).toBe('ABCDEFGH');
   });
 });

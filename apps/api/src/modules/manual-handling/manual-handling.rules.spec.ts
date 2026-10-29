@@ -2,6 +2,7 @@ import { ASSIGNMENT_STATUSES, type AssignmentStatus, type RoundStatus } from '@d
 import { describe, expect, it } from 'vitest';
 import type { ActionRound } from '../rounds/round-actions.rules.js';
 import {
+  kioskOwnAttempts,
   kioskRefusal,
   manualDocumentRefusal,
   manualSendRefusal,
@@ -120,25 +121,43 @@ describe('manualDocumentRefusal', () => {
 
 describe('kioskRefusal', () => {
   const past = round({ linkExpiresAt: new Date('2026-10-01T00:00:00.000Z') });
+  const open = { locked: false, unlocksLeft: 2 };
+  const locked = (unlocksLeft: number) => ({ locked: true, unlocksLeft });
 
   it.each<AssignmentStatus>(['pending', 'sent', 'opened', 'no_email', 'invalid_email'])(
     '%s may open the kiosk, also after the link expired',
     (status) => {
-      expect(kioskRefusal(status, false, round())).toBeNull();
-      expect(kioskRefusal(status, false, past)).toBeNull();
+      expect(kioskRefusal(status, open, round())).toBeNull();
+      expect(kioskRefusal(status, open, past)).toBeNull();
     },
   );
 
-  it('a locked row is unlocked first', () => {
-    expect(kioskRefusal('sent', true, round())).toEqual({ code: 'ASSIGNMENT_LOCKED' });
+  it('a locked row that can still be unlocked is unlocked first', () => {
+    expect(kioskRefusal('sent', locked(2), round())).toEqual({ code: 'ASSIGNMENT_LOCKED' });
+    expect(kioskRefusal('sent', locked(1), round())).toEqual({ code: 'ASSIGNMENT_LOCKED' });
+  });
+
+  it('a row locked for good (no unlocks left, or the link expired) opens (D2)', () => {
+    expect(kioskRefusal('sent', locked(0), round())).toBeNull();
+    expect(kioskRefusal('opened', locked(2), past)).toBeNull();
+    expect(kioskRefusal('no_email', locked(0), past)).toBeNull();
   });
 
   it('signed, cancelled, missing data and closed rounds first, like print', () => {
-    expect(kioskRefusal('signed', true, round())?.code).toBe('ASSIGNMENT_ALREADY_SIGNED');
-    expect(kioskRefusal('signed_manual', false, round())?.code).toBe('ASSIGNMENT_ALREADY_SIGNED');
-    expect(kioskRefusal('cancelled', true, round())?.code).toBe('ASSIGNMENT_ALREADY_CANCELLED');
-    expect(kioskRefusal('missing_data', false, round())?.code).toBe('ASSIGNMENT_NOT_PRINTABLE');
-    expect(kioskRefusal('sent', false, round({ status: 'closed' }))?.code).toBe('ROUND_NOT_OPEN');
-    expect(kioskRefusal('sent', false, round({ status: 'draft' }))?.code).toBe('ROUND_NOT_SENT');
+    expect(kioskRefusal('signed', locked(0), round())?.code).toBe('ASSIGNMENT_ALREADY_SIGNED');
+    expect(kioskRefusal('signed_manual', open, round())?.code).toBe('ASSIGNMENT_ALREADY_SIGNED');
+    expect(kioskRefusal('cancelled', locked(0), round())?.code).toBe(
+      'ASSIGNMENT_ALREADY_CANCELLED',
+    );
+    expect(kioskRefusal('missing_data', open, round())?.code).toBe('ASSIGNMENT_NOT_PRINTABLE');
+    expect(kioskRefusal('sent', open, round({ status: 'closed' }))?.code).toBe('ROUND_NOT_OPEN');
+    expect(kioskRefusal('sent', open, round({ status: 'draft' }))?.code).toBe('ROUND_NOT_SENT');
+  });
+});
+
+describe('kioskOwnAttempts', () => {
+  it('only a locked row gets its own attempts; an open one shares the link count', () => {
+    expect(kioskOwnAttempts({ locked: true, unlocksLeft: 0 })).toBe(true);
+    expect(kioskOwnAttempts({ locked: false, unlocksLeft: 2 })).toBe(false);
   });
 });

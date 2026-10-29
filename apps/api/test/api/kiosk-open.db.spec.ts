@@ -4,7 +4,14 @@ import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaService } from '../../src/common/prisma/prisma.service.js';
 import { createTestApp } from '../setup/app.js';
-import { kioskServer, kioskVerified, openKiosk, postOpenKiosk } from '../setup/kiosk.js';
+import {
+  enterKioskCode,
+  kioskServer,
+  kioskVerified,
+  openKiosk,
+  openKioskShort,
+  postOpenKiosk,
+} from '../setup/kiosk.js';
 import { errorOf, postAction } from '../setup/round-actions.js';
 import { type RoundsWorld, seedRoundsWorld } from '../setup/rounds.js';
 import { type SigningRound, signingRound } from '../setup/signing.js';
@@ -43,24 +50,35 @@ const setRow = (assignmentId: string, data: object) =>
 const stateOf = (code: string) => kioskServer(app).post('/api/kiosk/state').send({ code });
 
 describe('POST /api/assignments/:id/kiosk', () => {
-  it('opens a 10-minute one-time code; only its hash is stored; logged without it', async () => {
+  it('opens a 10-minute one-time short code; only its hash is stored; logged without it', async () => {
     const { assignmentId } = person('1001');
     const before = Date.now();
-    const opened = await openKiosk(app, assignmentId, world.managerCookie);
+    const opened = await openKioskShort(app, assignmentId, world.managerCookie);
     expect(opened.assignmentId).toBe(assignmentId);
     expect(opened.kioskPath).toBe('/kiosk');
-    expect(opened.code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(opened.shortCode).toMatch(/^[A-HJKMNP-Z2-9]{8}$/);
+    expect(Object.keys(opened).sort()).toEqual([
+      'assignmentId',
+      'expiresAt',
+      'kioskPath',
+      'shortCode',
+    ]);
     const minutes = (new Date(opened.expiresAt).getTime() - before) / 60_000;
     expect(minutes).toBeGreaterThan(9.9);
     expect(minutes).toBeLessThan(10.1);
 
     const [row] = await prisma.kioskSession.findMany({ where: { assignmentId } });
     expect(row).toMatchObject({
-      codeHash: sha256(opened.code),
+      shortCodeHash: sha256(opened.shortCode),
+      shortCodeUsedAt: null,
       openedById: world.managerId,
+      ownAttempts: false,
+      failedAttempts: 0,
       usedAt: null,
       endedAt: null,
     });
+    // The long code is not known before the short code is typed.
+    expect(row?.codeHash).not.toBe(sha256(opened.shortCode));
     const audit = await prisma.auditLog.findFirstOrThrow({
       where: { action: 'assignment.kiosk_opened' },
     });
@@ -75,10 +93,15 @@ describe('POST /api/assignments/:id/kiosk', () => {
       kioskSessionId: row?.id,
       expiresAt: opened.expiresAt,
       replaced: 0,
+      ownAttempts: false,
     });
-    expect(JSON.stringify(audit.details)).not.toContain(opened.code);
+    expect(JSON.stringify(audit.details)).not.toContain(opened.shortCode);
 
-    const state = await stateOf(opened.code);
+    const code = await enterKioskCode(app, opened.shortCode);
+    const traded = await prisma.kioskSession.findUniqueOrThrow({ where: { id: row?.id } });
+    expect(traded.codeHash).toBe(sha256(code));
+    expect(traded.shortCodeUsedAt).not.toBeNull();
+    const state = await stateOf(code);
     expect(state.status).toBe(200);
     expect(state.body).toEqual({ state: 'valid', hrContact: expect.any(Object) as object });
   });
@@ -98,7 +121,7 @@ describe('POST /api/assignments/:id/kiosk', () => {
     },
   );
 
-  it('a locked row is unlocked first (the logged unlock), then opens', async () => {
+  it('a locked row with an unlock left is unlocked first (the logged unlock), then opens', async () => {
     const { assignmentId } = person('1001');
     await setRow(assignmentId, { lockedAt: new Date(), failedAttempts: 5 });
     const locked = await postOpenKiosk(app, assignmentId, world.managerCookie);
@@ -113,6 +136,45 @@ describe('POST /api/assignments/:id/kiosk', () => {
     );
     expect(unlocked.status).toBe(200);
     await openKiosk(app, assignmentId, world.managerCookie);
+    const rows = await prisma.kioskSession.findMany({ where: { assignmentId } });
+    expect(rows.map(({ ownAttempts }) => ownAttempts)).toEqual([false]);
+  });
+
+  it('a row locked for good opens with its own attempts (D2): no unlock left, or expired', async () => {
+    const { assignmentId } = person('1001');
+    const lock = () => setRow(assignmentId, { lockedAt: new Date(), failedAttempts: 5 });
+    for (let unlock = 0; unlock < 2; unlock += 1) {
+      await lock();
+      const unlocked = await postAction(
+        app,
+        `/api/assignments/${assignmentId}/unlock`,
+        world.managerCookie,
+      );
+      expect(unlocked.status).toBe(200);
+    }
+    await lock();
+    const opened = await openKiosk(app, assignmentId, world.managerCookie);
+    expect((await stateOf(opened.code)).body).toMatchObject({ state: 'valid' });
+    const row = await prisma.kioskSession.findFirstOrThrow({ where: { endedAt: null } });
+    expect(row.ownAttempts).toBe(true);
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'assignment.kiosk_opened' },
+    });
+    expect(audit.details).toMatchObject({ ownAttempts: true });
+    // Her row stays locked; the link's count is unchanged.
+    expect(
+      await prisma.assignment.findUniqueOrThrow({ where: { id: assignmentId } }),
+    ).toMatchObject({ failedAttempts: 5, lockedAt: expect.any(Date) as Date });
+
+    // The other employee: locked with unlocks left, but the link expired (no unlock possible).
+    const other = person('1002');
+    await setRow(other.assignmentId, { lockedAt: new Date(), failedAttempts: 5 });
+    await prisma.round.update({
+      where: { id: round.roundId },
+      data: { linkExpiresAt: new Date(Date.now() - 60_000) },
+    });
+    const expired = await openKiosk(app, other.assignmentId, world.managerCookie);
+    expect((await stateOf(expired.code)).body).toMatchObject({ state: 'valid' });
   });
 
   it('refuses rows that are done, have nothing saved, or whose round is over', async () => {

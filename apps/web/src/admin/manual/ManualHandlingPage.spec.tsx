@@ -1,6 +1,6 @@
-import { errorMessage, MAX_UNLOCKS, NO_EMAIL_REASONS } from '@doc-signing/shared';
+import { errorMessage, formatTime, MAX_UNLOCKS, NO_EMAIL_REASONS } from '@doc-signing/shared';
 import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { he } from '../../i18n/he';
 import { apiErrorResponse, jsonResponse, stubApi } from '../../test/fetch-stub';
 import { managerUser, meAnswer, officerUser, renderRoutes } from '../../test/render';
@@ -301,5 +301,75 @@ describe('ManualHandlingPage (A10)', () => {
     )?.[1]?.body;
     expect(body).toBeInstanceOf(FormData);
     expect((body as FormData).get('file')).toBe(file);
+  });
+
+  it('office kiosk: asks first, then shows the short code, until when and where; nothing kept', async () => {
+    const path = `POST /api/assignments/${noEmail.assignmentId}/kiosk`;
+    const expiresAt = '2026-10-29T08:40:00.000Z';
+    const mock = stubPage({
+      [path]: () =>
+        jsonResponse(201, {
+          assignmentId: noEmail.assignmentId,
+          shortCode: 'ABCDEFGH',
+          expiresAt,
+          kioskPath: '/kiosk',
+        }),
+    });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const before = window.location.href;
+    const { user } = await openPage();
+    await openMenu(user, noEmail);
+    await user.click(screen.getByRole('menuitem', { name: text.kiosk.label }));
+    const title = text.kiosk.title(NAME(noEmail));
+    const ask = screen.getByRole('dialog', { name: title });
+    expect(urls(mock)).not.toContain(path);
+    await user.click(within(ask).getByRole('button', { name: text.kiosk.label }));
+
+    const shown = await screen.findByText('ABCD-EFGH');
+    const dialog = screen.getByRole('dialog', { name: title });
+    expect(within(dialog).getByText(text.kiosk.validUntil(formatTime(expiresAt)))).toBeVisible();
+    expect(
+      within(dialog).getByText(text.kiosk.instructions(`${window.location.origin}/kiosk`)),
+    ).toBeVisible();
+    expect(shown).toHaveAttribute('dir', 'ltr');
+    expect(urls(mock).filter((url) => url === path)).toHaveLength(1);
+    // Not in the address, browser storage or a notice.
+    expect(window.location.href).toBe(before);
+    expect(setItem).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    await user.click(within(dialog).getByRole('button', { name: text.kiosk.close }));
+    await waitFor(() => expect(screen.queryByText('ABCD-EFGH')).toBeNull());
+    setItem.mockRestore();
+  });
+
+  it('office kiosk on a row that can still be unlocked: unlock first, with the round link', async () => {
+    const path = `POST /api/assignments/${lockedOut.assignmentId}/kiosk`;
+    stubPage({ [path]: () => apiErrorResponse(409, 'ASSIGNMENT_LOCKED') });
+    const { user } = await openPage();
+    await openMenu(user, lockedOut);
+    await user.click(screen.getByRole('menuitem', { name: text.kiosk.label }));
+    const dialog = screen.getByRole('dialog', { name: text.kiosk.title(NAME(lockedOut)) });
+    await user.click(within(dialog).getByRole('button', { name: text.kiosk.label }));
+    expect(await within(dialog).findByText(new RegExp(text.kiosk.lockedFirst))).toBeVisible();
+    expect(within(dialog).getByRole('link', { name: text.kiosk.toRound })).toHaveAttribute(
+      'href',
+      `/rounds/${ROUND_ID}`,
+    );
+    expect(within(dialog).getByRole('button', { name: text.kiosk.label })).toBeDisabled();
+  });
+
+  it('a manager sees the two tabs of A10', async () => {
+    stubPage();
+    await openPage();
+    const tabs = screen.getByRole('tablist', { name: text.tabs.label });
+    expect(within(tabs).getByRole('tab', { name: text.tabs.list })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(within(tabs).getByRole('tab', { name: text.tabs.approvals })).toHaveAttribute(
+      'href',
+      '/manual/approvals',
+    );
   });
 });

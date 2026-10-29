@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module.js';
 import { PdfFillerModule } from '../pdf-filler/pdf-filler.module.js';
 import { TemplatesModule } from '../templates/templates.module.js';
 import { RateHitsRepository } from '../../common/rate-limit/rate-hits.repository.js';
+import { KioskNoStaffGuard } from './kiosk-no-staff.guard.js';
 import { KioskRepository } from './kiosk.repository.js';
 import { KioskSigningController } from './kiosk-signing.controller.js';
 import { KioskSigningService } from './kiosk-signing.service.js';
@@ -18,13 +20,14 @@ import { SigningStepsService } from './signing-steps.service.js';
  * /api/kiosk/* (3.16), both through the same `SigningStepsService`.
  */
 @Module({
-  imports: [PdfFillerModule, TemplatesModule],
+  imports: [AuthModule, PdfFillerModule, TemplatesModule],
   controllers: [SigningController, KioskSigningController],
   providers: [
     SigningService,
     SigningStepsService,
     KioskSigningService,
     KioskRepository,
+    KioskNoStaffGuard,
     SigningRepository,
     SigningRateLimitService,
     RateHitsRepository,

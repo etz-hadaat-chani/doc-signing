@@ -145,6 +145,9 @@ export const ERROR_MESSAGES = {
   SIGN_ACK_REQUIRED: 'יש לסמן שקראת את המסמך ושהחתימה שלך',
   // Office signing station (3.16): unknown, used, replaced or old code; one answer for all.
   KIOSK_CODE_NOT_FOUND: 'החתימה במשרד הסתיימה או אינה בתוקף. יש לבקש מהמנהל לפתוח אותה שוב',
+  // The office computer (5.7): no staff user may be signed in there.
+  KIOSK_STAFF_SIGNED_IN:
+    'במחשב הזה מחובר משתמש של צוות הניהול. החתימה במשרד נפתחת רק במחשב שאין בו משתמש מחובר',
   // Email provider notices (3.15): read by a machine; no hint why it was refused.
   WEBHOOK_UNAUTHORIZED: 'הבקשה לא אומתה',
   PAYLOAD_TOO_LARGE: 'הקובץ או הבקשה גדולים מדי',

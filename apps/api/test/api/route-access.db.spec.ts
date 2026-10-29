@@ -114,6 +114,7 @@ describe('every route declares who may call it', () => {
       'AuthController.login (POST /auth/login)',
       'HealthController.check (GET /health)',
       'KioskSigningController.document (GET /kiosk/document)',
+      'KioskSigningController.enterCode (POST /kiosk/code)',
       'KioskSigningController.fit (POST /kiosk/fit)',
       'KioskSigningController.form (GET /kiosk/form)',
       'KioskSigningController.state (POST /kiosk/state)',

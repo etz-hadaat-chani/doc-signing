@@ -75,17 +75,28 @@ export type SigningAccess =
       kioskSessionId: string;
       /** The manager who opened the kiosk: `handled_by` of the signature. */
       handledById: string;
+      /**
+       * Opened on a row locked for good (5.7 decision D2): the kiosk session counts its own wrong
+       * ID numbers and the row's lock doesn't stop it; her links stay locked.
+       */
+      ownAttempts: boolean;
     };
 
 /** The state of the assignment as this channel reads it. */
 export function accessState(access: SigningAccess, facts: LinkFacts): SignLinkState {
-  return access.channel === 'kiosk' ? kioskState(facts) : linkState(facts);
+  if (access.channel === 'link') return linkState(facts);
+  return kioskState(access.ownAttempts ? { ...facts, locked: false } : facts);
 }
 
 /** The ids every signing audit row carries: the link used, or the kiosk session. */
 function auditBase(access: SigningAccess) {
   return access.channel === 'kiosk'
-    ? { roundId: access.roundId, emailMessageId: null, kioskSessionId: access.kioskSessionId }
+    ? {
+        roundId: access.roundId,
+        emailMessageId: null,
+        kioskSessionId: access.kioskSessionId,
+        ownAttempts: access.ownAttempts,
+      }
     : { roundId: access.roundId, emailMessageId: access.emailMessageId };
 }
 
@@ -214,7 +225,10 @@ export class SigningStepsService {
       }
       if (typed === null) return { kind: 'bad_shape' };
       if (!idNumbersMatch(typed, locked.idNumber)) {
-        const failedAttempts = await this.repository.recordWrongAttempt(access.assignmentId, tx);
+        const failedAttempts =
+          access.channel === 'kiosk' && access.ownAttempts
+            ? await this.kiosks.recordWrongAttempt(access.kioskSessionId, tx)
+            : await this.repository.recordWrongAttempt(access.assignmentId, tx);
         const details = { ...base, failedAttempts };
         await this.audit.record(
           { actor, action: 'sign.verify_failed', entity, ip: client.ip, details },
@@ -407,6 +421,7 @@ export class SigningStepsService {
             signMethod: access.channel === 'kiosk' ? 'kiosk' : 'digital',
             handledById: access.channel === 'kiosk' ? access.handledById : null,
             fromStatuses: access.channel === 'kiosk' ? KIOSK_SIGNABLE_STATUSES : SIGNABLE_STATUSES,
+            allowLocked: access.channel === 'kiosk' && access.ownAttempts,
             signedAt: pdf.signedAt,
             fileKey: pdf.key,
             fileSha256: pdf.sha256,

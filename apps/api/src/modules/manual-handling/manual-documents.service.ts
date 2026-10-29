@@ -3,6 +3,7 @@ import {
   KIOSK_PAGE_PATH,
   type KioskOpened,
   MANUAL_SCAN_MAX_PAGES,
+  MAX_UNLOCKS,
   type ManualSigned,
   todayInIsrael,
 } from '@doc-signing/shared';
@@ -16,16 +17,20 @@ import { PdfAssetsService } from '../pdf-filler/pdf-assets.service.js';
 import { renderSavedDocument } from '../pdf-filler/saved-document.js';
 import type { ActionRound } from '../rounds/round-actions.rules.js';
 import { RoundActionsRepository } from '../rounds/round-actions.repository.js';
+import { newKioskShortCode } from '../signing/kiosk-short-code.js';
 import { KioskRepository } from '../signing/kiosk.repository.js';
 import { SignedFilesService } from '../signing/signed-files.service.js';
 import { toPosition } from '../templates/stored-position.js';
 import { TemplatesRepository } from '../templates/templates.repository.js';
 import type { TemplateActor } from '../templates/templates.service.js';
 import { type DocumentFacts, ManualHandlingRepository } from './manual-handling.repository.js';
-import { kioskRefusal, manualDocumentRefusal } from './manual-handling.rules.js';
+import { kioskOwnAttempts, kioskRefusal, manualDocumentRefusal } from './manual-handling.rules.js';
 
 /** Like the round actions (3.12): READ COMMITTED, the round row first. */
 const SIGN_TRANSACTION = { maxWait: 10_000, timeout: 30_000 } as const;
+
+/** New short codes tried when one clashes with a code still waiting (about 1 in 10^11 each). */
+const SHORT_CODE_TRIES = 3;
 
 const PDF_PROBLEMS = {
   invalid: 'INVALID_PDF_FILE',
@@ -165,47 +170,62 @@ export class ManualDocumentsService {
   }
 
   /**
-   * Opens the office signing station for one assignment (FR-MAN-4). One transaction under the
-   * round and row locks: the kiosk rule (the print statuses, also expired; locked → unlock
-   * first), every earlier kiosk session of the row ended (and its signing session), a new one
-   * with a one-time code (only its SHA-256 stored), one audit row without the code. The code
-   * goes back only in this answer, for the kiosk window (`/kiosk#<code>`).
+   * Opens the office signing station for one assignment (FR-MAN-4, 5.7). One transaction under
+   * the round and row locks: the kiosk rule (the print statuses, also expired; locked with an
+   * unlock left → unlock first; locked for good → its own 5 attempts, decision D2), every earlier
+   * kiosk session of the row ended (and its signing session), a new one with a short code (only
+   * its SHA-256 stored), one audit row without the code. The short code goes back only in this
+   * answer, for the manager's dialog; it is typed at `/kiosk` on the office computer.
    */
   async openKiosk(assignmentId: string, actor: TemplateActor): Promise<KioskOpened> {
     const roundId = await this.actions.roundOfAssignment(assignmentId);
     if (!roundId) throw new AppException('ASSIGNMENT_NOT_FOUND', HttpStatus.NOT_FOUND);
-    const code = newSigningToken();
     const opened = await this.prisma.$transaction(async (tx) => {
       const round = await this.actions.lockRound(roundId, tx);
       const row = await this.repository.lockState(assignmentId, tx);
       if (!round || !row) throw new Error('Assignment or round gone while opening the kiosk');
-      const refusal = kioskRefusal(row.status, row.locked, round);
+      const unlocksUsed = row.locked ? await this.actions.unlockCount(assignmentId, tx) : 0;
+      const lock = { locked: row.locked, unlocksLeft: Math.max(0, MAX_UNLOCKS - unlocksUsed) };
+      const refusal = kioskRefusal(row.status, lock, round);
       if (refusal) throw new AppException(refusal.code, HttpStatus.CONFLICT, refusal.details);
+      const ownAttempts = kioskOwnAttempts(lock);
       const replaced = await this.kiosks.endOpenOf(assignmentId, tx);
-      const session = await this.kiosks.create(
-        { assignmentId, codeHash: hashSigningToken(code), openedById: actor.userId },
-        tx,
-      );
-      await this.audit.record(
-        {
-          actor: { type: 'user', userId: actor.userId },
-          action: 'assignment.kiosk_opened',
-          entity: { type: 'assignment', id: assignmentId },
-          ip: actor.ip,
-          details: {
-            roundId,
-            kioskSessionId: session.id,
-            expiresAt: session.expiresAt.toISOString(),
-            replaced,
+      for (let tries = 0; tries < SHORT_CODE_TRIES; tries += 1) {
+        const shortCode = newKioskShortCode();
+        const session = await this.kiosks.create(
+          {
+            assignmentId,
+            codeHash: hashSigningToken(newSigningToken()),
+            shortCodeHash: hashSigningToken(shortCode),
+            openedById: actor.userId,
+            ownAttempts,
           },
-        },
-        tx,
-      );
-      return session;
+          tx,
+        );
+        if (!session) continue;
+        await this.audit.record(
+          {
+            actor: { type: 'user', userId: actor.userId },
+            action: 'assignment.kiosk_opened',
+            entity: { type: 'assignment', id: assignmentId },
+            ip: actor.ip,
+            details: {
+              roundId,
+              kioskSessionId: session.id,
+              expiresAt: session.expiresAt.toISOString(),
+              replaced,
+              ownAttempts,
+            },
+          },
+          tx,
+        );
+        return { shortCode, expiresAt: session.expiresAt };
+      }
+      throw new Error('No free kiosk short code');
     }, SIGN_TRANSACTION);
     return {
       assignmentId,
-      code,
+      shortCode: opened.shortCode,
       expiresAt: opened.expiresAt.toISOString(),
       kioskPath: KIOSK_PAGE_PATH,
     };

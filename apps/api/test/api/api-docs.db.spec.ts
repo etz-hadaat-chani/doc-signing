@@ -107,6 +107,7 @@ describe('Swagger page outside production', () => {
         'POST /api/webhooks/email',
         'GET /api/kiosk/document',
         'GET /api/kiosk/form',
+        'POST /api/kiosk/code',
         'POST /api/kiosk/fit',
         'POST /api/kiosk/state',
         'POST /api/kiosk/submit',

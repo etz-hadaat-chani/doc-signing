@@ -1,4 +1,7 @@
 import {
+  approvalRowSchema,
+  type ApprovalsQuery,
+  kioskOpenedSchema,
   type manualListQuerySchema,
   manualRowSchema,
   manualSentSchema,
@@ -23,11 +26,14 @@ export type ManualRequest = ManualFilters & { q?: string };
 export const manualKeys = {
   all: ['staff', 'manual'] as const,
   list: (request: ManualRequest) => ['staff', 'manual', 'list', request] as const,
+  /** The approvals tab: under `all`, so approve / return refetch it. */
+  approvals: (query: ApprovalsQuery) => ['staff', 'manual', 'approvals', query] as const,
 };
 
 const manualPageSchema = pagedSchema(manualRowSchema);
+const approvalsPageSchema = pagedSchema(approvalRowSchema);
 
-function queryString(filters: ManualFilters): string {
+function queryString(filters: ManualFilters | ApprovalsQuery): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined) continue;
@@ -78,5 +84,21 @@ export function uploadScan(id: string, file: File) {
     method: 'POST',
     body,
     schema: manualSignedSchema,
+  });
+}
+
+/**
+ * Opens the office signing station (managers): a new short code (the earlier one stops). The
+ * answer is kept only in the dialog that shows it, never in the data cache.
+ */
+export function openKiosk(id: string) {
+  return staffRequest(assignmentPath(id, 'kiosk'), { method: 'POST', schema: kioskOpenedSchema });
+}
+
+/** The documents waiting for approval (managers and officers): ids and paging only. */
+export function fetchApprovals(query: ApprovalsQuery, signal?: AbortSignal) {
+  return staffRequest(`/api/approvals?${queryString(query)}`, {
+    schema: approvalsPageSchema,
+    signal,
   });
 }
