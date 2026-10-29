@@ -99,6 +99,16 @@ describe('staff routes', () => {
     ]);
   });
 
+  it('shows "no permission" to an officer on the settings (no settings or image request)', async () => {
+    const fetchMock = stubApi({ 'GET /api/auth/me': meAnswer(officerUser) });
+    renderRoutes('/settings');
+    await pageTitle(he.feedback.noPermissionTitle);
+    expect(screen.queryByRole('form', { name: he.settings.title })).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([url]) => (typeof url === 'string' ? url : ''))).toEqual([
+      '/api/auth/me',
+    ]);
+  });
+
   it('lets an officer open the read-only pages', async () => {
     stubApi({ 'GET /api/auth/me': meAnswer(officerUser) });
     renderRoutes('/manual/approvals');

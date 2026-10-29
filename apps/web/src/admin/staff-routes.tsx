@@ -79,6 +79,9 @@ const PAGE_COMPONENTS: Partial<Record<string, ComponentType>> = {
       default: module.TemplatePositionsPage,
     })),
   ),
+  '/settings': lazy(() =>
+    import('./settings/SettingsPage').then((module) => ({ default: module.SettingsPage })),
+  ),
   ...(import.meta.env.DEV && {
     '/demo/components': lazy(() =>
       import('./demo/ComponentsDemoPage').then((module) => ({
