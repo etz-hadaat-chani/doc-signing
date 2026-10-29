@@ -15,7 +15,7 @@ import {
 } from '../templates.fixtures';
 
 // pdf.js needs a real browser (canvas, workers): the editor is tested with a stand-in.
-vi.mock('./pdf-document', () => ({
+vi.mock('../../../pdf/pdf-document', () => ({
   loadPdf: vi.fn(() =>
     Promise.resolve({
       pages: [

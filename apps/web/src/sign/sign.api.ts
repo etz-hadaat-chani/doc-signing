@@ -1,6 +1,6 @@
 import { signLinkStateResultSchema, type SignVerifiedResult } from '@doc-signing/shared';
 import { z } from 'zod';
-import { request } from '../api/http';
+import { request, requestBytes } from '../api/http';
 
 /**
  * The signing link's calls (3.13) through the plain request(): no staff code, no /api/auth/*.
@@ -26,4 +26,9 @@ export function verifyLink(token: string, idNumber: string) {
     body: { idNumber },
     schema: signVerifiedResultSchema,
   });
+}
+
+/** Her personalized PDF (B2); the signing session cookie goes with it (same site). */
+export function linkDocument(token: string, signal?: AbortSignal) {
+  return requestBytes(`${linkPath(token)}/document`, { signal });
 }

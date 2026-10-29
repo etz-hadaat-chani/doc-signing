@@ -1,11 +1,14 @@
 import { errorMessage, KIOSK_PAGE_PATH } from '@doc-signing/shared';
 import { cleanup, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { isSigningPath } from '../app/area';
 import { he } from '../i18n/he';
 import { apiErrorResponse, jsonResponse, stubApi } from '../test/fetch-stub';
+import { pdfResponse } from '../test/pdf-document-stub';
 import { renderRoutes } from '../test/render';
 import { signRoutes } from './sign-routes';
+
+vi.mock('../pdf/pdf-document', () => import('../test/pdf-document-stub'));
 
 /** A request's JSON body (the stub's `init`), or null. */
 const bodyOf = (init?: RequestInit): unknown =>
@@ -129,6 +132,7 @@ describe('/kiosk, the ID check (6.2, B1 on the office computer)', () => {
       'POST /api/kiosk/code': () => jsonResponse(200, { code: LONG }),
       'POST /api/kiosk/state': () => jsonResponse(200, { state: 'valid', hrContact: HR }),
       'POST /api/kiosk/verify': verify,
+      'GET /api/kiosk/document': pdfResponse,
     });
     const rendered = renderRoutes(KIOSK_PAGE_PATH, signRoutes);
     await rendered.user.type(
@@ -144,13 +148,13 @@ describe('/kiosk, the ID check (6.2, B1 on the office computer)', () => {
     return { mock, field, send };
   }
 
-  it('the long code and the number in the POST body; correct → the next step', async () => {
+  it('the long code and the number in the POST body; correct → the document', async () => {
     const { mock, send } = await atIdCheck(() =>
       jsonResponse(200, { sessionExpiresAt: '2026-10-29T10:15:00.000Z' }),
     );
     await send();
     expect(
-      await screen.findByRole('heading', { level: 1, name: he.sign.verified.title }),
+      await screen.findByRole('heading', { level: 1, name: he.sign.document.title }),
     ).toBeVisible();
     const verifyBodies = mock.mock.calls
       .filter(([url]) => url === '/api/kiosk/verify')
@@ -200,5 +204,59 @@ describe('/kiosk, the ID check (6.2, B1 on the office computer)', () => {
     await waitFor(() =>
       expect(field).toHaveAccessibleDescription(errorMessage('KIOSK_STAFF_SIGNED_IN')),
     );
+  });
+});
+
+describe('the signing bundle loads no staff code', () => {
+  // Every source file as text, keyed "/src/…" (Vite reads them; nothing is run).
+  const sources = import.meta.glob<string>('/src/**/*.{ts,tsx}', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+
+  /** Static `import … from`, `export … from`, side-effect `import '…'` and dynamic `import('…')`. */
+  const SPECIFIERS = /(?:\bfrom\s*|\bimport\s*\(?\s*)['"]([^'"]+)['"]/g;
+
+  function resolve(fromFile: string, specifier: string): string | null {
+    if (!specifier.startsWith('.')) return null; // a package (react, @mui, @doc-signing/shared …)
+    const bare = specifier.split('?')[0] ?? ''; // `?url`, `?raw`: still the same file
+    const base = new URL(bare, `http://x${fromFile}`).pathname;
+    const found = ['', '.ts', '.tsx', '/index.ts', '/index.tsx']
+      .map((ending) => base + ending)
+      .find((path) => path in sources);
+    return found ?? null;
+  }
+
+  /** Every file of ours reached from the signing area's entry. */
+  function reachedFrom(entry: string): Set<string> {
+    const seen = new Set<string>();
+    const queue = [entry];
+    while (queue.length > 0) {
+      const file = queue.pop() ?? '';
+      if (seen.has(file)) continue;
+      seen.add(file);
+      for (const [, specifier] of (sources[file] ?? '').matchAll(SPECIFIERS)) {
+        const next = specifier ? resolve(file, specifier) : null;
+        if (next) queue.push(next);
+      }
+    }
+    return seen;
+  }
+
+  // main.tsx loads the area with `import('./sign/SignApp')`.
+  const reached = reachedFrom('/src/sign/SignApp.tsx');
+
+  it('follows the imports (the shared PDF code is reached)', () => {
+    expect(reached.has('/src/sign/DocumentStep.tsx')).toBe(true);
+    expect(reached.has('/src/pdf/pdf-document.ts')).toBe(true);
+  });
+
+  it('reaches nothing under src/admin/ and no staff request', () => {
+    const staff = [...reached].filter((file) => file.startsWith('/src/admin/'));
+    expect(staff).toEqual([]);
+    for (const file of reached) {
+      expect(sources[file], file).not.toMatch(/\bstaffRequest(Bytes)?\b/);
+    }
   });
 });

@@ -13,11 +13,12 @@ import Typography from '@mui/material/Typography';
 import { type FormEvent, useRef, useState } from 'react';
 import { isApiRequestError } from '../api/api-error';
 import { he } from '../i18n/he';
+import { DocumentStep } from './DocumentStep';
+import { FormStepPlaceholder } from './FormStepPlaceholder';
 import type { VerifyOutcome } from './id-check-outcome';
 import { IdCheck } from './IdCheck';
-import { enterKioskCode, kioskState, verifyKiosk } from './kiosk.api';
+import { enterKioskCode, kioskDocument, kioskState, verifyKiosk } from './kiosk.api';
 import { MessagePage, type SignMessageKind } from './MessagePage';
-import { NextStepPlaceholder } from './NextStepPlaceholder';
 import { SignLayout } from './SignLayout';
 
 const text = he.sign.kiosk;
@@ -48,7 +49,8 @@ const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
  * idNumber }`. A kiosk session with its own 5 attempts (D2) answers the same 401 / 423; a 423
  * or an ended code shows "ask the manager". A staff user signed in on this computer gets the
  * API's 409 text. The long code is dropped once the ID is correct (the `kiosk_sid` cookie
- * carries the session from there).
+ * carries the session from there): B2 (6.3) reads the document with the cookie only. A session
+ * that ended there can't ask the ID again (the code is used up): "ask the manager".
  */
 export function KioskCodePage() {
   const [typed, setTyped] = useState('');
@@ -57,7 +59,8 @@ export function KioskCodePage() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SignLinkStateResult | null>(null);
   const [refused, setRefused] = useState<SignMessageKind | null>(null);
-  const [verified, setVerified] = useState(false);
+  // After the correct ID number: the document (B2), then the form.
+  const [step, setStep] = useState<'document' | 'form' | null>(null);
   // The long code: for the ID check only, never shown or stored.
   const kioskCode = useRef<string | null>(null);
 
@@ -90,6 +93,7 @@ export function KioskCodePage() {
 
   const again = () => {
     kioskCode.current = null;
+    setStep(null);
     setResult(null);
     setRefused(null);
     setFailure(null);
@@ -105,22 +109,30 @@ export function KioskCodePage() {
 
   const onVerified = () => {
     kioskCode.current = null;
-    setVerified(true);
+    setStep('document');
   };
 
   const onRefused = (outcome: Exclude<VerifyOutcome, { kind: 'retry' }>) => {
     kioskCode.current = null;
     setRefused(outcome.kind === 'gone' ? 'kioskCodeGone' : MESSAGE_OF[outcome.state]);
+    setStep(null);
   };
 
   const message = refused ?? (result && result.state !== 'valid' ? MESSAGE_OF[result.state] : null);
 
   return (
-    <SignLayout>
-      {verified ? (
-        <NextStepPlaceholder />
-      ) : result && message ? (
+    <SignLayout wide={step === 'document'}>
+      {result && message ? (
         <MessagePage kind={message} hrContact={result.hrContact} action={againButton} />
+      ) : step === 'document' ? (
+        <DocumentStep
+          load={kioskDocument}
+          onContinue={() => setStep('form')}
+          onSessionEnded={() => onRefused({ kind: 'gone' })}
+          onRefused={onRefused}
+        />
+      ) : step === 'form' ? (
+        <FormStepPlaceholder />
       ) : result ? (
         <Box sx={{ display: 'grid', gap: 3 }}>
           <IdCheck

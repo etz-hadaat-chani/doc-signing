@@ -22,7 +22,8 @@ import {
   type PositionNumber,
   readNumber,
 } from './editor-state';
-import { inFooter, type PageSize, pageProblem } from './pdf-geometry';
+import type { PageSize } from '../../../pdf/page-fit';
+import { inFooter, pageProblem } from './pdf-geometry';
 
 const text = he.templates.editor;
 

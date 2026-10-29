@@ -9,15 +9,16 @@ import { tokens } from '../theme/tokens';
 
 /**
  * The frame of every employee page (B1–B5, the office computer): the organization's name and
- * one calm white card, no staff header or menu. Larger text through `signTheme`.
+ * one calm white card, no staff header or menu. Larger text through `signTheme`. `wide`: the
+ * document screen (B2), where the pages need the room.
  */
-export function SignLayout({ children }: { children: ReactNode }) {
+export function SignLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   return (
     <ThemeProvider theme={signTheme}>
       <Box
         component="main"
         sx={{
-          maxWidth: tokens.sign.contentMaxWidth,
+          maxWidth: wide ? tokens.sign.documentMaxWidth : tokens.sign.contentMaxWidth,
           mx: 'auto',
           px: 2,
           py: { xs: 3, sm: 6 },

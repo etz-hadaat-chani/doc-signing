@@ -14,7 +14,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { PageLoader } from '../../../components/feedback/PageLoader';
 import { he } from '../../../i18n/he';
-import { usePdf } from '../../templates/editor/use-pdf';
+import { usePdf } from '../../../pdf/use-pdf';
 import { fetchPreviewCheck, fetchPreviewPdf, templateKeys } from '../../templates/templates.api';
 import { EmailPreview } from './EmailPreview';
 import { fullName } from './employee-columns';

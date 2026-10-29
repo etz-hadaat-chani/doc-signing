@@ -1,5 +1,5 @@
 import { kioskCodeEnteredSchema, signLinkStateResultSchema } from '@doc-signing/shared';
-import { request } from '../api/http';
+import { request, requestBytes } from '../api/http';
 import { signVerifiedResultSchema } from './sign.api';
 
 /**
@@ -32,4 +32,9 @@ export function verifyKiosk(code: string, idNumber: string) {
     body: { code, idNumber },
     schema: signVerifiedResultSchema,
   });
+}
+
+/** Her personalized PDF (B2) with the `kiosk_sid` cookie only: the long code is already dropped. */
+export function kioskDocument(signal?: AbortSignal) {
+  return requestBytes('/api/kiosk/document', { signal });
 }

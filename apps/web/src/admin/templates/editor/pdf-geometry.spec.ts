@@ -1,6 +1,6 @@
 import { TEMPLATE_FOOTER_HEIGHT } from '@doc-signing/shared';
 import { describe, expect, it } from 'vitest';
-import { footerRect, inFooter, pageProblem, scaleToFit, toPixels, toPoints } from './pdf-geometry';
+import { footerRect, inFooter, pageProblem, toPixels, toPoints } from './pdf-geometry';
 
 const a4 = { width: 595.28, height: 841.89 };
 
@@ -51,11 +51,5 @@ describe('page checks against pdf.js sizes', () => {
     expect(pageProblem({ ...box, x: 495.3 }, [a4])).toBe('outside_page');
     expect(pageProblem({ ...box, y: 830 }, [a4])).toBe('outside_page');
     expect(pageProblem({ ...box, page: 2 }, [a4])).toBe('page_not_found');
-  });
-
-  it('scales a page to the width available, at most 1.5', () => {
-    expect(scaleToFit(600, 300)).toBe(0.5);
-    expect(scaleToFit(600, 3000)).toBe(1.5);
-    expect(scaleToFit(600, 0)).toBe(1);
   });
 });

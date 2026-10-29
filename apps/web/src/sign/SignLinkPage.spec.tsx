@@ -3,8 +3,11 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { he } from '../i18n/he';
 import { apiErrorResponse, jsonResponse, stubApi } from '../test/fetch-stub';
+import { pdfResponse } from '../test/pdf-document-stub';
 import { renderRoutes } from '../test/render';
 import { signRoutes } from './sign-routes';
+
+vi.mock('../pdf/pdf-document', () => import('../test/pdf-document-stub'));
 
 /** A request's JSON body (the stub's `init`), or null. */
 const bodyOf = (init?: RequestInit): unknown =>
@@ -119,7 +122,11 @@ describe('/sign/:token, the ID check (6.2, B1)', () => {
   const VERIFIED = { sessionExpiresAt: '2026-10-29T10:15:00.000Z' };
 
   function openValid(verify: (init: RequestInit) => Response) {
-    const mock = stubApi({ ...stateAnswer('valid'), [`POST ${VERIFY_URL}`]: verify });
+    const mock = stubApi({
+      ...stateAnswer('valid'),
+      [`POST ${VERIFY_URL}`]: verify,
+      [`GET ${STATE_URL}/document`]: pdfResponse,
+    });
     return { mock, ...open() };
   }
 
@@ -203,11 +210,11 @@ describe('/sign/:token, the ID check (6.2, B1)', () => {
     expect(screen.queryByText(WRONG_ID)).toBeNull();
   });
 
-  it('the correct number: the next step, the field gone, the number only in the body', async () => {
+  it('the correct number: the document, the field gone, the number only in the body', async () => {
     const { mock, user } = openValid(() => jsonResponse(200, VERIFIED));
     await typeAndContinue(user, RIGHT_ID);
     expect(
-      await screen.findByRole('heading', { level: 1, name: he.sign.verified.title }),
+      await screen.findByRole('heading', { level: 1, name: he.sign.document.title }),
     ).toBeVisible();
     expect(screen.queryByRole('textbox')).toBeNull();
     const sent = mock.mock.calls

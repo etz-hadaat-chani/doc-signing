@@ -4,11 +4,12 @@ import { alpha } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { PageLoader } from '../../../components/feedback/PageLoader';
 import { he } from '../../../i18n/he';
-import type { LoadedPdf } from './pdf-document';
-import { footerRect, type PageSize, type PointBox, scaleToFit, toPixels } from './pdf-geometry';
-import { PdfPageCanvas } from './PdfPageCanvas';
-import type { PdfState } from './use-pdf';
-import { useWidth } from './use-width';
+import { type PageSize, scaleToFit } from '../../../pdf/page-fit';
+import type { LoadedPdf } from '../../../pdf/pdf-document';
+import { PdfPageCanvas } from '../../../pdf/PdfPageCanvas';
+import type { PdfState } from '../../../pdf/use-pdf';
+import { useWidth } from '../../../pdf/use-width';
+import { footerRect, type PointBox, toPixels } from './pdf-geometry';
 
 const text = he.templates.editor;
 

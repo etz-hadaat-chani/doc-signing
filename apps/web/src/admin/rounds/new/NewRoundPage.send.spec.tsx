@@ -31,7 +31,7 @@ import {
 } from './wizard.test-utils';
 
 // pdf.js needs a real browser (canvas, workers): the preview is tested with a stand-in.
-vi.mock('../../templates/editor/pdf-document', () => ({
+vi.mock('../../../pdf/pdf-document', () => ({
   loadPdf: vi.fn(() =>
     Promise.resolve({
       pages: [{ width: 595, height: 842 }],

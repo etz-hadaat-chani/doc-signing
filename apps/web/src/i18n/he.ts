@@ -1443,10 +1443,25 @@ export const he = {
           ? 'יותר מדי ניסיונות. יש לחכות דקה ולנסות שוב.'
           : `יותר מדי ניסיונות. יש לחכות ${minutes} דקות ולנסות שוב.`,
     },
-    /** After the correct ID number, until 6.3 builds the document view (B2). */
-    verified: {
-      title: 'הזהות אומתה',
-      text: 'הצגת המסמך תתווסף בשלב הבא.',
+    /** B2: the personalized document, read to the end before the next step. */
+    document: {
+      title: 'צפייה במסמך',
+      fillLater: 'את התיבות הריקות ואת פרטי האימייל ממלאים במסך הבא.',
+      label: 'המסמך',
+      pageLabel: (page: number, pages: number) => `עמוד ${page} מתוך ${pages}`,
+      continue: 'המשך לחתימה',
+      scrollHint: 'הכפתור יופעל אחרי גלילה עד סוף המסמך.',
+      sessionEnded: 'זמן החתימה הסתיים. יש להקליד שוב את מספר תעודת הזהות כדי להמשיך.',
+      wait: (minutes: number) =>
+        minutes <= 1
+          ? 'יש כרגע עומס. יש לחכות דקה ולנסות שוב.'
+          : `יש כרגע עומס. יש לחכות ${minutes} דקות ולנסות שוב.`,
+      retry: 'לנסות שוב',
+    },
+    /** After B2, until 6.4 builds the form and signature (B3). */
+    formPlaceholder: {
+      title: 'טופס וחתימה',
+      text: 'כאן יופיעו הטופס והחתימה (בשלב הבא).',
     },
     messages: {
       signed: {

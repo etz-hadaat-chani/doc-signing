@@ -276,7 +276,7 @@ Wherever a department is shown or picked (lists, filters, cards, wizard, exports
 | # | Screen | Main contents |
 | --- | --- | --- |
 | B1 | ID check (אימות זהות) | Short welcome, ID number field, Continue |
-| B2 | Document (צפייה במסמך) | The personalized PDF; the Sign button becomes active after scrolling to the end |
+| B2 | Document (צפייה במסמך) | The personalized PDF, every page; one line says the empty boxes and the email section are filled in on the next screen; the Sign button becomes active after scrolling to the end. A signing session that ended here asks the ID number again and returns to the document; at the office signing station it shows "ask the manager to open it again" (the code is single-use) |
 | B3 | Form and signature (טופס וחתימה) | For a correction: "תיקון נדרש: <note>" at the top. A short form above the pad: the boxes she fills in and the email section (email box pre-filled, or "no email, at the office"; exactly one), in the template's order, Hebrew labels and errors, small pads for drawing boxes; then the large drawing pad, Clear and Confirm buttons, reading statement checkbox |
 | B4 | Done (אישור) | "The document was signed. A copy was sent to your email." |
 | B5 | Messages | Link expired, already signed, locked, cancelled; each with HR contact details. An unknown link: "the link is not valid" (open the latest email). At the office signing station: locked or an ended code → "ask the manager for a new code" |

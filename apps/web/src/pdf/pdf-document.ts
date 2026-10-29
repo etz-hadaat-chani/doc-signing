@@ -1,6 +1,6 @@
 import { getDocument, GlobalWorkerOptions, RenderingCancelledException } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import type { PageSize } from './pdf-geometry';
+import type { PageSize } from './page-fit';
 
 // The worker is a file of our own build (same origin): CSP `worker-src 'self'` (7.2).
 GlobalWorkerOptions.workerSrc = workerUrl;

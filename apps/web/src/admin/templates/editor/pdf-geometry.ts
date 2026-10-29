@@ -1,10 +1,5 @@
 import { TEMPLATE_FOOTER_HEIGHT } from '@doc-signing/shared';
-
-/** A page's visible area (CropBox) in PDF points. */
-export interface PageSize {
-  width: number;
-  height: number;
-}
+import type { PageSize } from '../../../pdf/page-fit';
 
 /** A position's box in PDF points, from the CropBox's bottom-left corner (PRD §12). */
 export interface PointBox {
@@ -52,12 +47,6 @@ export function footerRect(page: PageSize, scale: number): PixelRect {
 
 /** Starts inside the footer strip: a "ready" reason on the server (POSITION_IN_FOOTER). */
 export const inFooter = (y: number) => y < TEMPLATE_FOOTER_HEIGHT;
-
-/** The scale that fits a page into the width available, at most `max` (1 = 72 px per inch). */
-export function scaleToFit(pageWidth: number, availableWidth: number, max = 1.5): number {
-  if (pageWidth <= 0 || availableWidth <= 0) return 1;
-  return Math.min(max, availableWidth / pageWidth);
-}
 
 /** Float sums like 495.28 + 100 may land a hair over 595.28 (the API allows the same). */
 const TOLERANCE = 1e-6;

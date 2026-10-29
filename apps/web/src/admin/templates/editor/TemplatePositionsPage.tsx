@@ -53,7 +53,7 @@ import {
 } from './editor-state';
 import { inFooter } from './pdf-geometry';
 import { type Outline, PdfPositionsView } from './PdfPositionsView';
-import { usePdf } from './use-pdf';
+import { usePdf } from '../../../pdf/use-pdf';
 import { useUnsavedGuard } from './use-unsaved-guard';
 
 const text = he.templates.editor;

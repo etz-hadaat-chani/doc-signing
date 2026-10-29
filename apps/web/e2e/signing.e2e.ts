@@ -2,7 +2,7 @@ import { type APIRequestContext, expect, type Page, request, test } from '@playw
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { seedPassword } from './helpers';
 
-// Tasks 6.1 + 6.2: the employee's signing pages (B5 messages, B1 ID check), for a link and for
+// Tasks 6.1 + 6.2 (+ 6.3: the right number opens the document, B2): the employee's signing pages (B5 messages, B1 ID check), for a link and for
 // the office computer. Needs `pnpm dev` (with the worker, so invitations reach Mailpit).
 // DANGER rules (nothing is ever deleted in this system):
 // - The template is built here (pdf-lib), named "בדיקה אוטומטית …", linked to an existing
@@ -27,7 +27,7 @@ const T = {
   idTitle: 'אימות זהות',
   idField: 'מספר תעודת זהות',
   submit: 'המשך',
-  verified: 'הזהות אומתה',
+  document: 'צפייה במסמך',
   locked: 'הגישה למסמך ננעלה',
   cancelled: 'המסמך בוטל',
   signed: 'המסמך כבר נחתם',
@@ -311,7 +311,7 @@ test('a valid link: the ID check, a wrong number shows the attempts left, the ri
   await screen(page, 'b1-2-wrong');
 
   await typeId(page, people.valid.idNumber);
-  await expect(page.getByRole('heading', { level: 1, name: T.verified })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: T.document })).toBeVisible();
   await screen(page, 'b1-3-verified');
   await checkPage(page, urls, [wrong, people.valid.idNumber]);
 });
@@ -436,7 +436,7 @@ test('the office computer: the short code, then the same ID check', async ({ pag
   await expect(idField(page)).toHaveAccessibleDescription(T.left(4));
   await screen(page, 'k-2-wrong');
   await typeId(page, people.kiosk.idNumber);
-  await expect(page.getByRole('heading', { level: 1, name: T.verified })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: T.document })).toBeVisible();
   await screen(page, 'k-3-verified');
   await checkPage(page, urls, [wrong, people.kiosk.idNumber, shortCode]);
 });

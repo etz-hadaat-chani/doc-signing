@@ -1,12 +1,10 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import { PageLoader } from '../../../components/feedback/PageLoader';
 import { he } from '../../../i18n/he';
-import { scaleToFit } from '../../templates/editor/pdf-geometry';
-import { PdfPageCanvas } from '../../templates/editor/PdfPageCanvas';
-import type { PdfState } from '../../templates/editor/use-pdf';
-import { useWidth } from '../../templates/editor/use-width';
+import { PdfPages } from '../../../pdf/PdfPages';
+import type { PdfState } from '../../../pdf/use-pdf';
+import { useWidth } from '../../../pdf/use-width';
 
 const texts = he.newRound.preview;
 
@@ -26,33 +24,7 @@ export function PdfDocumentView({ pdfState, failed }: { pdfState: PdfState; fail
   } else if (pdfState.status !== 'ready') {
     content = <PageLoader />;
   } else {
-    const { pdf } = pdfState;
-    content = pdf.pages.map((size, index) => {
-      const scale = scaleToFit(size.width, width);
-      return (
-        <Box component="figure" key={index} sx={{ m: 0 }}>
-          <Box
-            sx={{
-              width: size.width * scale,
-              height: size.height * scale,
-              bgcolor: 'common.white',
-              boxShadow: 1,
-            }}
-          >
-            <PdfPageCanvas pdf={pdf} number={index + 1} scale={scale} />
-          </Box>
-          <Typography
-            component="figcaption"
-            variant="body2"
-            color="text.secondary"
-            dir="rtl"
-            sx={{ mt: 0.5, mb: 2 }}
-          >
-            {texts.pageLabel(index + 1, pdf.pages.length)}
-          </Typography>
-        </Box>
-      );
-    });
+    content = <PdfPages pdf={pdfState.pdf} width={width} pageLabel={texts.pageLabel} />;
   }
   return (
     <Box
