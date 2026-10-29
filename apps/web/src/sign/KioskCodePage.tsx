@@ -2,6 +2,7 @@ import {
   isKioskShortCodeShape,
   KIOSK_SHORT_CODE_LENGTH,
   normalizeKioskShortCode,
+  type SignLinkState,
   type SignLinkStateResult,
 } from '@doc-signing/shared';
 import Alert from '@mui/material/Alert';
@@ -12,8 +13,9 @@ import Typography from '@mui/material/Typography';
 import { type FormEvent, useRef, useState } from 'react';
 import { isApiRequestError } from '../api/api-error';
 import { he } from '../i18n/he';
-import { tokens } from '../theme/tokens';
 import { enterKioskCode, kioskState } from './kiosk.api';
+import { MessagePage, type SignMessageKind } from './MessagePage';
+import { SignLayout } from './SignLayout';
 
 const text = he.sign.kiosk;
 
@@ -27,32 +29,13 @@ function failureText(error: unknown): string {
   return error.message;
 }
 
-function StateResult({ result }: { result: SignLinkStateResult }) {
-  if (result.state === 'valid') {
-    return (
-      <Alert severity="success">
-        <Typography sx={{ fontWeight: 700 }}>{text.accepted}</Typography>
-        <Typography>{text.nextStep}</Typography>
-      </Alert>
-    );
-  }
-  return (
-    <Alert severity="warning">
-      <Typography sx={{ fontWeight: 700 }}>{text.states[result.state]}</Typography>
-      <Typography>
-        <bdi>{text.hrContact(result.hrContact.name)}</bdi>
-        {[result.hrContact.phone, result.hrContact.email]
-          .filter((value) => value !== null)
-          .map((value) => (
-            <bdi key={value} dir="ltr">
-              {' '}
-              {value}
-            </bdi>
-          ))}
-      </Typography>
-    </Alert>
-  );
-}
+/** The B5 screen of a state that can't be signed here (a closed round reads "expired"). */
+const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
+  signed: 'signed',
+  cancelled: 'cancelled',
+  expired: 'kioskExpired',
+  locked: 'kioskLocked',
+};
 
 /**
  * `/kiosk` on the office computer (5.7, FR-MAN-4, decision D1): the short code the manager
@@ -103,28 +86,37 @@ export function KioskCodePage() {
     setFailure(null);
   };
 
+  const againButton = (
+    <Button variant="outlined" onClick={again}>
+      {text.again}
+    </Button>
+  );
+
   return (
-    <Box
-      component="main"
-      sx={{ maxWidth: tokens.layout.contentMaxWidth, mx: 'auto', p: { xs: 2, sm: 4 } }}
-    >
-      <Typography variant="h1" sx={{ mb: 2 }}>
-        {text.title}
-      </Typography>
-      {result ? (
-        <Box sx={{ display: 'grid', gap: 2, justifyItems: 'start' }}>
-          <StateResult result={result} />
-          <Button variant="outlined" onClick={again}>
-            {text.again}
-          </Button>
+    <SignLayout>
+      {result && result.state !== 'valid' ? (
+        <MessagePage
+          kind={MESSAGE_OF[result.state]}
+          hrContact={result.hrContact}
+          action={againButton}
+        />
+      ) : result ? (
+        <Box sx={{ display: 'grid', gap: 3, justifyItems: 'start' }}>
+          <Typography variant="h1">{text.title}</Typography>
+          <Alert severity="success" sx={{ width: '100%' }}>
+            {text.accepted}
+          </Alert>
+          <Typography>{he.sign.idCheckNext}</Typography>
+          {againButton}
         </Box>
       ) : (
         <Box
           component="form"
           noValidate
           onSubmit={(event) => void submit(event)}
-          sx={{ display: 'grid', gap: 2, maxWidth: 360 }}
+          sx={{ display: 'grid', gap: 3 }}
         >
+          <Typography variant="h1">{text.title}</Typography>
           <Typography>{text.intro}</Typography>
           <TextField
             label={text.field}
@@ -143,7 +135,7 @@ export function KioskCodePage() {
                 spellCheck: false,
                 autoCapitalize: 'characters',
                 maxLength: FIELD_MAX_LENGTH,
-                style: { fontFamily: 'monospace', fontSize: '1.5rem', letterSpacing: '0.1em' },
+                style: { fontFamily: 'monospace', fontSize: '1.75rem', letterSpacing: '0.1em' },
               },
             }}
           />
@@ -157,6 +149,6 @@ export function KioskCodePage() {
           </Button>
         </Box>
       )}
-    </Box>
+    </SignLayout>
   );
 }

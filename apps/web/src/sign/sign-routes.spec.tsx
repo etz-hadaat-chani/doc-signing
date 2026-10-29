@@ -21,12 +21,18 @@ describe('signing area', () => {
     expect(isSigningPath(pathname)).toBe(expected);
   });
 
-  it('never calls the staff session (no /api/auth/*)', async () => {
-    const fetchMock = stubApi({});
+  it('never calls the staff session (no /api/auth/*): only the link state', async () => {
+    const fetchMock = stubApi({
+      'GET /api/sign/abc': () =>
+        jsonResponse(200, {
+          state: 'signed',
+          hrContact: { name: 'משאבי אנוש', phone: null, email: 'hr@example.test' },
+        }),
+    });
     renderRoutes('/sign/abc', signRoutes);
 
-    await screen.findByRole('heading', { level: 1, name: he.sign.placeholderTitle });
-    expect(fetchMock).not.toHaveBeenCalled();
+    await screen.findByRole('heading', { level: 1, name: he.sign.messages.signed.title });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/sign/abc']);
   });
 
   it('the kiosk path is the shared one', () => {
@@ -61,7 +67,7 @@ describe('/kiosk (the office computer, 5.7)', () => {
     });
     await typeCode('abcd-efgh');
     expect(await screen.findByText(text.accepted)).toBeVisible();
-    expect(screen.getByText(text.nextStep)).toBeVisible();
+    expect(screen.getByText(he.sign.idCheckNext)).toBeVisible();
     expect(bodies(mock, '/api/kiosk/code')).toEqual([{ code: 'ABCDEFGH' }]);
     expect(bodies(mock, '/api/kiosk/state')).toEqual([{ code: LONG }]);
     expect(window.location.pathname + window.location.search + window.location.hash).toBe('/');
@@ -76,7 +82,9 @@ describe('/kiosk (the office computer, 5.7)', () => {
       'POST /api/kiosk/state': () => jsonResponse(200, { state: 'signed', hrContact: HR }),
     });
     await typeCode('ABCDEFGH');
-    expect(await screen.findByText(text.states.signed)).toBeVisible();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: he.sign.messages.signed.title }),
+    ).toBeVisible();
     expect(screen.getByText(HR.phone)).toBeVisible();
   });
 

@@ -926,10 +926,20 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
 
 ## Phase 6: Employee signing screens
 
-### [ ] 6.1 Signing pages and messages (B5)
+### [x] 6.1 Signing pages and messages (B5)
 - **Build:** `/sign/:token` checks link state; expired / signed / locked / cancelled messages with HR contact.
 - **Depends on:** 4.1, 3.13
 - **Done when:** Each state shows the right Hebrew message.
+- **Done (rules):**
+  - No API or `packages/shared` change. Routes (`sign/sign-routes.tsx`): `/sign/:token` → `SignLinkPage`; `/sign` and longer paths → `SignNotFoundPage` (no request); `/kiosk` unchanged. `SignPlaceholderPage` removed.
+  - `SignLinkPage`: one `GET /api/sign/:token` (`sign/sign.api.ts` `linkState`, plain `request()`, token through `encodeURIComponent`) in an effect with an `AbortController`; **no TanStack query** (the token never sits in the data cache, a focus never asks again). `PageLoader` → state: signed / cancelled / expired / locked → `MessagePage`; 404 → "הקישור אינו תקין" (no HR contact: the API gives none); no connection / other → `ErrorState` (`errorContent`) with "try again".
+  - `MessagePage` (B5): kinds `signed`, `cancelled`, `expired`, `locked`, `notFound` and the office computer's `kioskExpired` (closed round), `kioskLocked` ("ask the manager for a new code"), `kioskCodeGone`; an icon ("already signed" in the success color, the others calm grey, not error red), h1, one short line, the HR contact, an optional button; `role="status"`. `HrContact`: a region "לשאלות אפשר לפנות אל", the name, then "טלפון:" / "אימייל:" each LTR in a `<bdi>`, a null one left out.
+  - `SignLayout`: no staff header or menu; the organization and "חתימה על מסמך" centered on top, one white card (max 640 px), `<main>`, inside a nested `ThemeProvider` with `theme/sign-theme.ts` (`createTheme(theme, …)`): body / buttons / fields 20 px, h1 28, help and error lines 18, buttons and fields 56 px high. New token group `tokens.sign` (sizes only; no new colors, `tokens.spec` unchanged). `KioskCodePage` now uses the same layout and `MessagePage` for its states (its old `StateResult` and own state texts are gone).
+  - Texts `he.sign`: `areaName`, `messages.<kind>.title / text`, `hrContact`, `kiosk` (code page only). Valid shows `idCheckNext` until 6.2.
+  - Tests: web unit `SignLinkPage.spec` (10: the four states with title, text and contact, contact without phone / without email, 404, no connection + retry, `/sign` with no request, organization and no menu); `sign-routes.spec` (the `/sign/abc` test now allows exactly the state call and nothing under `/api/auth`; kiosk texts updated).
+- **Note for later tasks:**
+  - 6.2: replace `he.sign.idCheckNext` (link and kiosk) with B1; a 409 / 423 from verify shows `MessagePage` with the contact already read from the state answer.
+  - 6.3 / 6.4: wrap every new screen in `SignLayout` (it brings `signTheme`); sizes from `tokens.sign`. A 409 / 423 at any step → `MessagePage` by `details.state`.
 
 ### [ ] 6.2 ID check (B1)
 - **Build:** ID field, errors, locked state.

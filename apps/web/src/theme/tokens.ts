@@ -47,6 +47,11 @@ export const tokens = {
     activeBarWidth: 3,
   },
   control: { minHeight: 40, largeMinHeight: 44 },
+  /**
+   * The employee signing pages (phase 6, PRD §3): larger text and controls for a wide range of
+   * computer skills. Sizes in px; colors are the ones above.
+   */
+  sign: { titleSize: 28, bodySize: 20, smallSize: 18, controlMinHeight: 56, contentMaxWidth: 640 },
   /** `insetOffset` draws the ring inside, where an outer ring would be clipped (side menu). */
   focusRing: { width: 2, offset: 2, insetOffset: -2 },
 } as const;
