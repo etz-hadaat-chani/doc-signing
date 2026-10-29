@@ -920,7 +920,7 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
   - Phase 6 (B5 and every signing page): the HR contact comes from `GET /api/sign/:token` `hrContact` (`{ name, phone, email }`, phone or email may be null); a manager edits it on `/settings`.
   - 7.2 CSP: the employer image preview loads straight from the storage host (a presigned link, MinIO `localhost:9000` locally): `img-src` must allow that host, or the preview breaks.
   - 7.2 passwords (3.1 + 5.8): 10–128 characters, length only (shared `passwordSchema`, never trimmed; login accepts up to 1024). Disabling or resetting ends the user's sessions (a manager resetting their own keeps the current one). The screen sends passwords only in POST / PATCH bodies and keeps no copy (dialog state emptied, mutations `gcTime: 0` + `reset()`): when CSRF or request logging is added, keep request bodies out of every log (as for the signing `verify`).
-  - **E2E and a shared database:** `settings.e2e.ts` restores every value that differs from what it read at the start, so a manager's change made in the app while it runs is undone too. Run the e2e only when nobody is using the app on the same database (or narrow its cleanup to the keys the test itself changes).
+  - **E2E and a shared database:** `settings.e2e.ts` restores only the two values it changes (`reminderIntervalDays`, `reminderSkipDates`, when they differ from what it read at the start) and checks them, so other settings changed in the app while it runs are kept. A change to those two made meanwhile is still undone: run the e2e only when nobody is using the app on the same database.
 
 ---
 

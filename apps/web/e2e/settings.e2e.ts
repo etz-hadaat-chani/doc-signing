@@ -2,29 +2,23 @@ import { type APIRequestContext, expect, type Page, request, test } from '@playw
 import { logIn, seedPassword } from './helpers';
 
 // Task 5.8 (part A): the settings screen (A11).
-// DANGER: settings are global. Every value is read first and PATCHed back in afterAll (also after
-// a failure); afterAll then checks they all match what was read. The employer signature image is
-// NEVER uploaded here (it would become the image of every new document, and there is no delete):
-// only refusals. The successful upload is covered by the API db tests (test database).
+// DANGER: settings are global. The tests save only CHANGED_KEYS; afterAll PATCHes back just those
+// (also after a failure) and checks them, so any other change someone makes in the app meanwhile
+// is kept. The employer signature image is NEVER uploaded here (it would become the image of every
+// new document, and there is no delete): only refusals. The successful upload is covered by the API db tests (test database).
 
 const BASE_URL = 'http://localhost:5173';
 const SCREENS = 'test-results/settings';
 const SKIP_DAY = '15/03/2099';
-const SETTINGS_KEYS = [
-  'reminderIntervalDays',
-  'maxReminders',
-  'linkExpiryDays',
-  'senderName',
-  'hrContact',
-  'reminderSkipDates',
-] as const;
+/** The only values the tests here save (the other checks never reach a successful PATCH). */
+const CHANGED_KEYS = ['reminderIntervalDays', 'reminderSkipDates'] as const;
 
 // The Hebrew texts (the e2e files can't import @doc-signing/shared).
 const INVALID_PNG_FILE =
   'הקובץ אינו תמונת PNG תקינה. יש לשמור את התמונה מחדש בפורמט PNG ולהעלות שוב';
 const PHONE_OR_EMAIL = 'יש למלא טלפון, אימייל או את שניהם.';
 
-type Settings = Record<(typeof SETTINGS_KEYS)[number], unknown> & {
+type Settings = Record<(typeof CHANGED_KEYS)[number], unknown> & {
   employerSignature: { width: number; height: number } | null;
 };
 
@@ -46,12 +40,12 @@ test.beforeAll(async () => {
   before = await readSettings();
 });
 
-// Also after a failed step: every value back as it was read (only the ones that differ are sent,
-// so an older stored value is never sent through today's rules).
+// Also after a failed step: only the values the tests change, and only when they differ, go back
+// as they were read (an older stored value is never sent through today's rules).
 test.afterAll(async () => {
   const now = await readSettings();
   const back = Object.fromEntries(
-    SETTINGS_KEYS.filter((key) => JSON.stringify(now[key]) !== JSON.stringify(before[key])).map(
+    CHANGED_KEYS.filter((key) => JSON.stringify(now[key]) !== JSON.stringify(before[key])).map(
       (key) => [key, before[key]],
     ),
   );
@@ -60,8 +54,7 @@ test.afterAll(async () => {
     expect(answer.status()).toBe(200);
   }
   const after = await readSettings();
-  for (const key of SETTINGS_KEYS) expect(after[key]).toEqual(before[key]);
-  expect(after.employerSignature).toEqual(before.employerSignature);
+  for (const key of CHANGED_KEYS) expect(after[key]).toEqual(before[key]);
   await api.dispose();
 });
 
