@@ -13,8 +13,11 @@ import Typography from '@mui/material/Typography';
 import { type FormEvent, useRef, useState } from 'react';
 import { isApiRequestError } from '../api/api-error';
 import { he } from '../i18n/he';
-import { enterKioskCode, kioskState } from './kiosk.api';
+import type { VerifyOutcome } from './id-check-outcome';
+import { IdCheck } from './IdCheck';
+import { enterKioskCode, kioskState, verifyKiosk } from './kiosk.api';
 import { MessagePage, type SignMessageKind } from './MessagePage';
+import { NextStepPlaceholder } from './NextStepPlaceholder';
 import { SignLayout } from './SignLayout';
 
 const text = he.sign.kiosk;
@@ -40,9 +43,12 @@ const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
 /**
  * `/kiosk` on the office computer (5.7, FR-MAN-4, decision D1): the short code the manager
  * read off A10 → `POST /api/kiosk/code` → the long kiosk code, kept only in a ref (never in the
- * address, storage or the data cache) → `POST /api/kiosk/state`. Part B ends there: "valid" shows
- * "the code was accepted"; the ID check and the signing screens are 6.1–6.4 (B1–B5). A staff
- * user signed in on this computer gets the API's 409 text.
+ * address, storage or the data cache) → `POST /api/kiosk/state` → B5 for a state that can't be
+ * signed, or B1 (6.2): the same ID check as a link through `POST /api/kiosk/verify { code,
+ * idNumber }`. A kiosk session with its own 5 attempts (D2) answers the same 401 / 423; a 423
+ * or an ended code shows "ask the manager". A staff user signed in on this computer gets the
+ * API's 409 text. The long code is dropped once the ID is correct (the `kiosk_sid` cookie
+ * carries the session from there).
  */
 export function KioskCodePage() {
   const [typed, setTyped] = useState('');
@@ -50,7 +56,9 @@ export function KioskCodePage() {
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SignLinkStateResult | null>(null);
-  // The long code: for the next steps (6.x) only, never shown or stored.
+  const [refused, setRefused] = useState<SignMessageKind | null>(null);
+  const [verified, setVerified] = useState(false);
+  // The long code: for the ID check only, never shown or stored.
   const kioskCode = useRef<string | null>(null);
 
   const submit = async (event: FormEvent) => {
@@ -83,6 +91,7 @@ export function KioskCodePage() {
   const again = () => {
     kioskCode.current = null;
     setResult(null);
+    setRefused(null);
     setFailure(null);
   };
 
@@ -92,26 +101,40 @@ export function KioskCodePage() {
     </Button>
   );
 
+  const verify = (idNumber: string) => verifyKiosk(kioskCode.current ?? '', idNumber);
+
+  const onVerified = () => {
+    kioskCode.current = null;
+    setVerified(true);
+  };
+
+  const onRefused = (outcome: Exclude<VerifyOutcome, { kind: 'retry' }>) => {
+    kioskCode.current = null;
+    setRefused(outcome.kind === 'gone' ? 'kioskCodeGone' : MESSAGE_OF[outcome.state]);
+  };
+
+  const message = refused ?? (result && result.state !== 'valid' ? MESSAGE_OF[result.state] : null);
+
   return (
     <SignLayout>
-      {result && result.state !== 'valid' ? (
-        <MessagePage
-          kind={MESSAGE_OF[result.state]}
-          hrContact={result.hrContact}
-          action={againButton}
-        />
+      {verified ? (
+        <NextStepPlaceholder />
+      ) : result && message ? (
+        <MessagePage kind={message} hrContact={result.hrContact} action={againButton} />
       ) : result ? (
-        <Box sx={{ display: 'grid', gap: 3, justifyItems: 'start' }}>
-          <Typography variant="h1">{text.title}</Typography>
-          <Alert severity="success" sx={{ width: '100%' }}>
-            {text.accepted}
-          </Alert>
-          <Typography>{he.sign.idCheckNext}</Typography>
-          {againButton}
+        <Box sx={{ display: 'grid', gap: 3 }}>
+          <IdCheck
+            verify={verify}
+            onVerified={onVerified}
+            onRefused={onRefused}
+            notice={<Alert severity="success">{text.accepted}</Alert>}
+          />
+          <Box>{againButton}</Box>
         </Box>
       ) : (
         <Box
           component="form"
+          method="post"
           noValidate
           onSubmit={(event) => void submit(event)}
           sx={{ display: 'grid', gap: 3 }}

@@ -1,21 +1,22 @@
 import type { SignHrContact, SignLinkState } from '@doc-signing/shared';
-import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { isApiRequestError } from '../api/api-error';
 import { ErrorState } from '../components/feedback/ErrorState';
 import { errorContent } from '../components/feedback/error-content';
 import { PageLoader } from '../components/feedback/PageLoader';
-import { he } from '../i18n/he';
+import { IdCheck } from './IdCheck';
 import { MessagePage, type SignMessageKind } from './MessagePage';
-import { linkState } from './sign.api';
+import { NextStepPlaceholder } from './NextStepPlaceholder';
+import { linkState, verifyLink } from './sign.api';
 import { SignLayout } from './SignLayout';
 
 type View =
   | { kind: 'loading' }
   | { kind: 'failed'; error: unknown }
   | { kind: 'message'; message: SignMessageKind; hrContact: SignHrContact | null }
-  | { kind: 'valid'; hrContact: SignHrContact };
+  | { kind: 'valid'; hrContact: SignHrContact }
+  | { kind: 'verified' };
 
 /** The B5 screen of a link state that can't be signed. */
 const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
@@ -26,9 +27,11 @@ const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
 };
 
 /**
- * `/sign/:token` (6.1, FR-SGN-1, FR-SGN-7): asks `GET /api/sign/:token` once (state only) and
- * shows B5 for a state that can't be signed, or "the link is not valid" for a 404. Plain state,
- * no query cache: the token never sits in the data cache and a focus never asks again.
+ * `/sign/:token` (6.1, 6.2, FR-SGN-1, FR-SGN-2, FR-SGN-7): asks `GET /api/sign/:token` once
+ * (state only) and shows B5 for a state that can't be signed, "the link is not valid" for a 404,
+ * or B1 for a valid link. A refusal at the ID check (locked, signed meanwhile …) shows B5 with
+ * the contact already read. Plain state, no query cache: the token never sits in the data cache
+ * and a focus never asks again.
  */
 export function SignLinkPage() {
   const { token = '' } = useParams();
@@ -66,7 +69,20 @@ export function SignLinkPage() {
       {view.kind === 'loading' && <PageLoader />}
       {view.kind === 'failed' && <ErrorState {...errorContent(view.error)} onRetry={retry} />}
       {view.kind === 'message' && <MessagePage kind={view.message} hrContact={view.hrContact} />}
-      {view.kind === 'valid' && <Typography>{he.sign.idCheckNext}</Typography>}
+      {view.kind === 'valid' && (
+        <IdCheck
+          verify={(idNumber) => verifyLink(token, idNumber)}
+          onVerified={() => setView({ kind: 'verified' })}
+          onRefused={(outcome) =>
+            setView({
+              kind: 'message',
+              message: outcome.kind === 'gone' ? 'notFound' : MESSAGE_OF[outcome.state],
+              hrContact: view.hrContact,
+            })
+          }
+        />
+      )}
+      {view.kind === 'verified' && <NextStepPlaceholder />}
     </SignLayout>
   );
 }

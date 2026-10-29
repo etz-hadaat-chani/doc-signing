@@ -1,5 +1,6 @@
 import { kioskCodeEnteredSchema, signLinkStateResultSchema } from '@doc-signing/shared';
 import { request } from '../api/http';
+import { signVerifiedResultSchema } from './sign.api';
 
 /**
  * The office computer's calls (5.7, FR-MAN-4) through the plain request(): no staff code, no
@@ -21,5 +22,14 @@ export function kioskState(code: string) {
     method: 'POST',
     body: { code },
     schema: signLinkStateResultSchema,
+  });
+}
+
+/** The ID number with the long code, both in the POST body; correct → the `kiosk_sid` session. */
+export function verifyKiosk(code: string, idNumber: string) {
+  return request('/api/kiosk/verify', {
+    method: 'POST',
+    body: { code, idNumber },
+    schema: signVerifiedResultSchema,
   });
 }

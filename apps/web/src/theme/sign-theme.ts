@@ -21,10 +21,23 @@ export const signTheme = createTheme(theme, {
       styleOverrides: { root: { minHeight: sign.controlMinHeight, paddingInline: 32 } },
     },
     MuiOutlinedInput: {
-      styleOverrides: { root: { minHeight: sign.controlMinHeight, fontSize: sign.bodySize } },
+      styleOverrides: {
+        root: { minHeight: sign.controlMinHeight, fontSize: sign.bodySize },
+        // The gap in the border fits the raised label below.
+        notchedOutline: { '& legend': { fontSize: sign.smallSize } },
+      },
     },
     MuiInputLabel: {
-      styleOverrides: { root: { fontSize: sign.bodySize } },
+      styleOverrides: {
+        root: {
+          fontSize: sign.bodySize,
+          // A raised label is drawn at 75%: at least 18 px on screen.
+          '&.MuiInputLabel-shrink': {
+            fontSize: sign.smallSize / 0.75,
+            transform: 'translate(14px, -13px) scale(0.75)',
+          },
+        },
+      },
     },
     MuiFormHelperText: {
       styleOverrides: { root: { fontSize: sign.smallSize, marginInline: 0 } },

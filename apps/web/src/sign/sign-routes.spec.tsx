@@ -7,6 +7,10 @@ import { apiErrorResponse, jsonResponse, stubApi } from '../test/fetch-stub';
 import { renderRoutes } from '../test/render';
 import { signRoutes } from './sign-routes';
 
+/** A request's JSON body (the stub's `init`), or null. */
+const bodyOf = (init?: RequestInit): unknown =>
+  typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : null;
+
 describe('signing area', () => {
   it.each([
     ['/sign/abc', true],
@@ -67,7 +71,7 @@ describe('/kiosk (the office computer, 5.7)', () => {
     });
     await typeCode('abcd-efgh');
     expect(await screen.findByText(text.accepted)).toBeVisible();
-    expect(screen.getByText(he.sign.idCheckNext)).toBeVisible();
+    expect(screen.getByRole('textbox', { name: he.sign.idCheck.field })).toBeVisible();
     expect(bodies(mock, '/api/kiosk/code')).toEqual([{ code: 'ABCDEFGH' }]);
     expect(bodies(mock, '/api/kiosk/state')).toEqual([{ code: LONG }]);
     expect(window.location.pathname + window.location.search + window.location.hash).toBe('/');
@@ -110,5 +114,91 @@ describe('/kiosk (the office computer, 5.7)', () => {
     await typeCode('ABC1');
     expect(await screen.findByText(text.shape)).toBeVisible();
     await waitFor(() => expect(mock).not.toHaveBeenCalled());
+  });
+});
+
+describe('/kiosk, the ID check (6.2, B1 on the office computer)', () => {
+  const LONG = 'L'.repeat(43);
+  const HR = { name: 'משאבי אנוש', phone: '02-5555555', email: null };
+  const RIGHT_ID = '000000018';
+  const id = he.sign.idCheck;
+
+  /** The code accepted, then each verify answered by `verify` in turn. */
+  async function atIdCheck(verify: () => Response) {
+    const mock = stubApi({
+      'POST /api/kiosk/code': () => jsonResponse(200, { code: LONG }),
+      'POST /api/kiosk/state': () => jsonResponse(200, { state: 'valid', hrContact: HR }),
+      'POST /api/kiosk/verify': verify,
+    });
+    const rendered = renderRoutes(KIOSK_PAGE_PATH, signRoutes);
+    await rendered.user.type(
+      await screen.findByRole('textbox', { name: he.sign.kiosk.field }),
+      'ABCDEFGH',
+    );
+    await rendered.user.click(screen.getByRole('button', { name: he.sign.kiosk.submit }));
+    const field = await screen.findByRole('textbox', { name: id.field });
+    const send = async () => {
+      await rendered.user.type(field, RIGHT_ID);
+      await rendered.user.click(screen.getByRole('button', { name: id.submit }));
+    };
+    return { mock, field, send };
+  }
+
+  it('the long code and the number in the POST body; correct → the next step', async () => {
+    const { mock, send } = await atIdCheck(() =>
+      jsonResponse(200, { sessionExpiresAt: '2026-10-29T10:15:00.000Z' }),
+    );
+    await send();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: he.sign.verified.title }),
+    ).toBeVisible();
+    const verifyBodies = mock.mock.calls
+      .filter(([url]) => url === '/api/kiosk/verify')
+      .map(([, init]) => bodyOf(init));
+    expect(verifyBodies).toEqual([{ code: LONG, idNumber: RIGHT_ID }]);
+    for (const [url] of mock.mock.calls) {
+      const address = typeof url === 'string' ? url : '';
+      expect(address).not.toContain(RIGHT_ID);
+      expect(address).not.toContain(LONG);
+    }
+  });
+
+  it("the kiosk's own attempts (D2) show like a link's; its 423: ask for a new code", async () => {
+    let wrong = 0;
+    const { field, send } = await atIdCheck(() => {
+      wrong += 1;
+      if (wrong === 2) return apiErrorResponse(423, 'SIGN_LOCKED');
+      return jsonResponse(401, {
+        error: { code: 'SIGN_ID_MISMATCH', message: 'x', details: { attemptsLeft: 1 } },
+      });
+    });
+    await send();
+    await waitFor(() => expect(field).toHaveAccessibleDescription(id.mismatch(1)));
+    await send();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: he.sign.messages.kioskLocked.title }),
+    ).toBeVisible();
+    expect(screen.getByText(he.sign.messages.kioskLocked.text)).toBeVisible();
+    expect(screen.getByText(HR.phone)).toBeVisible();
+    expect(screen.getByRole('button', { name: he.sign.kiosk.again })).toBeVisible();
+  });
+
+  it('an ended code at the ID step: "ask the manager to open it again"', async () => {
+    const { send } = await atIdCheck(() => apiErrorResponse(404, 'KIOSK_CODE_NOT_FOUND'));
+    await send();
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: he.sign.messages.kioskCodeGone.title,
+      }),
+    ).toBeVisible();
+  });
+
+  it('a staff user signed in meanwhile: the API text under the field', async () => {
+    const { field, send } = await atIdCheck(() => apiErrorResponse(409, 'KIOSK_STAFF_SIGNED_IN'));
+    await send();
+    await waitFor(() =>
+      expect(field).toHaveAccessibleDescription(errorMessage('KIOSK_STAFF_SIGNED_IN')),
+    );
   });
 });

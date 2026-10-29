@@ -279,7 +279,7 @@ Wherever a department is shown or picked (lists, filters, cards, wizard, exports
 | B2 | Document (צפייה במסמך) | The personalized PDF; the Sign button becomes active after scrolling to the end |
 | B3 | Form and signature (טופס וחתימה) | For a correction: "תיקון נדרש: <note>" at the top. A short form above the pad: the boxes she fills in and the email section (email box pre-filled, or "no email, at the office"; exactly one), in the template's order, Hebrew labels and errors, small pads for drawing boxes; then the large drawing pad, Clear and Confirm buttons, reading statement checkbox |
 | B4 | Done (אישור) | "The document was signed. A copy was sent to your email." |
-| B5 | Messages | Link expired, already signed, locked, cancelled; each with HR contact details |
+| B5 | Messages | Link expired, already signed, locked, cancelled; each with HR contact details. An unknown link: "the link is not valid" (open the latest email). At the office signing station: locked or an ended code → "ask the manager for a new code" |
 
 ### Emails (Hebrew, right to left)
 

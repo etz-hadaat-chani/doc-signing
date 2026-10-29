@@ -1426,8 +1426,28 @@ export const he = {
 
   sign: {
     areaName: 'חתימה על מסמך',
-    /** Until the ID check of 6.2. */
-    idCheckNext: 'מסך הקלדת מספר תעודת הזהות יתווסף בהמשך.',
+    idCheck: {
+      title: 'אימות זהות',
+      intro: 'שלום. כדי לראות את המסמך, יש להקליד את מספר תעודת הזהות שלך.',
+      field: 'מספר תעודת זהות',
+      hint: 'ספרות בלבד, כולל ספרת הביקורת',
+      submit: 'המשך',
+      required: 'יש להקליד את מספר תעודת הזהות',
+      invalid: 'מספר תעודת הזהות אינו תקין. יש לבדוק ולהקליד שוב.',
+      mismatch: (attemptsLeft: number) =>
+        attemptsLeft === 1
+          ? 'מספר תעודת הזהות אינו תואם. נשאר ניסיון אחד.'
+          : `מספר תעודת הזהות אינו תואם. נותרו ${attemptsLeft} ניסיונות.`,
+      wait: (minutes: number) =>
+        minutes <= 1
+          ? 'יותר מדי ניסיונות. יש לחכות דקה ולנסות שוב.'
+          : `יותר מדי ניסיונות. יש לחכות ${minutes} דקות ולנסות שוב.`,
+    },
+    /** After the correct ID number, until 6.3 builds the document view (B2). */
+    verified: {
+      title: 'הזהות אומתה',
+      text: 'הצגת המסמך תתווסף בשלב הבא.',
+    },
     messages: {
       signed: {
         title: 'המסמך כבר נחתם',
