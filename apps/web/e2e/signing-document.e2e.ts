@@ -1,26 +1,21 @@
-import { type APIRequestContext, expect, type Page, request, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
-import { seedPassword } from './helpers';
+import {
+  checkPage,
+  openLink,
+  type Person,
+  RUN,
+  SigningSetup,
+  watchRequests,
+} from './signing-helpers';
 
 // Task 6.3: the document screen (B2) after the ID check, for a link and for the office computer.
 // Needs `pnpm dev` (with the worker, so the invitation reaches Mailpit).
 // Browsers without touching the config: E2E_CHANNEL=msedge (the installed Edge) or
 // E2E_BROWSER=firefox (when Playwright's Firefox is installed), on the chromium project.
-// DANGER rules (nothing is ever deleted in this system):
-// - The template is built here (pdf-lib), named "בדיקה אוטומטית …", linked to an existing
-//   department and ARCHIVED in afterAll with every version, also after a failure.
-// - Rounds hold ONLY the hand-picked fake employees made here. Every round id is CANCELLED in
-//   afterAll (409 = already cancelled), also after a failure.
-// - Fake employees: Hebrew-letter names, unique numbers, generated ID numbers, a unique
-//   @example.test address only where a link is emailed. All made INACTIVE in afterAll.
-// - Settings are never changed and no employer signature is uploaded: an existing one is used
-//   (`pre_signed`) only if it is already there.
-// - A link, its token, a kiosk code, an ID number or the PDF content is never printed.
+// DANGER rules: see signing-helpers.ts (fake rows only, all cleaned up in afterAll). An employer
+// signature is used (`pre_signed`) only if one is already uploaded; none is ever uploaded here.
 
-const BASE_URL = 'http://localhost:5173';
-const MAILPIT = 'http://localhost:8025';
-const RUN = Date.now().toString().slice(-9);
-const TAG = [...RUN].map((digit) => 'אבגדהוזחטי'.charAt(Number(digit))).join('');
 const SCREENS = 'test-results/signing';
 const CHANNEL = process.env.E2E_CHANNEL;
 const FIREFOX = process.env.E2E_BROWSER === 'firefox';
@@ -41,53 +36,9 @@ const T = {
   kioskAccepted: 'הקוד התקבל.',
 };
 
-interface Person {
-  id: string;
-  idNumber: string;
-  email?: string;
-}
-
-let api: APIRequestContext;
-let departmentId = '';
-let preSigned = false;
-const templateIds: string[] = [];
-const employeeIds: string[] = [];
-const roundIds: string[] = [];
+const setup = new SigningSetup('96');
 const people = {} as Record<'link' | 'kiosk', Person>;
 let kioskRoundId = '';
-
-/** 8 random digits + the Israeli check digit. */
-function fakeIdNumber(): string {
-  const body = Array.from({ length: 8 }, () => Math.floor(Math.random() * 10));
-  const sum = body.reduce((total, digit, index) => {
-    const value = digit * (index % 2 === 0 ? 1 : 2);
-    return total + (value > 9 ? value - 9 : value);
-  }, 0);
-  return `${body.join('')}${String((10 - (sum % 10)) % 10)}`;
-}
-
-async function createFakeEmployee(index: number, email?: string): Promise<Person> {
-  const employeeNumber = `96${RUN}${String(index)}`;
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const idNumber = fakeIdNumber();
-    const response = await api.post('/api/employees', {
-      data: {
-        employeeNumber,
-        idNumber,
-        ...(email && { email }),
-        firstName: 'בדיקה',
-        lastName: `אוטומטית ${TAG} ${'אבגדהוזחטי'.charAt(index)}`,
-        departmentId,
-      },
-    });
-    if (response.status() === 409) continue;
-    expect(response.status()).toBe(201);
-    const { id } = (await response.json()) as { id: string };
-    employeeIds.push(id);
-    return { id, idNumber, ...(email && { email }) };
-  }
-  throw new Error('Could not find a free fake ID number');
-}
 
 /** A 3-page A4 document with a few readable lines per page, built here (no file in the repo). */
 async function testPdf(): Promise<Buffer> {
@@ -116,16 +67,7 @@ async function testPdf(): Promise<Buffer> {
 
 /** A ready template: a saved value (name), one employee box and the signature. */
 async function createReadyTemplate(): Promise<string> {
-  const created = await api.post('/api/templates', {
-    multipart: {
-      name: `בדיקה אוטומטית ${TAG} מסמך`,
-      departmentIds: departmentId,
-      file: { name: 'test.pdf', mimeType: 'application/pdf', buffer: await testPdf() },
-    },
-  });
-  expect(created.status()).toBe(201);
-  const { id } = (await created.json()) as { id: string };
-  templateIds.push(id);
+  const preSigned = setup.employerSignature;
   const fields: object[] = [
     { fieldType: 'full_name', page: 1, x: 60, y: 740, width: 220, height: 20 },
     {
@@ -150,110 +92,24 @@ async function createReadyTemplate(): Promise<string> {
       height: 60,
     });
   }
-  const ready = await api.patch(`/api/templates/${id}`, {
-    data: { fields, ...(preSigned && { employerSignatureMode: 'pre_signed' }) },
+  return setup.createReadyTemplate('מסמך', await testPdf(), {
+    fields,
+    ...(preSigned && { employerSignatureMode: 'pre_signed' }),
   });
-  expect(ready.status()).toBe(200);
-  const item = (await ready.json()) as { id: string; isReady: boolean };
-  templateIds.push(item.id);
-  expect(item.isReady).toBe(true);
-  return item.id;
-}
-
-async function sentRound(suffix: string, templateId: string, ids: string[]): Promise<string> {
-  const response = await api.post('/api/rounds', {
-    data: {
-      mode: 'single_template',
-      templateId,
-      recipients: { all: false, departmentIds: [], employeeIds: ids },
-      alreadySigned: 'skip',
-      name: `בדיקה אוטומטית ${TAG} ${suffix}`,
-    },
-  });
-  expect(response.status()).toBe(201);
-  const { id } = (await response.json()) as { id: string };
-  roundIds.push(id);
-  const sent = await api.post(`/api/rounds/${id}/send`, {
-    data: { confirmOutdatedTemplateIds: [] },
-  });
-  expect(sent.status()).toBe(202);
-  return id;
 }
 
 test.beforeAll(async () => {
-  api = await request.newContext({ baseURL: BASE_URL });
-  const login = await api.post('/api/auth/login', {
-    data: { email: 'manager@doc-signing.local', password: seedPassword() },
-  });
-  expect(login.status()).toBe(200);
-  const answer = await api.get('/api/departments');
-  const { items } = (await answer.json()) as { items: { id: string }[] };
-  const first = items[0];
-  if (!first) throw new Error('The seed has no department');
-  departmentId = first.id;
-  // Read only: an employer signature already uploaded is used; none is ever uploaded here.
-  const settings = await api.get('/api/settings');
-  expect(settings.status()).toBe(200);
-  preSigned =
-    ((await settings.json()) as { employerSignature: unknown }).employerSignature !== null;
-
+  await setup.start();
   const templateId = await createReadyTemplate();
-  people.link = await createFakeEmployee(0, `e2e-document-${RUN}-link@example.test`);
-  people.kiosk = await createFakeEmployee(1);
-  await sentRound('מסמך', templateId, [people.link.id]);
-  kioskRoundId = await sentRound('משרד מסמך', templateId, [people.kiosk.id]);
+  people.link = await setup.createFakeEmployee(0, `e2e-document-${RUN}-link@example.test`);
+  people.kiosk = await setup.createFakeEmployee(1);
+  await setup.sentRound('מסמך', templateId, [people.link.id]);
+  kioskRoundId = await setup.sentRound('משרד מסמך', templateId, [people.kiosk.id]);
 });
 
 test.afterAll(async () => {
-  const statuses: [string, number][] = [];
-  for (const id of new Set(roundIds)) {
-    const response = await api.post(`/api/rounds/${id}/cancel`);
-    statuses.push([`cancel round ${id}`, response.status() === 409 ? 200 : response.status()]);
-  }
-  for (const id of employeeIds) {
-    const response = await api.patch(`/api/employees/${id}`, { data: { isActive: false } });
-    statuses.push([`deactivate employee ${id}`, response.status()]);
-  }
-  for (const id of new Set(templateIds)) {
-    const response = await api.post(`/api/templates/${id}/archive`);
-    statuses.push([`archive template ${id}`, response.status() === 409 ? 200 : response.status()]);
-  }
-  await api.dispose();
-  for (const [what, status] of statuses) expect(status, what).toBe(200);
+  await setup.finish();
 });
-
-/** The signing link path from the newest email to this address in Mailpit. Never printed. */
-async function linkPathFor(address: string): Promise<string> {
-  let path = '';
-  await expect
-    .poll(
-      async () => {
-        const search = await api.get(`${MAILPIT}/api/v1/search`, {
-          params: { query: `to:"${address}"` },
-        });
-        if (search.status() !== 200) return false;
-        const { messages } = (await search.json()) as { messages: { ID: string }[] };
-        const newest = messages[0];
-        if (!newest) return false;
-        const message = await api.get(`${MAILPIT}/api/v1/message/${newest.ID}`);
-        const { HTML, Text } = (await message.json()) as { HTML: string; Text: string };
-        const found = /\/sign\/[A-Za-z0-9_-]{20,}/.exec(`${Text} ${HTML}`);
-        path = found ? found[0] : '';
-        return path !== '';
-      },
-      { message: 'the invitation reached Mailpit', timeout: 60_000 },
-    )
-    .toBe(true);
-  return path;
-}
-
-async function openLink(page: Page, path: string) {
-  try {
-    await page.goto(path);
-  } catch {
-    throw new Error('Could not open the signing link');
-  }
-}
 
 /** The page as the employee sees it now (one viewport). */
 async function shot(page: Page, name: string) {
@@ -261,26 +117,6 @@ async function shot(page: Page, name: string) {
     'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))',
   );
   await page.screenshot({ path: `${SCREENS}/b2-${BROWSER}-${name}.png`, animations: 'disabled' });
-}
-
-function watchRequests(page: Page): string[] {
-  const urls: string[] = [];
-  page.on('request', (sent) => urls.push(sent.url()));
-  return urls;
-}
-
-/** Nothing outside our host, no typed value in an address, empty storage, no sideways scroll. */
-async function checkPage(page: Page, urls: string[], typed: string[]) {
-  for (const url of urls) {
-    expect(url.startsWith(`${BASE_URL}/`), 'a request left the app').toBe(true);
-    for (const value of typed)
-      expect(url.includes(value), 'a typed value in an address').toBe(false);
-  }
-  expect(await page.evaluate('localStorage.length + sessionStorage.length')).toBe(0);
-  const sideways = await page.evaluate(
-    'document.documentElement.scrollWidth - document.documentElement.clientWidth',
-  );
-  expect(sideways).toBeLessThanOrEqual(0);
 }
 
 async function typeId(page: Page, idNumber: string) {
@@ -353,7 +189,7 @@ test.use({
 test('a link: the document, "continue" off until the End key reaches the end, then the form step', async ({
   page,
 }) => {
-  const path = await linkPathFor(people.link.email ?? '');
+  const path = await setup.linkPathFor(people.link.email ?? '');
   const urls = watchRequests(page);
   await openLink(page, path);
   await openDocument(page, people.link.idNumber, '/document');
@@ -384,7 +220,7 @@ test('a link again with the mouse wheel, at 640 × 360 (1280 × 720 at 200% zoom
   page,
 }) => {
   await page.setViewportSize({ width: 640, height: 360 });
-  const path = await linkPathFor(people.link.email ?? '');
+  const path = await setup.linkPathFor(people.link.email ?? '');
   const urls = watchRequests(page);
   await openLink(page, path);
   await openDocument(page, people.link.idNumber, '/document');
@@ -411,16 +247,7 @@ test('a link again with the mouse wheel, at 640 × 360 (1280 × 720 at 200% zoom
 test('the office computer: code, ID, the document with the kiosk cookie, then the form step', async ({
   page,
 }) => {
-  const rows = await api.get(`/api/rounds/${kioskRoundId}/assignments?pageSize=100`);
-  expect(rows.status()).toBe(200);
-  const { items } = (await rows.json()) as {
-    items: { assignmentId: string; employeeId: string }[];
-  };
-  const row = items.find((item) => item.employeeId === people.kiosk.id);
-  if (!row) throw new Error('fake employee not in the round');
-  const opened = await api.post(`/api/assignments/${row.assignmentId}/kiosk`);
-  expect(opened.status()).toBe(201);
-  const { shortCode } = (await opened.json()) as { shortCode: string };
+  const shortCode = await setup.openKiosk(kioskRoundId, people.kiosk.id);
 
   const urls = watchRequests(page);
   await page.goto('/kiosk');

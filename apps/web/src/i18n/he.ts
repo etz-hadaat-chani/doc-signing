@@ -1458,10 +1458,36 @@ export const he = {
           : `יש כרגע עומס. יש לחכות ${minutes} דקות ולנסות שוב.`,
       retry: 'לנסות שוב',
     },
-    /** After B2, until 6.4 builds the form and signature (B3). */
-    formPlaceholder: {
+    /** B3: the boxes she fills in and the email section (6.4 part A); the signature in part B. */
+    form: {
       title: 'טופס וחתימה',
-      text: 'כאן יופיעו הטופס והחתימה (בשלב הבא).',
+      intro: 'יש למלא את הפרטים. כל מה שממלאים כאן יופיע במסמך החתום.',
+      correction: 'תיקון נדרש:',
+      optional: '(לא חובה)',
+      charsLeft: (left: number) => (left === 1 ? 'נותר תו אחד' : `נותרו ${left} תווים`),
+      selectPlaceholder: 'יש לבחור מהרשימה',
+      datePlaceholder: 'DD/MM/YYYY',
+      dateHint: 'יש להקליד תאריך בצורה DD/MM/YYYY',
+      dateFrom: (from: string) => `מתאריך ${from}`,
+      dateUntil: (until: string) => `עד תאריך ${until}`,
+      dateBetween: (from: string, until: string) => `בין ${from} ל-${until}`,
+      calendar: 'בחירה מלוח שנה',
+      drawingHint: 'יש לצייר עם העכבר בתוך המסגרת.',
+      drawingArea: (label: string) => `משטח ציור: ${label}`,
+      clear: 'ניקוי',
+      drawingTooLarge: 'הציור גדול מדי. יש ללחוץ "ניקוי" ולצייר שוב, קטן ופשוט יותר.',
+      email: {
+        title: 'קבלת תלוש שכר והודעות',
+        intro: 'יש לבחור אחת משתי האפשרויות:',
+        byEmail: 'לקבל באימייל',
+        field: 'כתובת אימייל',
+        fieldHint: 'אפשר להשאיר את הכתובת או לתקן אותה.',
+        office: 'אין לי אימייל ואני רוצה לקבל את תלוש השכר וההודעות במשרד המוסד בעיר שלי',
+      },
+      check: 'בדיקת התשובות',
+      allGood: 'כל התשובות תקינות.',
+      toFix: (count: number) => (count === 1 ? 'יש לתקן שדה אחד.' : `יש לתקן ${count} שדות.`),
+      signaturePlaceholder: 'החתימה תתווסף כאן בשלב הבא.',
     },
     messages: {
       signed: {

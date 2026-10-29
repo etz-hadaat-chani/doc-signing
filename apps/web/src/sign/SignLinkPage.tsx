@@ -8,11 +8,12 @@ import { errorContent } from '../components/feedback/error-content';
 import { PageLoader } from '../components/feedback/PageLoader';
 import { he } from '../i18n/he';
 import { DocumentStep } from './DocumentStep';
-import { FormStepPlaceholder } from './FormStepPlaceholder';
+import { EMPTY_DRAFT, type FormDraft } from './form/form-draft';
+import { FormStep } from './FormStep';
 import type { VerifyOutcome } from './id-check-outcome';
 import { IdCheck } from './IdCheck';
 import { MessagePage, type SignMessageKind } from './MessagePage';
-import { linkDocument, linkState, verifyLink } from './sign.api';
+import { linkDocument, linkFit, linkForm, linkState, verifyLink } from './sign.api';
 import { SignLayout } from './SignLayout';
 
 type View =
@@ -21,9 +22,9 @@ type View =
   | { kind: 'message'; message: SignMessageKind; hrContact: SignHrContact | null }
   | { kind: 'valid'; hrContact: SignHrContact }
   | { kind: 'document'; hrContact: SignHrContact }
-  /** The session ended on B2: the ID number again, then back to the document. */
-  | { kind: 'reverify'; hrContact: SignHrContact }
-  | { kind: 'form' };
+  /** The session ended on B2 or B3: the ID number again, then back where she was. */
+  | { kind: 'reverify'; hrContact: SignHrContact; then: 'document' | 'form' }
+  | { kind: 'form'; hrContact: SignHrContact };
 
 /** The B5 screen of a link state that can't be signed. */
 const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
@@ -38,13 +39,15 @@ const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
  * only) and shows B5 for a state that can't be signed, "the link is not valid" for a 404, or B1
  * for a valid link; the correct ID number opens B2. A refusal at any step (locked, signed
  * meanwhile …) shows B5 with the contact already read; a session that ended on B2 asks the ID
- * number again and goes back to the document. Plain state, no query cache: the token never sits in the data cache
- * and a focus never asks again.
+ * number again and goes back there (on B3 with every answer kept). Plain state, no query cache:
+ * the token and her answers never sit in the data cache, and a focus never asks again.
  */
 export function SignLinkPage() {
   const { token = '' } = useParams();
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  // Her B3 answers: here, above the ID check, so a session that ends keeps them (FR-SGN-8).
+  const [draft, setDraft] = useState<FormDraft>(EMPTY_DRAFT);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -88,7 +91,12 @@ export function SignLinkPage() {
         <IdCheck
           key={view.kind}
           verify={(idNumber) => verifyLink(token, idNumber)}
-          onVerified={() => setView({ kind: 'document', hrContact: view.hrContact })}
+          onVerified={() =>
+            setView({
+              kind: view.kind === 'reverify' ? view.then : 'document',
+              hrContact: view.hrContact,
+            })
+          }
           onRefused={(outcome) => refused(outcome, view.hrContact)}
           notice={
             view.kind === 'reverify' && (
@@ -102,12 +110,25 @@ export function SignLinkPage() {
       {view.kind === 'document' && (
         <DocumentStep
           load={(signal) => linkDocument(token, signal)}
-          onContinue={() => setView({ kind: 'form' })}
-          onSessionEnded={() => setView({ kind: 'reverify', hrContact: view.hrContact })}
+          onContinue={() => setView({ kind: 'form', hrContact: view.hrContact })}
+          onSessionEnded={() =>
+            setView({ kind: 'reverify', hrContact: view.hrContact, then: 'document' })
+          }
           onRefused={(outcome) => refused(outcome, view.hrContact)}
         />
       )}
-      {view.kind === 'form' && <FormStepPlaceholder />}
+      {view.kind === 'form' && (
+        <FormStep
+          load={(signal) => linkForm(token, signal)}
+          fit={(answers, signal) => linkFit(token, answers, signal)}
+          draft={draft}
+          onDraftChange={setDraft}
+          onSessionEnded={() =>
+            setView({ kind: 'reverify', hrContact: view.hrContact, then: 'form' })
+          }
+          onRefused={(outcome) => refused(outcome, view.hrContact)}
+        />
+      )}
     </SignLayout>
   );
 }

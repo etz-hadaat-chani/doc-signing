@@ -5,6 +5,7 @@ import { he } from '../i18n/he';
 import { apiErrorResponse, jsonResponse, stubApi } from '../test/fetch-stub';
 import { loadPdf, pdfResponse, pdfStub } from '../test/pdf-document-stub';
 import { renderRoutes } from '../test/render';
+import { formAnswer } from '../test/sign-form-stub';
 import { signRoutes } from './sign-routes';
 
 vi.mock('../pdf/pdf-document', () => import('../test/pdf-document-stub'));
@@ -69,6 +70,7 @@ async function linkAtDocument(
     [`GET ${STATE_URL}`]: () => jsonResponse(200, { state: 'valid', hrContact: HR }),
     [`POST ${STATE_URL}/verify`]: verify,
     [`GET ${DOCUMENT_URL}`]: document,
+    [`GET ${STATE_URL}/form`]: () => jsonResponse(200, formAnswer()),
   });
   const rendered = renderRoutes(`/sign/${TOKEN}`, signRoutes);
   await typeId(rendered.user);
@@ -82,6 +84,7 @@ async function kioskAtDocument(document: Handler) {
     'POST /api/kiosk/state': () => jsonResponse(200, { state: 'valid', hrContact: HR }),
     'POST /api/kiosk/verify': () => jsonResponse(200, VERIFIED),
     [`GET ${KIOSK_DOCUMENT_URL}`]: document,
+    'GET /api/kiosk/form': () => jsonResponse(200, formAnswer()),
   });
   const rendered = renderRoutes(KIOSK_PAGE_PATH, signRoutes);
   await rendered.user.type(
@@ -108,6 +111,7 @@ beforeEach(() => {
   pdfStub.destroy.mockClear();
   loadPdf.mockClear();
   stubObserver();
+  vi.stubGlobal('scrollTo', vi.fn());
 });
 
 describe('B2 for a link (6.3)', () => {
@@ -137,7 +141,7 @@ describe('B2 for a link (6.3)', () => {
     expect(screen.queryByText(text.scrollHint)).toBeNull();
     await user.click(button);
     expect(
-      await screen.findByRole('heading', { level: 1, name: he.sign.formPlaceholder.title }),
+      await screen.findByRole('heading', { level: 1, name: he.sign.form.title }),
     ).toBeVisible();
   });
 
@@ -276,7 +280,7 @@ describe('B2 on the office computer (6.3)', () => {
     await waitFor(() => expect(button).toBeEnabled());
     await user.click(button);
     expect(
-      await screen.findByRole('heading', { level: 1, name: he.sign.formPlaceholder.title }),
+      await screen.findByRole('heading', { level: 1, name: he.sign.form.title }),
     ).toBeVisible();
   });
 });

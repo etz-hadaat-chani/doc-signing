@@ -1,6 +1,6 @@
 import { kioskCodeEnteredSchema, signLinkStateResultSchema } from '@doc-signing/shared';
 import { request, requestBytes } from '../api/http';
-import { signVerifiedResultSchema } from './sign.api';
+import { signFitResultSchema, signFormResultSchema, signVerifiedResultSchema } from './sign.api';
 
 /**
  * The office computer's calls (5.7, FR-MAN-4) through the plain request(): no staff code, no
@@ -37,4 +37,19 @@ export function verifyKiosk(code: string, idNumber: string) {
 /** Her personalized PDF (B2) with the `kiosk_sid` cookie only: the long code is already dropped. */
 export function kioskDocument(signal?: AbortSignal) {
   return requestBytes('/api/kiosk/document', { signal });
+}
+
+/** The form (B3) with the `kiosk_sid` cookie only. */
+export function kioskForm(signal?: AbortSignal) {
+  return request('/api/kiosk/form', { schema: signFormResultSchema, signal });
+}
+
+/** Which typed texts would not fit their place; the `kiosk_sid` cookie only. */
+export function kioskFit(answers: Record<string, string>, signal?: AbortSignal) {
+  return request('/api/kiosk/fit', {
+    method: 'POST',
+    body: { answers },
+    schema: signFitResultSchema,
+    signal,
+  });
 }

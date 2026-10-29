@@ -14,10 +14,18 @@ import { type FormEvent, useRef, useState } from 'react';
 import { isApiRequestError } from '../api/api-error';
 import { he } from '../i18n/he';
 import { DocumentStep } from './DocumentStep';
-import { FormStepPlaceholder } from './FormStepPlaceholder';
+import { EMPTY_DRAFT, type FormDraft } from './form/form-draft';
+import { FormStep } from './FormStep';
 import type { VerifyOutcome } from './id-check-outcome';
 import { IdCheck } from './IdCheck';
-import { enterKioskCode, kioskDocument, kioskState, verifyKiosk } from './kiosk.api';
+import {
+  enterKioskCode,
+  kioskDocument,
+  kioskFit,
+  kioskForm,
+  kioskState,
+  verifyKiosk,
+} from './kiosk.api';
 import { MessagePage, type SignMessageKind } from './MessagePage';
 import { SignLayout } from './SignLayout';
 
@@ -50,7 +58,8 @@ const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
  * or an ended code shows "ask the manager". A staff user signed in on this computer gets the
  * API's 409 text. The long code is dropped once the ID is correct (the `kiosk_sid` cookie
  * carries the session from there): B2 (6.3) reads the document with the cookie only. A session
- * that ended there can't ask the ID again (the code is used up): "ask the manager".
+ * that ended there or on B3 can't ask the ID again (the code is used up): "ask the manager";
+ * her B3 answers are dropped with it.
  */
 export function KioskCodePage() {
   const [typed, setTyped] = useState('');
@@ -63,6 +72,8 @@ export function KioskCodePage() {
   const [step, setStep] = useState<'document' | 'form' | null>(null);
   // The long code: for the ID check only, never shown or stored.
   const kioskCode = useRef<string | null>(null);
+  // Her B3 answers. A session that ends here can't be resumed (the code is used up): dropped.
+  const [draft, setDraft] = useState<FormDraft>(EMPTY_DRAFT);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -93,6 +104,7 @@ export function KioskCodePage() {
 
   const again = () => {
     kioskCode.current = null;
+    setDraft(EMPTY_DRAFT);
     setStep(null);
     setResult(null);
     setRefused(null);
@@ -115,6 +127,7 @@ export function KioskCodePage() {
   const onRefused = (outcome: Exclude<VerifyOutcome, { kind: 'retry' }>) => {
     kioskCode.current = null;
     setRefused(outcome.kind === 'gone' ? 'kioskCodeGone' : MESSAGE_OF[outcome.state]);
+    setDraft(EMPTY_DRAFT);
     setStep(null);
   };
 
@@ -132,7 +145,14 @@ export function KioskCodePage() {
           onRefused={onRefused}
         />
       ) : step === 'form' ? (
-        <FormStepPlaceholder />
+        <FormStep
+          load={kioskForm}
+          fit={kioskFit}
+          draft={draft}
+          onDraftChange={setDraft}
+          onSessionEnded={() => onRefused({ kind: 'gone' })}
+          onRefused={onRefused}
+        />
       ) : result ? (
         <Box sx={{ display: 'grid', gap: 3 }}>
           <IdCheck
