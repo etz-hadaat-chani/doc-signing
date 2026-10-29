@@ -1296,6 +1296,84 @@ export const he = {
     },
   },
 
+  /** Staff users (A12, FR-ADM-1), managers only. Role names come from `roles`. */
+  users: {
+    add: 'הוספת משתמש',
+    listCaption: 'משתמשי המערכת',
+    empty: 'אין משתמשים.',
+    columns: {
+      name: 'שם',
+      email: 'אימייל',
+      role: 'תפקיד',
+      status: 'מצב',
+      lastLogin: 'כניסה אחרונה',
+      actions: 'פעולות',
+    },
+    active: 'פעיל',
+    inactive: 'מושבת',
+    you: '(את/ה)',
+    neverLoggedIn: 'טרם נכנס',
+    lastLogin: (date: string, time: string) => `${date} ${time}`,
+    fields: {
+      fullName: 'שם מלא',
+      email: 'אימייל (שם המשתמש לכניסה)',
+      role: 'תפקיד',
+      password: 'סיסמה',
+      newPassword: 'סיסמה חדשה',
+      passwordHint: (min: number, max: number) =>
+        `${min} עד ${max} תווים. אפשר משפט שקל לזכור. הסיסמה לא תוצג שוב.`,
+    },
+    roleHints: {
+      manager: 'מנהל: כל הפעולות, כולל משתמשים והגדרות.',
+      officer: 'קצין: צפייה בלבד בלוח הבקרה, בסטטוסים ובמסמכים החתומים.',
+    },
+    errors: {
+      required: 'שדה חובה',
+      tooLong: (max: number) => `עד ${max} תווים`,
+      emailInvalid: 'כתובת האימייל אינה תקינה',
+      passwordLength: (min: number, max: number) =>
+        `הסיסמה צריכה להיות באורך ${min} עד ${max} תווים`,
+    },
+    actions: {
+      makeManager: 'הפיכה למנהל',
+      makeOfficer: 'הפיכה לקצין',
+      disable: 'השבתה',
+      enable: 'הפעלה',
+      resetPassword: 'איפוס סיסמה',
+      rowLabel: (name: string) => `פעולות עבור ${name}`,
+    },
+    dialogs: {
+      addTitle: 'הוספת משתמש מערכת',
+      addText: 'המשתמש ייכנס עם האימייל והסיסמה שנקבעים כאן. אי אפשר לשנות את האימייל אחר כך.',
+      addConfirm: 'הוספה',
+      roleTitle: 'שינוי תפקיד',
+      toManager:
+        'המשתמש יוכל לבצע כל פעולה במערכת, כולל ניהול משתמשים והגדרות. השינוי חל מהפעולה הבאה של המשתמש.',
+      toOfficer:
+        'המשתמש יוכל רק לצפות בנתונים ובמסמכים, בלי לשנות דבר. השינוי חל מהפעולה הבאה של המשתמש.',
+      roleConfirm: 'שינוי התפקיד',
+      disableTitle: 'להשבית את המשתמש?',
+      disableText:
+        'המשתמש לא יוכל להיכנס למערכת, וינותק מיד בכל מחשב שבו הוא מחובר. אפשר להפעיל אותו שוב בכל עת.',
+      disableConfirm: 'השבתה',
+      enableTitle: 'להפעיל את המשתמש?',
+      enableText: 'המשתמש יוכל להיכנס שוב עם הסיסמה שלו.',
+      enableConfirm: 'הפעלה',
+      resetTitle: 'איפוס סיסמה',
+      resetText:
+        'המשתמש ינותק בכל מחשב שבו הוא מחובר ויצטרך להיכנס עם הסיסמה החדשה. יש למסור לו אותה בדרך בטוחה.',
+      resetOwnText: 'הסיסמה שלך תוחלף. במחשב הזה תישאר/י מחובר/ת; בכל מחשב אחר החיבור ינותק.',
+      resetConfirm: 'איפוס הסיסמה',
+    },
+    done: {
+      created: 'המשתמש נוסף.',
+      roleChanged: 'התפקיד שונה.',
+      disabled: 'המשתמש הושבת.',
+      enabled: 'המשתמש הופעל.',
+      passwordReset: 'הסיסמה אופסה.',
+    },
+  },
+
   /** The components demo page (4.2, development only). Every name and number there is made up. */
   demo: {
     intro: 'דף לבדיקת הרכיבים המשותפים. כל הנתונים כאן מומצאים. הדף קיים רק בסביבת הפיתוח.',

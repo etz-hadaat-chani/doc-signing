@@ -82,6 +82,9 @@ const PAGE_COMPONENTS: Partial<Record<string, ComponentType>> = {
   '/settings': lazy(() =>
     import('./settings/SettingsPage').then((module) => ({ default: module.SettingsPage })),
   ),
+  '/users': lazy(() =>
+    import('./users/UsersPage').then((module) => ({ default: module.UsersPage })),
+  ),
   ...(import.meta.env.DEV && {
     '/demo/components': lazy(() =>
       import('./demo/ComponentsDemoPage').then((module) => ({
