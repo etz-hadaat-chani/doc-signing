@@ -2,7 +2,7 @@ import { errorMessage, SIGN_IMAGE_MAX_CHARS } from '@doc-signing/shared';
 import { describe, expect, it } from 'vitest';
 import { EMAIL_PAIR, formAnswer, formBox } from '../../test/sign-form-stub';
 import { ACK_ITEM, EMPTY_DRAFT, type FormDraft, SIGNATURE_ITEM } from './form-draft';
-import { checkSubmit, itemOfField } from './submit-check';
+import { checkPreview, itemOfField, submitBodyOf } from './submit-check';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 const HUGE = `data:image/png;base64,${'A'.repeat(SIGN_IMAGE_MAX_CHARS)}`;
@@ -28,13 +28,12 @@ const complete: FormDraft = {
 };
 const draft = (change: Partial<FormDraft>): FormDraft => ({ ...complete, ...change });
 
-describe('checkSubmit', () => {
-  it('all good: the body is the signature, the statement and the shown answers only', () => {
-    const { errors, body } = checkSubmit(form, complete);
+describe('checkPreview', () => {
+  it('all good: the body is the signature and the shown answers only (no statement)', () => {
+    const { errors, body } = checkPreview(form, draft({ acknowledged: false }));
     expect(errors.size).toBe(0);
     expect(body).toEqual({
       signatureImage: PNG,
-      acknowledged: true,
       emailChoice: 'email',
       email: 'dana@example.test',
       answers: { note: 'שלום' },
@@ -43,26 +42,24 @@ describe('checkSubmit', () => {
   });
 
   it('"office": no address in the body', () => {
-    const { body } = checkSubmit(form, draft({ emailChoice: 'office', email: 'x@example.test' }));
+    const { body } = checkPreview(form, draft({ emailChoice: 'office', email: 'x@example.test' }));
     expect(body).toMatchObject({ emailChoice: 'office' });
     expect(body).not.toHaveProperty('email');
   });
 
-  it('collects every error at once: boxes, statement, signature', () => {
-    const { errors, body } = checkSubmit(form, {
+  it('collects every error at once: boxes and signature; the statement is for B3a', () => {
+    const { errors, body } = checkPreview(form, {
       ...EMPTY_DRAFT,
       emailChoice: 'office',
     });
     expect(body).toBeNull();
-    expect([...errors.keys()].sort()).toEqual(
-      ['note', 'initials', ACK_ITEM, SIGNATURE_ITEM].sort(),
-    );
-    expect(errors.get(ACK_ITEM)).toBe(errorMessage('SIGN_ACK_REQUIRED'));
+    expect([...errors.keys()].sort()).toEqual(['note', 'initials', SIGNATURE_ITEM].sort());
+    expect(errors.has(ACK_ITEM)).toBe(false);
     expect(errors.get(SIGNATURE_ITEM)).toBe(errorMessage('SIGNATURE_EMPTY'));
   });
 
   it('too little ink: the signature or a drawing counts as empty', () => {
-    const { errors } = checkSubmit(
+    const { errors } = checkPreview(
       form,
       draft({ faint: { [SIGNATURE_ITEM]: true, initials: true } }),
     );
@@ -71,15 +68,23 @@ describe('checkSubmit', () => {
   });
 
   it('larger than the server takes: the size error at its pad', () => {
-    const { errors } = checkSubmit(form, draft({ signature: HUGE, drawings: { initials: HUGE } }));
+    const { errors } = checkPreview(form, draft({ signature: HUGE, drawings: { initials: HUGE } }));
     expect(errors.get(SIGNATURE_ITEM)).toBe(errorMessage('SIGNATURE_IMAGE_TOO_LARGE'));
     expect(errors.get('initials')).toBe(errorMessage('DRAWING_IMAGE_TOO_LARGE'));
   });
 
   it('a text the fit check found too long stops the send', () => {
-    const { errors, body } = checkSubmit(form, complete, new Map([['note', 'שלום']]));
+    const { errors, body } = checkPreview(form, complete, new Map([['note', 'שלום']]));
     expect(errors.get('note')).toBe(errorMessage('ANSWER_DOES_NOT_FIT'));
     expect(body).toBeNull();
+  });
+});
+
+describe('submitBodyOf', () => {
+  it('signs with exactly the previewed body plus the reading statement', () => {
+    const { body } = checkPreview(form, complete);
+    if (!body) throw new Error('no body');
+    expect(submitBodyOf(body)).toEqual({ ...body, acknowledged: true });
   });
 });
 

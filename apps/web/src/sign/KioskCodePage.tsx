@@ -28,6 +28,7 @@ import {
   kioskDocument,
   kioskFit,
   kioskForm,
+  kioskPreview,
   kioskState,
   kioskSubmit,
   verifyKiosk,
@@ -78,7 +79,7 @@ const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
  * carries the session from there): B2 (6.3) reads the document with the cookie only. A session
  * that ended there or on B3 can't ask the ID again (the code is used up): "ask the manager";
  * her B3 answers are dropped with it. Two minutes before the session ends a notice warns that
- * the answers would be lost. Signed: the copy's address is confirmed on B3, then
+ * the answers would be lost. Signed: the copy's address is confirmed on B3a (6.5), then
  * `location.replace('/kiosk?done')` loads B4 afresh with nothing of hers; "הקלדת קוד חדש" opens
  * the empty code field for the next employee.
  */
@@ -119,6 +120,8 @@ function KioskSigning() {
   const [draft, setDraft] = useState<FormDraft>(EMPTY_DRAFT);
   // When the signing session ends (this computer's clock), for the notice before it does.
   const [deadline, setDeadline] = useState<number | null>(null);
+  // B3a shows the pages: the wide card, as on B2.
+  const [previewing, setPreviewing] = useState(false);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -188,7 +191,7 @@ function KioskSigning() {
   const message = refused ?? (result && result.state !== 'valid' ? MESSAGE_OF[result.state] : null);
 
   return (
-    <SignLayout wide={step === 'document'}>
+    <SignLayout wide={step === 'document' || (step === 'form' && previewing)}>
       {step !== null && !message && <SessionWarning deadline={deadline} channel="kiosk" />}
       {result && message ? (
         <MessagePage kind={message} hrContact={result.hrContact} action={againButton} />
@@ -203,8 +206,10 @@ function KioskSigning() {
         <FormStep
           load={kioskForm}
           fit={kioskFit}
+          preview={kioskPreview}
           submit={kioskSubmit}
           confirmEmail
+          onPreviewChange={setPreviewing}
           onSigned={onSigned}
           draft={draft}
           onDraftChange={setDraft}

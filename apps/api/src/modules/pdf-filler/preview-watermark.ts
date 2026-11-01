@@ -7,10 +7,10 @@ export const PREVIEW_WATERMARK = 'תצוגה מקדימה – המסמך טרם 
 
 /** At most this size, and about this share of the page's diagonal. */
 const WATERMARK_MAX_SIZE = 60;
-const WATERMARK_DIAGONAL_SHARE = 0.75;
+const WATERMARK_DIAGONAL_SHARE = 0.6;
 /** Red-grey and see-through: clearly "not signed", while the text under it stays readable. */
 const WATERMARK_COLOR = rgb(0.75, 0.15, 0.15);
-const WATERMARK_OPACITY = 0.3;
+const WATERMARK_OPACITY = 0.2;
 
 /**
  * The preview of the signed PDF (B3a): the bytes `renderSignedPdf` built, with one diagonal line

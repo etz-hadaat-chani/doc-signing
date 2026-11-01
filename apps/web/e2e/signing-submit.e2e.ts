@@ -12,10 +12,11 @@ import {
 } from './signing-helpers';
 
 // Task 6.4 part B: B3 signed and sent, B4, the office computer's ending, and a correction round.
+// Task 6.5: B3 → the preview (B3a, watermarked, read in memory) → back to fix → again → signed.
 // Needs `pnpm dev` (with the worker: the invitations and the signed copies reach Mailpit).
 // DANGER rules: see signing-helpers.ts (fake rows only, all cleaned up in afterAll; the
 // correction round too). A signed assignment stays signed: expected, fake employees only.
-// The signed PDF stays in memory only (never written to disk) and is checked with pdf.js:
+// The preview and the signed PDF stay in memory only (never written to disk), checked with pdf.js:
 // only true / false is printed, never its text, an answer, an address or an ID number.
 
 const SCREENS = 'test-results/signing';
@@ -27,7 +28,11 @@ const T = {
   document: 'צפייה במסמך',
   continue: 'המשך לחתימה',
   form: 'טופס וחתימה',
-  finish: 'סיום וחתימה',
+  finish: 'המשך לתצוגה לפני חתימה',
+  preview: 'בדיקת המסמך לפני החתימה',
+  previewRegion: 'המסמך לפני החתימה',
+  sign: 'אישור וחתימה',
+  watermark: 'תצוגה מקדימה – המסמך טרם נחתם',
   toFix: (count: number) => `יש לתקן ${String(count)} שדות.`,
   signatureArea: 'משטח חתימה',
   ack: 'קראתי את המסמך והבנתי אותו, וזו החתימה שלי.',
@@ -202,7 +207,77 @@ async function fillAndSign(page: Page) {
   const size = await pad.boundingBox();
   expect((size?.width ?? 0) >= 500 && (size?.height ?? 0) >= 200, 'pad ≥ 500 × 200').toBe(true);
   await drawOn(page, pad);
+}
+
+/** Per page of a PDF (pdf.js, in memory): whether the preview's watermark line is on it. */
+async function watermarkPerPage(bytes: Uint8Array): Promise<boolean[]> {
+  const task = getDocument({ data: bytes, verbosity: VerbosityLevel.ERRORS });
+  const pdf = await task.promise;
+  const pages: boolean[] = [];
+  for (let number = 1; number <= pdf.numPages; number += 1) {
+    const content = await (await pdf.getPage(number)).getTextContent();
+    pages.push(content.items.some((item) => 'str' in item && item.str === T.watermark));
+  }
+  await task.destroy();
+  return pages;
+}
+
+/**
+ * The B3 button: the preview's bytes (kept in this test's memory only) and B3a with every page
+ * drawn (each canvas has ink). Checks the watermark on every page; prints only true / false.
+ */
+async function openPreview(page: Page) {
+  const previewed = page.waitForResponse((response) => response.url().endsWith('/preview'));
+  await page.getByRole('button', { name: T.finish }).click();
+  const response = await previewed;
+  expect(response.status()).toBe(200);
+  const bytes = new Uint8Array(await response.body());
+  await expect(page.getByRole('heading', { level: 1, name: T.preview })).toBeVisible();
+  const marks = await watermarkPerPage(bytes);
+  expect(marks.length > 0 && marks.every(Boolean), 'watermark on every page').toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(`(() => {
+        const canvases = [...document.querySelectorAll('[aria-label="${T.previewRegion}"] canvas')];
+        return canvases.length > 0 && canvases.every((canvas) => {
+          const context = canvas.getContext('2d');
+          if (!context || canvas.width === 0) return false;
+          const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+          for (let at = 0; at < data.length; at += 4) if (data[at] < 200) return true;
+          return false;
+        });
+      })()`),
+    )
+    .toBe(true);
+  // The sign theme's button sizes (20 px text, ≥ 56 px high), RTL page.
+  const looks = await page.evaluate(`(() => {
+    const button = [...document.querySelectorAll('button')].find(
+      (element) => element.textContent === '${T.sign}',
+    );
+    return button && {
+      font: getComputedStyle(button).fontSize,
+      height: button.getBoundingClientRect().height,
+      direction: getComputedStyle(document.querySelector('main')).direction,
+    };
+  })()`);
+  expect(looks).toMatchObject({ font: '20px', direction: 'rtl' });
+  expect((looks as { height: number }).height).toBeGreaterThanOrEqual(56);
+  return bytes;
+}
+
+/** On B3a: the reading statement and "אישור וחתימה". */
+async function tickAndSign(page: Page) {
   await page.getByRole('checkbox', { name: T.ack }).check();
+  await page.getByRole('button', { name: T.sign }).click();
+}
+
+/** "חזרה לתיקון" (the one under the pages): B3 from its top, with her answers. */
+async function backToFix(page: Page) {
+  await page.getByRole('button', { name: T.back }).last().click();
+  await expect(page.getByRole('heading', { level: 1, name: T.form })).toBeVisible();
+  expect(Number(await page.evaluate('window.scrollY'))).toBe(0);
+  const kept = (await page.getByRole('textbox', { name: L.note }).inputValue()) === A.note;
+  expect(kept, 'her answers kept').toBe(true);
 }
 
 type Matrix = [number, number, number, number, number, number];
@@ -296,7 +371,7 @@ function inkedImageIn(images: (Rect & { ink: number })[], place: Rect): boolean 
 
 test.use({ viewport: { width: 1280, height: 720 } });
 
-test('a link: errors first, then filled and signed with the mouse → B4; the stored PDF; "already signed"; the copy; a correction round', async ({
+test('a link: errors first, then filled and signed with the mouse → B3a → back → B3a → B4; the stored PDF; "already signed"; the copy; a correction round', async ({
   page,
 }) => {
   test.setTimeout(240_000);
@@ -306,26 +381,33 @@ test('a link: errors first, then filled and signed with the mouse → B4; the st
   await openLink(page, path);
   await reachForm(page, people.link.idNumber);
 
-  // "סיום וחתימה" with nothing filled ("office" chosen to turn it on): errors, nothing sent.
+  // The B3 button with nothing filled ("office" chosen to turn it on): errors, nothing sent.
   const finish = page.getByRole('button', { name: T.finish });
   await expect(finish).toBeDisabled();
   await page.getByRole('radio', { name: T.office }).check();
   await finish.click();
   await expect(page.getByRole('textbox', { name: L.note })).toBeFocused();
-  // Note, story, size, date, drawing, signature, statement.
-  await expect(page.getByText(T.toFix(7))).toBeVisible();
+  // Note, story, size, date, drawing, signature (the statement is on B3a now).
+  await expect(page.getByText(T.toFix(6))).toBeVisible();
   await shot(page, 'b3-sign-1-errors');
-  expect(urls.some((url) => url.endsWith('/submit'))).toBe(false);
+  expect(urls.some((url) => url.endsWith('/submit') || url.endsWith('/preview'))).toBe(false);
 
-  await page.getByRole('radio', { name: T.byEmail }).check();
   await fillAndSign(page);
   await shot(page, 'b3-sign-2-filled', {
     fullPage: true,
     mask: [page.getByRole('textbox', { name: T.emailField })],
   });
   expect(await setup.mailCount(address)).toBe(1);
+
+  // B3a ("office" first: no address drawn in the picture), back to fix, the email chosen
+  // instead (one answer changed), the preview again with it, then signed.
+  await openPreview(page);
+  await shot(page, 'b3a-link', { fullPage: true });
+  await backToFix(page);
+  await page.getByRole('radio', { name: T.byEmail }).check();
+  await openPreview(page);
   const submitted = page.waitForResponse((response) => response.url().endsWith('/submit'));
-  await finish.click();
+  await tickAndSign(page);
   expect((await submitted).status()).toBe(201);
   await expect(page.getByRole('heading', { level: 1, name: T.done })).toBeVisible();
   await expect(page.getByText(T.linkCopy)).toBeVisible();
@@ -352,6 +434,7 @@ test('a link: errors first, then filled and signed with the mouse → B4; the st
     carNumber: text.includes(A.carNumber),
     date: text.includes(todayIL()),
     email: text.includes(address),
+    noWatermark: !text.includes(T.watermark),
   };
   for (const [what, ok] of Object.entries(found)) expect(ok, `signed PDF: ${what}`).toBe(true);
 
@@ -381,7 +464,7 @@ test('a link: errors first, then filled and signed with the mouse → B4; the st
   await checkPage(page, urls, [people.link.idNumber, A.note, A.carNumber, address]);
 });
 
-test('the office computer: the email confirmed in sign-theme sizes, then B4 through location.replace; "Back" shows nothing of hers', async ({
+test('the office computer: B3a, back, the email confirmed in sign-theme sizes, then B4 through location.replace; "Back" shows nothing of hers', async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -393,9 +476,17 @@ test('the office computer: the email confirmed in sign-theme sizes, then B4 thro
   await expect(page.getByText(T.kioskAccepted)).toBeVisible();
   await reachForm(page, people.kiosk.idNumber);
 
-  await page.getByRole('textbox', { name: T.emailField }).fill(kioskAddress);
+  // B3a first with "office" (no address in the picture), back, then the email she gives.
+  await page.getByRole('radio', { name: T.office }).check();
   await fillAndSign(page);
-  await page.getByRole('button', { name: T.finish }).click();
+  await openPreview(page);
+  await shot(page, 'b3a-kiosk', { fullPage: true });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await backToFix(page);
+  await page.getByRole('radio', { name: T.byEmail }).check();
+  await page.getByRole('textbox', { name: T.emailField }).fill(kioskAddress);
+  await openPreview(page);
+  await tickAndSign(page);
 
   // The confirm: the address once more, left to right in a right-to-left dialog, large.
   const dialog = page.getByRole('dialog', { name: T.confirmTitle });
@@ -424,7 +515,7 @@ test('the office computer: the email confirmed in sign-theme sizes, then B4 thro
   // Back to fix it, then confirmed: B4 as a fresh page.
   await dialog.getByRole('button', { name: T.back }).click();
   await expect(dialog).toBeHidden();
-  await page.getByRole('button', { name: T.finish }).click();
+  await page.getByRole('button', { name: T.sign }).click();
   const submitted = page.waitForResponse(
     (response) => new URL(response.url()).pathname === '/api/kiosk/submit',
   );

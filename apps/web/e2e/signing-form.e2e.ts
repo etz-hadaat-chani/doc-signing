@@ -27,10 +27,9 @@ const T = {
   continue: 'המשך לחתימה',
   form: 'טופס וחתימה',
   correction: 'תיקון נדרש:',
-  finish: 'סיום וחתימה',
+  finish: 'המשך לתצוגה לפני חתימה',
   chooseFirst: 'הכפתור יופעל אחרי בחירה איך לקבל את תלוש השכר וההודעות.',
   signatureEmpty: 'לא נמצאה חתימה. יש לחתום עם העכבר בתוך המסגרת',
-  ackRequired: 'יש לסמן שקראת את המסמך ושהחתימה שלך',
   toFix: (count: number) => `יש לתקן ${String(count)} שדות.`,
   required: 'יש למלא שדה זה',
   invalidEmail: 'כתובת האימייל אינה תקינה',
@@ -218,18 +217,18 @@ test('a link: required errors, every box filled, the condition, a bad email, the
   await checkSizes(page);
   await shot(page, '1-top');
 
-  // No email choice yet: "סיום וחתימה" is off and says why.
+  // No email choice yet: the button to the preview is off and says why.
   const finish = page.getByRole('button', { name: T.finish });
   await expect(finish).toBeDisabled();
   await expect(page.getByText(T.chooseFirst)).toBeVisible();
-  // Nothing filled in: an error next to each required box (7), the signature and the
-  // statement, the first one focused.
+  // Nothing filled in: an error next to each required box (7) and the signature, the first one
+  // focused. The reading statement is on the preview screen (6.5), not here.
   await page.getByRole('radio', { name: T.office }).check();
   await finish.click();
   const note = page.getByRole('textbox', { name: L.note });
   await expect(note).toHaveAttribute('aria-invalid', 'true');
   await expect(note).toBeFocused();
-  await expect(page.getByText(T.toFix(9))).toBeVisible();
+  await expect(page.getByText(T.toFix(8))).toBeVisible();
   await shot(page, '2-errors');
 
   await note.fill('בדיקה אוטומטית');
@@ -272,13 +271,12 @@ test('a link: required errors, every box filled, the condition, a bad email, the
   await tiny.fill('אב');
   await expect(page.getByText(T.doesNotFit)).toHaveCount(0);
 
-  // Every box is good: only the signature and the reading statement are left; nothing sent.
+  // Every box is good: only the signature is left; nothing sent.
   await finish.click();
   await expect(page.getByText(T.required)).toHaveCount(0);
   await expect(page.getByText(T.signatureEmpty)).toBeVisible();
-  await expect(page.getByText(T.ackRequired)).toBeVisible();
-  await expect(page.getByText(T.toFix(2))).toBeVisible();
-  expect(urls.some((url) => url.endsWith('/submit'))).toBe(false);
+  await expect(page.getByText('יש לתקן שדה אחד.')).toBeVisible();
+  expect(urls.some((url) => url.endsWith('/preview') || url.endsWith('/submit'))).toBe(false);
   await shot(page, '5-only-signature-left');
   await shot(page, '6-full', true);
 

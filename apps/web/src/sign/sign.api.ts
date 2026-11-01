@@ -2,6 +2,7 @@ import {
   type SignFitResult,
   type SignFormResult,
   signLinkStateResultSchema,
+  type SignPreviewInput,
   type SignSubmitInput,
   type SignSubmittedResult,
   type SignVerifiedResult,
@@ -91,6 +92,14 @@ export function linkFit(token: string, answers: Record<string, string>, signal?:
     schema: signFitResultSchema,
     signal,
   });
+}
+
+/**
+ * The signed document before signing (B3a, 6.5): built by the server from this body, marked "not
+ * signed yet", nothing saved. The bytes stay in the screen's memory only.
+ */
+export function linkPreview(token: string, body: SignPreviewInput) {
+  return requestBytes(`${linkPath(token)}/preview`, { method: 'POST', body });
 }
 
 /** Signs (FR-SGN-5): her signature, the statement and her answers, in the body only. */

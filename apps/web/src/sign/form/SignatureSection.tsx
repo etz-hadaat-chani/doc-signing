@@ -87,7 +87,7 @@ interface ReadingStatementProps {
   onChange: (acknowledged: boolean) => void;
 }
 
-/** The reading statement (FR-SGN-4): a checkbox whose whole row is clickable. */
+/** The reading statement (FR-SGN-4), on B3a since 6.5: a checkbox whose whole row is clickable. */
 export function ReadingStatement({ acknowledged, error, onChange }: ReadingStatementProps) {
   return (
     <FormControl error={error !== null} fullWidth>
@@ -99,7 +99,7 @@ export function ReadingStatement({ acknowledged, error, onChange }: ReadingState
             slotProps={{ input: { 'aria-invalid': error !== null } }}
           />
         }
-        label={text.ack}
+        label={he.sign.preview.ack}
         sx={choiceSx}
       />
       {error !== null && <FormHelperText>{error}</FormHelperText>}

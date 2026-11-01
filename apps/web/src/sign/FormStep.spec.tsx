@@ -9,7 +9,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { he } from '../i18n/he';
 import { apiErrorResponse, jsonResponse, stubApi } from '../test/fetch-stub';
-import { pdfResponse } from '../test/pdf-document-stub';
+import { pdfResponse, pdfStub } from '../test/pdf-document-stub';
 import { renderRoutes } from '../test/render';
 import { EMAIL_PAIR, formAnswer, formBox } from '../test/sign-form-stub';
 import { padStub } from '../test/signature-pad-stub';
@@ -22,11 +22,13 @@ vi.mock('signature_pad', () => import('../test/signature-pad-stub'));
 vi.mock('./page-navigation', () => ({ replacePage: vi.fn() }));
 
 const text = he.sign.form;
+const previewText = he.sign.preview;
 const TOKEN = 'T'.repeat(43);
 const STATE_URL = `/api/sign/${TOKEN}`;
 const FORM_URL = `${STATE_URL}/form`;
 const FIT_URL = `${STATE_URL}/fit`;
 const SUBMIT_URL = `${STATE_URL}/submit`;
+const PREVIEW_URL = `${STATE_URL}/preview`;
 const SIGNED = () =>
   jsonResponse(201, {
     state: 'signed',
@@ -111,6 +113,7 @@ async function linkAtForm(
   form: Handler | SignFormResult = FULL_FORM,
   fit: Handler = () => jsonResponse(200, { tooLong: [] }),
   submit: Handler = SIGNED,
+  preview: Handler = pdfResponse,
 ) {
   const mock = stubApi({
     [`GET ${STATE_URL}`]: () => jsonResponse(200, { state: 'valid', hrContact: HR }),
@@ -119,6 +122,7 @@ async function linkAtForm(
     [`GET ${FORM_URL}`]: typeof form === 'function' ? form : () => jsonResponse(200, form),
     [`POST ${FIT_URL}`]: fit,
     [`POST ${SUBMIT_URL}`]: submit,
+    [`POST ${PREVIEW_URL}`]: preview,
   });
   const rendered = renderRoutes(`/sign/${TOKEN}`, signRoutes);
   await typeId(rendered.user);
@@ -131,6 +135,7 @@ async function kioskAtForm(
   form: Handler,
   fit: Handler = () => jsonResponse(200, { tooLong: [] }),
   submit: Handler = SIGNED,
+  preview: Handler = pdfResponse,
 ) {
   const mock = stubApi({
     'POST /api/kiosk/code': () => jsonResponse(200, { code: 'L'.repeat(43) }),
@@ -140,6 +145,7 @@ async function kioskAtForm(
     'GET /api/kiosk/form': form,
     'POST /api/kiosk/fit': fit,
     'POST /api/kiosk/submit': submit,
+    'POST /api/kiosk/preview': preview,
   });
   const rendered = renderRoutes(KIOSK_PAGE_PATH, signRoutes);
   await rendered.user.type(
@@ -161,25 +167,32 @@ const bodyOf = (call: unknown[] | undefined): unknown => {
   const init = call?.[1] as RequestInit | undefined;
   return typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
 };
-/** "סיום וחתימה". */
+/** "המשך לתצוגה לפני חתימה" on B3. */
 const press = (user: Rendered['user']) =>
   user.click(screen.getByRole('button', { name: text.submit.button }));
+const previewShown = () => screen.findByRole('heading', { level: 1, name: previewText.title });
+/** On B3a: ticks the reading statement and presses "אישור וחתימה". */
+async function tickAndConfirm(user: Rendered['user']) {
+  await previewShown();
+  await user.click(screen.getByRole('checkbox', { name: previewText.ack }));
+  await user.click(screen.getByRole('button', { name: previewText.confirm }));
+}
 const doneShown = () => screen.findByRole('heading', { level: 1, name: he.sign.done.title });
 const drawingGroup = () => screen.getByRole('group', { name: 'ראשי תיבות' });
 const signatureGroup = () => screen.getByRole('group', { name: text.signature.title });
 /** The big pad (the last one made: a new ID check makes it again). */
 const signaturePad = () =>
   padStub.pads.findLast((pad) => pad.canvas.getAttribute('aria-label') === text.signature.area);
-/** Signs with the mouse and ticks the reading statement. */
-async function signAndTick(user: Rendered['user']) {
+/** Signs with the mouse on the big pad. */
+function sign() {
   act(() => signaturePad()?.stroke());
-  await user.click(screen.getByRole('checkbox', { name: text.ack }));
 }
 const helperOf = (field: HTMLElement) =>
   field.closest('.MuiFormControl-root')?.querySelector('.MuiFormHelperText-root')?.textContent;
 
 beforeEach(() => {
   padStub.pads.length = 0;
+  pdfStub.destroy.mockClear();
   vi.mocked(replacePage).mockClear();
   padStub.png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
   stubObserver();
@@ -216,8 +229,9 @@ describe('B3 form for a link (6.4 part A)', () => {
     await user.click(screen.getByRole('radio', { name: text.email.byEmail }));
     // The optional checkbox says so.
     expect(screen.getByRole('checkbox', { name: `יש לי רכב ${text.optional}` })).not.toBeChecked();
-    await signAndTick(user);
+    sign();
     await press(user);
+    await tickAndConfirm(user);
     expect(await doneShown()).toBeVisible();
   });
 
@@ -234,7 +248,7 @@ describe('B3 form for a link (6.4 part A)', () => {
     expect(await screen.findByRole('textbox', { name: 'מספר רכב' })).toHaveValue('');
   });
 
-  it('"סיום וחתימה" with required boxes empty: a Hebrew error next to each, the first one focused', async () => {
+  it('the B3 button with required boxes empty: a Hebrew error next to each, the first one focused', async () => {
     const { mock, user } = await linkAtForm();
     await formShown();
     await user.click(screen.getByRole('radio', { name: text.email.office }));
@@ -246,13 +260,15 @@ describe('B3 form for a link (6.4 part A)', () => {
     expect(note).toHaveFocus();
     expect(screen.getAllByText(required).length).toBeGreaterThanOrEqual(5);
     expect(screen.getByText(errorMessage('SIGNATURE_EMPTY'))).toBeVisible();
-    expect(screen.getByText(errorMessage('SIGN_ACK_REQUIRED'))).toBeVisible();
-    expect(screen.getByText(text.toFix(8))).toBeVisible();
-    expect(calls(mock, SUBMIT_URL)).toHaveLength(0);
+    // The reading statement is on B3a now (6.5): not asked here.
+    expect(screen.queryByText(errorMessage('SIGN_ACK_REQUIRED'))).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: previewText.ack })).toBeNull();
+    expect(screen.getByText(text.toFix(7))).toBeVisible();
+    expect(calls(mock, PREVIEW_URL)).toHaveLength(0);
     // The errors follow her edits.
     await user.type(note, 'שלום');
     expect(helperOf(note)).not.toBe(required);
-    expect(screen.getByText(text.toFix(7))).toBeVisible();
+    expect(screen.getByText(text.toFix(6))).toBeVisible();
   });
 
   it('long text shows how many characters are left', async () => {
@@ -289,7 +305,7 @@ describe('B3 form for a link (6.4 part A)', () => {
     const field = screen.getByRole('textbox', { name: text.email.field });
     expect(field).toHaveValue('dana@example.test');
     expect(field).toHaveAttribute('dir', 'ltr');
-    // No choice yet: "סיום וחתימה" is off, and says why.
+    // No choice yet: the B3 button is off, and says why.
     const button = screen.getByRole('button', { name: text.submit.button });
     expect(button).toBeDisabled();
     expect(button).toHaveAccessibleDescription(text.submit.chooseFirst);
@@ -435,14 +451,15 @@ function blankCanvases() {
 const errorAnswer = (status: number, code: string, details: object) => () =>
   jsonResponse(status, { error: { code, message: 'x', details } });
 
-/** Office chosen, signed and ticked, then "סיום וחתימה". */
+/** Office chosen and signed, then the B3 button, then on B3a the statement and "אישור וחתימה". */
 async function officeSignPress(user: Rendered['user']) {
   await user.click(screen.getByRole('radio', { name: text.email.office }));
-  await signAndTick(user);
+  sign();
   await press(user);
+  await tickAndConfirm(user);
 }
 
-describe('B3 signature and "סיום וחתימה" for a link (6.4 part B)', () => {
+describe('B3 signature and the button for a link (6.4 part B)', () => {
   it('2 minutes before the session ends: a calm line, not an alert (here: the end already near)', async () => {
     await linkAtForm();
     await formShown();
@@ -467,28 +484,17 @@ describe('B3 signature and "סיום וחתימה" for a link (6.4 part B)', () 
     expect(within(signatureGroup()).getByText(errorMessage('SIGNATURE_EMPTY'))).toBeVisible();
   });
 
-  it('the reading statement is required: its error at the box, focused, nothing sent', async () => {
-    const { mock, user } = await linkAtForm();
-    await fillAll(user);
-    await user.click(screen.getByRole('radio', { name: text.email.office }));
-    act(() => signaturePad()?.stroke());
-    await press(user);
-    const ack = screen.getByRole('checkbox', { name: text.ack });
-    expect(ack).toHaveAttribute('aria-invalid', 'true');
-    expect(ack).toHaveFocus();
-    expect(screen.getByText(errorMessage('SIGN_ACK_REQUIRED'))).toBeVisible();
-    expect(calls(mock, SUBMIT_URL)).toHaveLength(0);
-  });
-
   it('too little ink in the signature or a drawing: a Hebrew error at that pad, nothing sent', async () => {
     const canvases = blankCanvases();
     const { mock, user } = await linkAtForm();
     await fillAll(user);
-    await officeSignPress(user);
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    sign();
+    await press(user);
     expect(within(signatureGroup()).getByText(errorMessage('SIGNATURE_EMPTY'))).toBeVisible();
     expect(within(drawingGroup()).getByText(errorMessage('DRAWING_EMPTY'))).toBeVisible();
     expect(within(drawingGroup()).getByRole('button', { name: text.clear })).toHaveFocus();
-    expect(calls(mock, SUBMIT_URL)).toHaveLength(0);
+    expect(calls(mock, PREVIEW_URL)).toHaveLength(0);
     canvases.mockRestore();
   });
 
@@ -499,12 +505,11 @@ describe('B3 signature and "סיום וחתימה" for a link (6.4 part B)', () 
     act(() => signaturePad()?.stroke());
     expect(within(signatureGroup()).getByText(text.signature.tooLarge)).toBeVisible();
     await user.click(screen.getByRole('radio', { name: text.email.office }));
-    await user.click(screen.getByRole('checkbox', { name: text.ack }));
     await press(user);
-    expect(calls(mock, SUBMIT_URL)).toHaveLength(0);
+    expect(calls(mock, PREVIEW_URL)).toHaveLength(0);
   });
 
-  it('the body: the signature, the statement, the shown answers only, the email for "email"', async () => {
+  it('the body: the signature, the shown answers only, the email for "email"; signed with the same body + the statement', async () => {
     const { mock, user, queryClient } = await linkAtForm();
     await fillAll(user);
     const agree = screen.getByRole('checkbox', { name: `יש לי רכב ${text.optional}` });
@@ -512,14 +517,12 @@ describe('B3 signature and "סיום וחתימה" for a link (6.4 part B)', () 
     await user.type(await screen.findByRole('textbox', { name: 'מספר רכב' }), '12-345-67');
     await user.click(agree);
     await user.click(screen.getByRole('radio', { name: text.email.byEmail }));
-    await signAndTick(user);
+    sign();
     await press(user);
+    await tickAndConfirm(user);
     expect(await doneShown()).toBeVisible();
-    expect(calls(mock, SUBMIT_URL)).toHaveLength(1);
-    expect(calls(mock, SUBMIT_URL)[0]?.[1]?.method).toBe('POST');
-    expect(bodyOf(calls(mock, SUBMIT_URL)[0])).toEqual({
+    const previewed = {
       signatureImage: padStub.png,
-      acknowledged: true,
       emailChoice: 'email',
       email: 'dana@example.test',
       answers: {
@@ -530,7 +533,13 @@ describe('B3 signature and "סיום וחתימה" for a link (6.4 part B)', () 
         start: '2026-11-05',
       },
       drawings: { initials: padStub.png },
-    });
+    };
+    expect(calls(mock, PREVIEW_URL)).toHaveLength(1);
+    expect(calls(mock, PREVIEW_URL)[0]?.[1]?.method).toBe('POST');
+    expect(bodyOf(calls(mock, PREVIEW_URL)[0])).toEqual(previewed);
+    expect(calls(mock, SUBMIT_URL)).toHaveLength(1);
+    expect(calls(mock, SUBMIT_URL)[0]?.[1]?.method).toBe('POST');
+    expect(bodyOf(calls(mock, SUBMIT_URL)[0])).toEqual({ ...previewed, acknowledged: true });
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
     expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
   });
@@ -539,46 +548,55 @@ describe('B3 signature and "סיום וחתימה" for a link (6.4 part B)', () 
     const { user } = await linkAtForm();
     await fillAll(user);
     await user.click(screen.getByRole('radio', { name: text.email.byEmail }));
-    await signAndTick(user);
+    sign();
     await press(user);
+    await tickAndConfirm(user);
     expect(await doneShown()).toBeVisible();
     expect(screen.getByText(he.sign.done.linkCopy)).toBeVisible();
     expect(screen.getByText(HR.name)).toBeVisible();
     expect(document.body.textContent).not.toContain('dana@example.test');
     expect(document.body.textContent).not.toContain('שלום');
     expect(screen.queryByRole('img', { name: text.signature.area })).toBeNull();
+    expect(screen.queryByRole('region', { name: previewText.label })).toBeNull();
   });
 
-  it('"office" and a double click: one request, no address in it', async () => {
+  it('"office" and double clicks: one preview, one signature, no address in either', async () => {
     let answer: (response: Response) => void = () => {};
     const submit = () => new Promise<Response>((done) => (answer = done));
     const { mock, user } = await linkAtForm(FULL_FORM, undefined, submit as unknown as Handler);
     await fillAll(user);
     await user.click(screen.getByRole('radio', { name: text.email.office }));
-    await signAndTick(user);
+    sign();
     await user.dblClick(screen.getByRole('button', { name: text.submit.button }));
-    expect(screen.getByRole('button', { name: text.submit.sending })).toBeDisabled();
+    await previewShown();
+    expect(calls(mock, PREVIEW_URL)).toHaveLength(1);
+    await user.click(screen.getByRole('checkbox', { name: previewText.ack }));
+    await user.dblClick(screen.getByRole('button', { name: previewText.confirm }));
+    expect(screen.getByRole('button', { name: previewText.sending })).toBeDisabled();
     expect(calls(mock, SUBMIT_URL)).toHaveLength(1);
     const body = bodyOf(calls(mock, SUBMIT_URL)[0]) as Record<string, unknown>;
     expect(body.emailChoice).toBe('office');
     expect(body).not.toHaveProperty('email');
+    expect(bodyOf(calls(mock, PREVIEW_URL)[0])).not.toHaveProperty('email');
     act(() => answer(SIGNED()));
     expect(await doneShown()).toBeVisible();
   });
 
-  it("the server's 400s land at their box or pad: the first scrolled to and focused", async () => {
-    const submit = inTurn(
+  it("the preview's 400s land at their box or pad on B3: the first scrolled to and focused", async () => {
+    const preview = inTurn(
       errorAnswer(400, 'VALIDATION_FAILED', {
         fields: [{ field: 'answers.story', code: 'ANSWER_TOO_LONG', message: 'x' }],
       }),
       errorAnswer(400, 'ANSWER_DOES_NOT_FIT', { key: 'note' }),
       errorAnswer(400, 'DRAWING_IMAGE_INVALID', { key: 'initials' }),
       () => apiErrorResponse(400, 'SIGNATURE_IMAGE_INVALID'),
-      SIGNED,
+      pdfResponse,
     );
-    const { user } = await linkAtForm(FULL_FORM, undefined, submit);
+    const { user } = await linkAtForm(FULL_FORM, undefined, SIGNED, preview);
     await fillAll(user);
-    await officeSignPress(user);
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    sign();
+    await press(user);
     const story = screen.getByRole('textbox', { name: 'פירוט' });
     await waitFor(() => expect(helperOf(story)).toBe(errorMessage('ANSWER_TOO_LONG')));
     expect(story).toHaveFocus();
@@ -599,12 +617,13 @@ describe('B3 signature and "סיום וחתימה" for a link (6.4 part B)', () 
     expect(
       await within(signatureGroup()).findByText(errorMessage('SIGNATURE_IMAGE_INVALID')),
     ).toBeVisible();
-    act(() => signaturePad()?.stroke());
+    sign();
     await press(user);
+    await tickAndConfirm(user);
     expect(await doneShown()).toBeVisible();
   });
 
-  it('the session ended at "סיום וחתימה": the ID again, the form with everything kept; she presses again', async () => {
+  it('the session ended at "אישור וחתימה": the ID again, B3 with everything kept; she presses again', async () => {
     const submit = inTurn(() => apiErrorResponse(401, 'SIGN_SESSION_EXPIRED'), SIGNED);
     const { mock, user } = await linkAtForm(FULL_FORM, undefined, submit);
     await fillAll(user);
@@ -615,13 +634,14 @@ describe('B3 signature and "סיום וחתימה" for a link (6.4 part B)', () 
     expect(calls(mock, SUBMIT_URL)).toHaveLength(1);
     expect(screen.getByRole('textbox', { name: 'הערה' })).toHaveValue('שלום');
     expect(screen.getByRole('radio', { name: text.email.office })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: text.ack })).toBeChecked();
     await press(user);
+    await tickAndConfirm(user);
     expect(await doneShown()).toBeVisible();
     // The same body again: the signature was kept too.
     const [first, second] = calls(mock, SUBMIT_URL).map(bodyOf);
     expect(second).toEqual(first);
     expect((second as { signatureImage: string }).signatureImage).toBe(padStub.png);
+    expect(calls(mock, PREVIEW_URL)).toHaveLength(2);
   });
 
   it('already signed (409, e.g. a second tab): B4 without promising a copy', async () => {
@@ -643,17 +663,17 @@ describe('B3 signature and "סיום וחתימה" for a link (6.4 part B)', () 
     ).toBeVisible();
   });
 
-  it('429: "wait N minutes" and the button off until then; the answers stay', async () => {
+  it('429: "wait N minutes" and the button off until then; the statement stays ticked', async () => {
     const submit = () => apiErrorResponse(429, 'SIGN_TOO_MANY_REQUESTS', { 'Retry-After': '120' });
     const { user } = await linkAtForm(FULL_FORM, undefined, submit);
     await fillAll(user);
     await officeSignPress(user);
     expect(await screen.findByText(he.sign.document.wait(2))).toBeVisible();
-    expect(screen.getByRole('button', { name: text.submit.button })).toBeDisabled();
-    expect(screen.getByRole('textbox', { name: 'הערה' })).toHaveValue('שלום');
+    expect(screen.getByRole('button', { name: previewText.confirm })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: previewText.ack })).toBeChecked();
   });
 
-  it('no connection: an error with "try again"; every answer stays, and it sends again', async () => {
+  it('no connection: an error with "try again"; it sends again', async () => {
     const submit = inTurn(() => {
       throw new TypeError('Failed to fetch');
     }, SIGNED);
@@ -664,15 +684,156 @@ describe('B3 signature and "סיום וחתימה" for a link (6.4 part B)', () 
       '[role="alert"]',
     );
     if (!alert) throw new Error('no alert');
-    expect(screen.getByRole('textbox', { name: 'הערה' })).toHaveValue('שלום');
-    expect(screen.getByRole('checkbox', { name: text.ack })).toBeChecked();
-    await user.click(within(alert).getByRole('button', { name: text.submit.retry }));
+    expect(screen.getByRole('checkbox', { name: previewText.ack })).toBeChecked();
+    await user.click(within(alert).getByRole('button', { name: previewText.retry }));
     expect(await doneShown()).toBeVisible();
     expect(calls(mock, SUBMIT_URL)).toHaveLength(2);
   });
 });
 
-describe('B3 on the office computer: the ending (6.4 part B)', () => {
+describe('B3a: the preview before signing (6.5)', () => {
+  /** A link with every box filled, "office", signed, at B3a. */
+  async function linkAtPreview(...args: Parameters<typeof linkAtForm>) {
+    const rendered = await linkAtForm(...args);
+    await fillAll(rendered.user);
+    await rendered.user.click(screen.getByRole('radio', { name: text.email.office }));
+    sign();
+    await press(rendered.user);
+    await previewShown();
+    return rendered;
+  }
+
+  it('B3a: the title, the line, every page in the wide card, the session warning; nothing cached', async () => {
+    const { mock, queryClient } = await linkAtPreview();
+    expect(screen.getByText(previewText.intro)).toBeVisible();
+    const region = screen.getByRole('region', { name: previewText.label });
+    expect(region).toHaveAttribute('dir', 'ltr');
+    expect(await within(region).findAllByRole('figure')).toHaveLength(pdfStub.pages);
+    expect(screen.getByText(he.sign.sessionWarning.link)).toBeVisible();
+    expect(screen.getByRole('main')).toHaveStyle({ maxWidth: '960px' });
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+    expect(calls(mock, SUBMIT_URL)).toHaveLength(0);
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+    expect(urls(mock).some((url) => url.startsWith('/api/auth'))).toBe(false);
+    expect(urls(mock).some((url) => url.startsWith('blob:'))).toBe(false);
+  });
+
+  it('the reading statement is required on B3a: its error at the box, focused, nothing sent', async () => {
+    const { mock, user } = await linkAtPreview();
+    await user.click(screen.getByRole('button', { name: previewText.confirm }));
+    const ack = screen.getByRole('checkbox', { name: previewText.ack });
+    expect(ack).toHaveAttribute('aria-invalid', 'true');
+    expect(ack).toHaveFocus();
+    expect(screen.getByText(errorMessage('SIGN_ACK_REQUIRED'))).toBeVisible();
+    expect(calls(mock, SUBMIT_URL)).toHaveLength(0);
+    await user.click(ack);
+    expect(screen.queryByText(errorMessage('SIGN_ACK_REQUIRED'))).toBeNull();
+  });
+
+  it('"חזרה לתיקון": B3 from the top with everything kept; a changed answer goes into the next preview', async () => {
+    const { mock, user } = await linkAtPreview();
+    await user.click(screen.getByRole('checkbox', { name: previewText.ack }));
+    const [back] = screen.getAllByRole('button', { name: previewText.back });
+    if (!back) throw new Error('no back button');
+    scrollTo.mockClear();
+    await user.click(back);
+    await formShown();
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
+    // pdf.js's copy of the preview is freed with the screen.
+    expect(pdfStub.destroy).toHaveBeenCalled();
+    expect(screen.queryByRole('region', { name: previewText.label })).toBeNull();
+    expect(screen.getByRole('main')).not.toHaveStyle({ maxWidth: '960px' });
+    expect(calls(mock, FORM_URL)).toHaveLength(1);
+    const note = screen.getByRole('textbox', { name: 'הערה' });
+    expect(note).toHaveValue('שלום');
+    expect(screen.getByRole('radio', { name: text.email.office })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'אפשרות 2' })).toBeChecked();
+
+    await user.type(note, ' רב');
+    await press(user);
+    await previewShown();
+    // A new preview: the statement is ticked again for what she now sees.
+    expect(screen.getByRole('checkbox', { name: previewText.ack })).not.toBeChecked();
+    const bodies = calls(mock, PREVIEW_URL).map(bodyOf) as {
+      answers: { note: string };
+      signatureImage: string;
+      drawings: Record<string, string>;
+    }[];
+    expect(bodies.map(({ answers }) => answers.note)).toEqual(['שלום', 'שלום רב']);
+    // The signature and the drawing were kept across B3a and back.
+    expect(bodies[1]?.signatureImage).toBe(padStub.png);
+    expect(bodies[1]?.drawings).toEqual({ initials: padStub.png });
+    await tickAndConfirm(user);
+    expect(await doneShown()).toBeVisible();
+    expect((bodyOf(calls(mock, SUBMIT_URL)[0]) as { answers: { note: string } }).answers.note).toBe(
+      'שלום רב',
+    );
+  });
+
+  it('a 400 at signing (the day changed, say): back on B3 with the error at its box, focused', async () => {
+    const submit = inTurn(
+      errorAnswer(400, 'VALIDATION_FAILED', {
+        fields: [{ field: 'answers.start', code: 'ANSWER_DATE_OUT_OF_RANGE', message: 'x' }],
+      }),
+      SIGNED,
+    );
+    const { user } = await linkAtPreview(FULL_FORM, undefined, submit);
+    await tickAndConfirm(user);
+    await formShown();
+    const date = screen.getByRole('textbox', { name: 'תאריך התחלה' });
+    await waitFor(() => expect(helperOf(date)).toBe(errorMessage('ANSWER_DATE_OUT_OF_RANGE')));
+    expect(date).toHaveFocus();
+    expect(screen.getByText(text.toFix(1))).toBeVisible();
+  });
+
+  it('the session ended at the preview: the ID again, then B3 with everything kept', async () => {
+    const preview = inTurn(() => apiErrorResponse(401, 'SIGN_SESSION_EXPIRED'), pdfResponse);
+    const { mock, user } = await linkAtForm(FULL_FORM, undefined, SIGNED, preview);
+    await fillAll(user);
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    sign();
+    await press(user);
+    expect(await screen.findByText(he.sign.document.sessionEnded)).toBeVisible();
+    await typeId(user);
+    await formShown();
+    expect(screen.getByRole('textbox', { name: 'הערה' })).toHaveValue('שלום');
+    await press(user);
+    await previewShown();
+    const [first, second] = calls(mock, PREVIEW_URL).map(bodyOf);
+    expect(second).toEqual(first);
+  });
+
+  it('the preview refused (409 signed meanwhile): B4 without the copy line', async () => {
+    const { user } = await linkAtForm(
+      FULL_FORM,
+      undefined,
+      SIGNED,
+      errorAnswer(409, 'SIGN_ALREADY_SIGNED', { state: 'signed' }),
+    );
+    await fillAll(user);
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    sign();
+    await press(user);
+    expect(await doneShown()).toBeVisible();
+    expect(screen.queryByText(he.sign.done.linkCopy)).toBeNull();
+  });
+
+  it('the office computer: the preview through /api/kiosk/preview only', async () => {
+    const { mock, user } = await kioskAtForm(() => jsonResponse(200, FULL_FORM));
+    await fillAll(user);
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    sign();
+    await press(user);
+    await previewShown();
+    expect(calls(mock, '/api/kiosk/preview')).toHaveLength(1);
+    expect(screen.getByText(he.sign.sessionWarning.kiosk)).toBeVisible();
+    expect(
+      urls(mock).some((url) => url.startsWith('/api/sign') || url.startsWith('/api/auth')),
+    ).toBe(false);
+  });
+});
+
+describe('B3a on the office computer: the ending (6.4 part B, 6.5)', () => {
   const form = () => jsonResponse(200, FULL_FORM);
 
   it('2 minutes before the session ends: the answers would be lost, ask the manager', async () => {
@@ -682,23 +843,28 @@ describe('B3 on the office computer: the ending (6.4 part B)', () => {
     expect(screen.queryByText(he.sign.sessionWarning.link)).toBeNull();
   });
 
-  it('"email": the address once more in a confirm, then signed through location.replace', async () => {
+  it('"email": no confirm on B3; on B3a the address once more, then signed through location.replace', async () => {
     const { mock, user } = await kioskAtForm(form);
     await fillAll(user);
     await user.click(screen.getByRole('radio', { name: text.email.byEmail }));
-    await signAndTick(user);
+    sign();
     await press(user);
-    const dialog = await screen.findByRole('dialog', { name: text.submit.confirmTitle });
+    await previewShown();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await tickAndConfirm(user);
+    const dialog = await screen.findByRole('dialog', { name: previewText.confirmTitle });
     const address = within(dialog).getByText('dana@example.test');
     expect(address.tagName).toBe('BDI');
     expect(address).toHaveAttribute('dir', 'ltr');
-    // Back to fix it: nothing sent.
-    await user.click(within(dialog).getByRole('button', { name: text.submit.back }));
+    // Back: nothing sent.
+    await user.click(within(dialog).getByRole('button', { name: previewText.back }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(calls(mock, '/api/kiosk/submit')).toHaveLength(0);
-    await press(user);
+    await user.click(screen.getByRole('button', { name: previewText.confirm }));
     await user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: text.submit.confirm }),
+      within(await screen.findByRole('dialog')).getByRole('button', {
+        name: previewText.confirmSign,
+      }),
     );
     await waitFor(() => expect(replacePage).toHaveBeenCalledWith('/kiosk?done'));
     expect(calls(mock, '/api/kiosk/submit')).toHaveLength(1);
@@ -723,7 +889,7 @@ describe('B3 on the office computer: the ending (6.4 part B)', () => {
     expect(calls(mock, '/api/kiosk/submit')).toHaveLength(1);
   });
 
-  it('the session ended at "סיום וחתימה" (401): "ask the manager", her answers dropped', async () => {
+  it('the session ended at "אישור וחתימה" (401): "ask the manager", her answers dropped', async () => {
     const { user } = await kioskAtForm(form, undefined, () =>
       apiErrorResponse(401, 'SIGN_SESSION_EXPIRED'),
     );

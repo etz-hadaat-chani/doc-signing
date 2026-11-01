@@ -277,6 +277,7 @@ describe('the signing bundle loads no staff code', () => {
     expect(reached.has('/src/pdf/pdf-document.ts')).toBe(true);
     expect(reached.has('/src/sign/form/SignatureSection.tsx')).toBe(true);
     expect(reached.has('/src/sign/DoneScreen.tsx')).toBe(true);
+    expect(reached.has('/src/sign/PreviewStep.tsx')).toBe(true);
     expect(reached.has('/src/components/dialogs/ConfirmDialog.tsx')).toBe(true);
   });
 

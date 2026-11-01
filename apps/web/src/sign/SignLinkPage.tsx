@@ -16,7 +16,15 @@ import { IdCheck } from './IdCheck';
 import { MessagePage, type SignMessageKind } from './MessagePage';
 import { sessionDeadline } from './session-deadline';
 import { SessionWarning } from './SessionWarning';
-import { linkDocument, linkFit, linkForm, linkState, linkSubmit, verifyLink } from './sign.api';
+import {
+  linkDocument,
+  linkFit,
+  linkForm,
+  linkPreview,
+  linkState,
+  linkSubmit,
+  verifyLink,
+} from './sign.api';
 import { SignLayout } from './SignLayout';
 
 type View =
@@ -44,7 +52,7 @@ const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
  * only) and shows B5 for a state that can't be signed, "the link is not valid" for a 404, or B1
  * for a valid link; the correct ID number opens B2. A refusal at any step (locked, signed
  * meanwhile …) shows B5 with the contact already read; a session that ended on B2 asks the ID
- * number again and goes back there (on B3 with every answer kept). Plain state, no query cache:
+ * number again and goes back there (on B3 with every answer kept; from B3a too, 6.5). Plain state, no query cache:
  * the token and her answers never sit in the data cache, and a focus never asks again. Two
  * minutes before the session ends a calm notice says so. Signed → B4, and her answers and
  * signature are dropped; the link then reads "already signed" (6.1).
@@ -57,6 +65,8 @@ export function SignLinkPage() {
   const [draft, setDraft] = useState<FormDraft>(EMPTY_DRAFT);
   // When the signing session ends (this computer's clock), for the notice before it does.
   const [deadline, setDeadline] = useState<number | null>(null);
+  // B3a shows the pages: the wide card, as on B2.
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -92,7 +102,7 @@ export function SignLinkPage() {
   };
 
   return (
-    <SignLayout wide={view.kind === 'document'}>
+    <SignLayout wide={view.kind === 'document' || (view.kind === 'form' && previewing)}>
       {view.kind === 'loading' && <PageLoader />}
       {view.kind === 'failed' && <ErrorState {...errorContent(view.error)} onRetry={retry} />}
       {view.kind === 'message' && <MessagePage kind={view.message} hrContact={view.hrContact} />}
@@ -134,7 +144,9 @@ export function SignLinkPage() {
         <FormStep
           load={(signal) => linkForm(token, signal)}
           fit={(answers, signal) => linkFit(token, answers, signal)}
+          preview={(body) => linkPreview(token, body)}
           submit={(body) => linkSubmit(token, body)}
+          onPreviewChange={setPreviewing}
           onSigned={(kind) => {
             setDraft(EMPTY_DRAFT);
             setDeadline(null);

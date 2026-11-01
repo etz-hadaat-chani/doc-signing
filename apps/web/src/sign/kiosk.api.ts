@@ -1,6 +1,7 @@
 import {
   kioskCodeEnteredSchema,
   signLinkStateResultSchema,
+  type SignPreviewInput,
   type SignSubmitInput,
 } from '@doc-signing/shared';
 import { request, requestBytes } from '../api/http';
@@ -61,6 +62,11 @@ export function kioskFit(answers: Record<string, string>, signal?: AbortSignal) 
     schema: signFitResultSchema,
     signal,
   });
+}
+
+/** The signed document before signing (B3a), `kiosk_sid` cookie only; nothing saved. */
+export function kioskPreview(body: SignPreviewInput) {
+  return requestBytes('/api/kiosk/preview', { method: 'POST', body });
 }
 
 /** Signs at the office (FR-MAN-4) with the `kiosk_sid` cookie only; the session then ends. */

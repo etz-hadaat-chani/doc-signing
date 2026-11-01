@@ -2,7 +2,7 @@ import {
   type EmailChoice,
   errorMessage,
   type SignFormResult,
-  type SignSubmitInput,
+  type SignPreviewInput,
   type TemplateFieldSettings,
 } from '@doc-signing/shared';
 import Alert from '@mui/material/Alert';
@@ -14,19 +14,18 @@ import {
   type Dispatch,
   type SetStateAction,
   useEffect,
+  useEffectEvent,
   useId,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog';
 import { he } from '../../i18n/he';
 import type { DocumentOutcome } from '../document-outcome';
 import { submitOutcome } from '../submit-outcome';
 import { BoxField } from './BoxField';
 import { EmailSection } from './EmailSection';
 import {
-  ACK_ITEM,
   currentTooLong,
   EMAIL_CHOICE_ITEM,
   EMAIL_FIT_KEY,
@@ -43,8 +42,8 @@ import {
   withHiddenDropped,
 } from './form-draft';
 import { hasEnoughInk, type Ink } from './ink';
-import { ReadingStatement, SignatureField } from './SignatureSection';
-import { checkSubmit } from './submit-check';
+import { SignatureField } from './SignatureSection';
+import { checkPreview } from './submit-check';
 import { type FitCall, useFitCheck } from './use-fit-check';
 
 const text = he.sign.form;
@@ -57,7 +56,7 @@ const FOCUSABLE =
 /** How the screen ends: signed by this press, or found already signed (no copy promised). */
 export type SignedKind = 'signed' | 'alreadySigned';
 
-/** A send that failed and stays on B3: "try again", or wait out a 429 first. */
+/** A preview that failed and stays on B3: "try again", or wait out a 429 first. */
 type Failure = { message: string; waitSeconds: number | null };
 
 interface SignFormProps {
@@ -65,10 +64,13 @@ interface SignFormProps {
   draft: FormDraft;
   onDraftChange: Dispatch<SetStateAction<FormDraft>>;
   fit: FitCall;
-  /** `POST …/submit` of a link or of the office computer. */
-  submit: (body: SignSubmitInput) => Promise<unknown>;
-  /** The office computer: the address the copy goes to is shown once more before sending. */
-  confirmEmail: boolean;
+  /** `POST …/preview` of a link or of the office computer: the signed PDF, watermarked. */
+  preview: (body: SignPreviewInput) => Promise<ArrayBuffer>;
+  /** The preview arrived: B3a shows it (and keeps the body to sign with). */
+  onPreviewed: (pdf: ArrayBuffer, body: SignPreviewInput) => void;
+  /** The server's refusals handed back from B3a, shown at their items when B3 opens. */
+  initialErrors?: ReadonlyMap<string, string>;
+  /** Found already signed (a second tab, the office): done, no copy promised. */
   onSigned: (kind: SignedKind) => void;
   onSessionEnded: () => void;
   onRefused: (outcome: Extract<DocumentOutcome, { kind: 'refused' | 'gone' }>) => void;
@@ -77,21 +79,22 @@ interface SignFormProps {
 /**
  * B3 (FR-SGN-4, FR-SGN-5, FR-SGN-9, FR-SGN-10, FR-TPL-9, FR-TPL-10): the correction note, the
  * boxes and the email section in the template's order (a box with a condition appears and
- * disappears as she answers, its answer dropped), then the signature pad, the reading statement
- * and "סיום וחתימה". The button waits for the email choice; pressed, it checks everything the
- * server will (`checkSubmit`) and shows each Hebrew error at its item, scrolling to the first;
- * after that the errors follow her edits. The server's own refusals land at the same items.
- * Everything she enters lives in the caller's state (`draft`), nowhere else.
+ * disappears as she answers, its answer dropped), then the signature pad and "המשך לתצוגה לפני
+ * חתימה". The button waits for the email choice; pressed, it checks everything the server will
+ * (`checkPreview`) and shows each Hebrew error at its item, scrolling to the first; after that
+ * the errors follow her edits. Then the server builds the signed PDF (B3a, 6.5); its refusals
+ * land at the same items. Everything she enters lives in the caller's state (`draft`).
  */
 export function SignForm(props: SignFormProps) {
-  const { form, draft, onDraftChange, fit, submit, confirmEmail } = props;
+  const { form, draft, onDraftChange, fit, preview, onPreviewed, initialErrors } = props;
   const { onSigned, onSessionEnded, onRefused } = props;
   const [checked, setChecked] = useState(false);
-  const [serverErrors, setServerErrors] = useState<Map<string, string>>(new Map());
+  const [serverErrors, setServerErrors] = useState<Map<string, string>>(
+    () => new Map(initialErrors),
+  );
   const [sending, setSending] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [waiting, setWaiting] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const sendingRef = useRef(false);
   const reasonId = useId();
   const { tooLong, schedule } = useFitCheck({ fit, onSessionEnded, onRefused });
@@ -100,7 +103,7 @@ export function SignForm(props: SignFormProps) {
   const items = useMemo(() => formItems(form.fields), [form.fields]);
 
   const localErrors = useMemo(
-    () => (checked ? checkSubmit(form, draft, tooLong).errors : new Map<string, string>()),
+    () => (checked ? checkPreview(form, draft, tooLong).errors : new Map<string, string>()),
     [checked, form, draft, tooLong],
   );
   const errors = useMemo(() => {
@@ -184,7 +187,7 @@ export function SignForm(props: SignFormProps) {
     const order = items
       .map((item) => (item.kind === 'box' ? [item.box.key] : [EMAIL_CHOICE_ITEM, EMAIL_ITEM]))
       .flat()
-      .concat(SIGNATURE_ITEM, ACK_ITEM);
+      .concat(SIGNATURE_ITEM);
     const first = order.find((key) => found.has(key));
     const element = first === undefined ? undefined : containers.get(first);
     if (!element) return;
@@ -196,15 +199,15 @@ export function SignForm(props: SignFormProps) {
     target?.focus({ preventScroll: true });
   };
 
-  const send = async (body: SignSubmitInput) => {
+  const send = async (body: SignPreviewInput) => {
     if (sendingRef.current) return;
     sendingRef.current = true;
     setSending(true);
     setFailure(null);
     try {
-      await submit(body);
-      // The screen ends here; the button stays off until it does.
-      onSigned('signed');
+      const pdf = await preview(body);
+      // The screen ends here (B3a opens); the button stays off until it does.
+      onPreviewed(pdf, body);
       return;
     } catch (error) {
       const outcome = submitOutcome(error);
@@ -227,27 +230,25 @@ export function SignForm(props: SignFormProps) {
     setSending(false);
   };
 
-  /** "סיום וחתימה": everything checked here first; nothing is sent while anything is wrong. */
+  /** "המשך לתצוגה לפני חתימה": everything checked here first; nothing is sent while anything is wrong. */
   const press = () => {
     if (sendingRef.current || waiting) return;
     setChecked(true);
-    const { errors: found, body } = checkSubmit(form, draft, tooLong);
+    const { errors: found, body } = checkPreview(form, draft, tooLong);
     if (body === null) {
       showFirst(found);
-      return;
-    }
-    if (confirmEmail && body.emailChoice === 'email') {
-      setConfirming(true);
       return;
     }
     void send(body);
   };
 
-  const confirmed = () => {
-    setConfirming(false);
-    const { body } = checkSubmit(form, draft, tooLong);
-    if (body !== null) void send(body);
-  };
+  // Refusals handed back from B3a: the first one is scrolled to and focused, as after a press.
+  const showReturned = useEffectEvent(() => {
+    if (initialErrors && initialErrors.size > 0) showFirst(initialErrors);
+  });
+  useEffect(() => {
+    showReturned();
+  }, []);
 
   const shownItems = items.filter(
     (item) => item.kind === 'email' || isShown(item.box, form, draft),
@@ -305,13 +306,6 @@ export function SignForm(props: SignFormProps) {
           onSignature={setSignature}
         />
       </Box>
-      <Box ref={register([ACK_ITEM])}>
-        <ReadingStatement
-          acknowledged={draft.acknowledged}
-          error={errors.get(ACK_ITEM) ?? null}
-          onChange={(acknowledged) => update((current) => ({ ...current, acknowledged }), ACK_ITEM)}
-        />
-      </Box>
       {failure && (
         <Alert
           severity={failure.waitSeconds === null ? 'error' : 'warning'}
@@ -342,33 +336,9 @@ export function SignForm(props: SignFormProps) {
           </Typography>
         )}
         <Typography role="status" color="error.main" sx={{ fontWeight: 600 }}>
-          {checked && errors.size > 0 ? text.toFix(errors.size) : ''}
+          {(checked || serverErrors.size > 0) && errors.size > 0 ? text.toFix(errors.size) : ''}
         </Typography>
       </Box>
-      <ConfirmDialog
-        open={confirming}
-        title={text.submit.confirmTitle}
-        text={
-          <>
-            {text.submit.confirmText}
-            {/* Its own line, left to right: a long address never hides the line before it. */}
-            <Box
-              component="bdi"
-              dir="ltr"
-              sx={{ display: 'block', my: 1, fontWeight: 600, overflowWrap: 'anywhere' }}
-            >
-              {emailValue(form, draft).trim().toLowerCase()}
-            </Box>
-            <Box component="span" sx={{ display: 'block' }}>
-              {text.submit.confirmCheck}
-            </Box>
-          </>
-        }
-        confirmLabel={text.submit.confirm}
-        cancelLabel={text.submit.back}
-        onConfirm={confirmed}
-        onClose={() => setConfirming(false)}
-      />
     </Box>
   );
 }

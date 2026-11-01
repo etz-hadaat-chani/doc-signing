@@ -49,16 +49,25 @@ export async function request<T>(path: `/api/${string}`, options: RequestOptions
 
 /**
  * A file the API sends (a PDF), as bytes, with the same session and error handling as request():
- * a failure answered in our JSON format becomes the same ApiRequestError.
+ * a failure answered in our JSON format becomes the same ApiRequestError. A POST sends `body` as
+ * JSON (the signed document's preview, built from what she entered, 6.5).
  */
 export async function requestBytes(
   path: `/api/${string}`,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; method?: 'GET' | 'POST'; body?: unknown } = {},
 ): Promise<ArrayBuffer> {
-  const { signal } = options;
+  const { signal, method = 'GET', body } = options;
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
   let response: Response;
   try {
-    response = await fetch(path, { credentials: 'same-origin', signal });
+    response = await fetch(path, {
+      method,
+      headers,
+      credentials: 'same-origin',
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
+    });
   } catch (error) {
     if (signal?.aborted) throw error;
     throw new ApiRequestError({ kind: 'network' });
