@@ -3,11 +3,13 @@ import {
   type SignFitResult,
   type SignFormResult,
   type SignLinkStateResult,
+  type SignPreviewInput,
   type SignSubmitInput,
   type SignSubmittedResult,
   type SignVerifiedResult,
   type SignVerifyInput,
   signFitSchema,
+  signPreviewSchema,
   signSubmitSchema,
   signVerifySchema,
 } from '@doc-signing/shared';
@@ -116,6 +118,30 @@ export class SigningController {
     @Req() request: Request,
   ): Promise<SignFitResult> {
     return this.signing.fit(token, body, clientOf(request));
+  }
+
+  @ApiOperation({
+    summary: 'Preview before signing: the signed PDF, watermarked (needs the signing session)',
+    description:
+      'The signed PDF exactly as submit would build it (the same body without acknowledged, the ' +
+      'same 400s), with "not signed yet" across every page. Saves nothing: no file, hash, ' +
+      'status, answers or email. application/pdf, inline, no-store.',
+  })
+  @TokenParam()
+  @ApiZodBody(signPreviewSchema)
+  @Post('preview')
+  @HttpCode(HttpStatus.OK)
+  async preview(
+    @Param('token') token: string,
+    @Body(new ZodValidationPipe(signPreviewSchema)) body: SignPreviewInput,
+    @Req() request: Request,
+  ): Promise<StreamableFile> {
+    const pdf = await this.signing.preview(token, body, clientOf(request));
+    return new StreamableFile(pdf, {
+      type: 'application/pdf',
+      disposition: contentDisposition('preview.pdf', 'inline'),
+      length: pdf.byteLength,
+    });
   }
 
   @ApiOperation({ summary: 'Sign: answers, signature, the signed PDF; queues the signed copy' })

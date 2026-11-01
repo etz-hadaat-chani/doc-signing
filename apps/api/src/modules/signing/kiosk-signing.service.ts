@@ -6,6 +6,7 @@ import {
   type SignFitResult,
   type SignFormResult,
   type SignLinkStateResult,
+  type SignPreviewInput,
   type SignRateScope,
   type SignSubmitInput,
   type SignSubmittedResult,
@@ -143,6 +144,10 @@ export class KioskSigningService {
     return this.steps.fit(await this.openSession('fit', client), input);
   }
 
+  async preview(body: SignPreviewInput, client: SigningClient): Promise<Uint8Array> {
+    return this.steps.preview(await this.openSession('preview', client), body, client);
+  }
+
   async submit(body: SignSubmitInput, client: SigningClient): Promise<SignSubmittedResult> {
     return this.steps.submit(await this.openSession('submit', client), body, client);
   }
@@ -156,7 +161,7 @@ export class KioskSigningService {
     return row;
   }
 
-  /** The checks before document, form, fit and submit: limit, the kiosk cookie, the state. */
+  /** The checks before document, form, fit, preview and submit: limit, the kiosk cookie, the state. */
   private async openSession(scope: SignRateScope, client: SigningClient): Promise<SigningAccess> {
     await this.rateLimit.hit(['all', scope], client.ip);
     const kioskSessionId = await this.sessions.kioskSessionOf(client.sessionToken);

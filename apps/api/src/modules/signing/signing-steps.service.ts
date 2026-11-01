@@ -8,6 +8,7 @@ import {
   type SignFitResult,
   type SignFormResult,
   type SignLinkState,
+  type SignPreviewInput,
   type SignSubmitInput,
   type SignSubmittedResult,
   type SignVerifiedResult,
@@ -25,6 +26,7 @@ import { SIGNED_COPY_QUEUE } from '../../common/queue/queue.definitions.js';
 import { QueueService } from '../../common/queue/queue.service.js';
 import { answerFitKeys } from '../pdf-filler/answer-fit.js';
 import { PdfAssetsService } from '../pdf-filler/pdf-assets.service.js';
+import { addPreviewWatermark } from '../pdf-filler/preview-watermark.js';
 import { renderSavedDocument } from '../pdf-filler/saved-document.js';
 import { renderSignedPdf, type SignedPdf } from '../pdf-filler/signed-pdf.js';
 import { toPosition } from '../templates/stored-position.js';
@@ -358,29 +360,9 @@ export class SigningStepsService {
     client: SigningClient,
   ): Promise<SignSubmittedResult> {
     const parts = await this.parts(access);
-    const { data, template, fields, fieldValues } = parts;
-    // The answers part, as the answers schema takes it (`acknowledged` was checked already).
-    const { signatureImage, emailChoice, email, answers: given, drawings } = body;
-    const submitted = { emailChoice, email, answers: given, drawings };
+    const { data, template, fields } = parts;
     const reference = signingReference(data.assignmentId);
-    const employerPng =
-      template.employerSignatureMode !== 'none' && fieldValues.employerSignature
-        ? await this.assets.employerSignature(fieldValues.employerSignature)
-        : null;
-    const build = async (signedAt: Date): Promise<SignedPdf> =>
-      renderSignedPdf({
-        templateBytes: await this.assets.templatePdf(template.fileKey),
-        fields,
-        employerSignatureMode: template.employerSignatureMode,
-        fieldValues,
-        submitted,
-        signatureImage,
-        employerSignaturePng: employerPng,
-        signedAt,
-        reference,
-        documentName: template.name,
-        font: this.assets.font,
-      });
+    const build = await this.signedPdfBuilder(parts, body);
     const firstAt = thisSecond();
     const first = await build(firstAt);
 
@@ -479,6 +461,62 @@ export class SigningStepsService {
     if (refused === 'kiosk_gone') throw kioskGone();
     if (refused) throw linkStateError(refused);
     return { state: 'signed', signedAt: pdf.signedAt.toISOString(), reference };
+  }
+
+  /**
+   * The preview before signing (6.5, B3a, FR-SGN-11): the signed PDF exactly as submit builds it
+   * (the same builder, so every 400 is the same), with "not signed yet" across every page. Saves
+   * nothing: no file, hash, status, answers or email. One audit row, ids only.
+   */
+  async preview(
+    access: SigningAccess,
+    body: SignPreviewInput,
+    client: SigningClient,
+  ): Promise<Uint8Array> {
+    const build = await this.signedPdfBuilder(await this.parts(access), body);
+    const signed = await build(thisSecond());
+    const pdf = await addPreviewWatermark(signed.pdf, this.assets.font);
+    await this.audit.record({
+      actor: { type: 'employee' },
+      action: 'sign.previewed',
+      entity: { type: 'assignment', id: access.assignmentId },
+      ip: client.ip,
+      details: auditBase(access),
+    });
+    return pdf;
+  }
+
+  /**
+   * "Build the signed PDF from this body" (FR-SGN-5), shared by submit and the preview: the
+   * template, its positions, the saved values, her answers and signature, the employer image and
+   * the reference; only the moment of signing is left to the caller.
+   */
+  private async signedPdfBuilder(
+    { data, template, fields, fieldValues }: SigningParts,
+    body: SignPreviewInput,
+  ): Promise<(signedAt: Date) => Promise<SignedPdf>> {
+    // The answers part, as the answers schema takes it (`acknowledged` is checked by the route).
+    const { signatureImage, emailChoice, email, answers, drawings } = body;
+    const submitted = { emailChoice, email, answers, drawings };
+    const reference = signingReference(data.assignmentId);
+    const employerPng =
+      template.employerSignatureMode !== 'none' && fieldValues.employerSignature
+        ? await this.assets.employerSignature(fieldValues.employerSignature)
+        : null;
+    return async (signedAt) =>
+      renderSignedPdf({
+        templateBytes: await this.assets.templatePdf(template.fileKey),
+        fields,
+        employerSignatureMode: template.employerSignatureMode,
+        fieldValues,
+        submitted,
+        signatureImage,
+        employerSignaturePng: employerPng,
+        signedAt,
+        reference,
+        documentName: template.name,
+        font: this.assets.font,
+      });
   }
 
   /** The `signed_copy` row (`queued`) and its job, in the signing transaction; its id. */

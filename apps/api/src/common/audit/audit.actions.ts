@@ -84,6 +84,7 @@ export const AUDIT_ACTIONS = [
   'sign.verify_refused',
   'sign.document_viewed',
   'sign.form_viewed',
+  'sign.previewed',
   'sign.rate_limited',
   'kiosk.code_entered',
   'kiosk.code_failed',
@@ -420,6 +421,13 @@ export interface AuditDetailsMap {
     emailMessageId: string | null;
     kioskSessionId?: string;
     /** At the kiosk: its own 5 attempts on a row locked for good (5.7 D2). */
+    ownAttempts?: boolean;
+  };
+  /** The signed document was previewed before signing (B3a); never an answer or image. */
+  'sign.previewed': {
+    roundId: string;
+    emailMessageId: string | null;
+    kioskSessionId?: string;
     ownAttempts?: boolean;
   };
   /** The form was read (B3); `correction`: a correction round, so the note was shown. */

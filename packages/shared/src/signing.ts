@@ -78,6 +78,8 @@ export const SIGN_RATE_SCOPES = [
   'form',
   'fit',
   'submit',
+  // The signed document before signing (6.5): a whole PDF each time, like the document.
+  'preview',
   // The office short code (5.7): every try per IP (loose: the office computers may share one
   // public IP), wrong ones per IP (tight), and wrong ones from all IPs together (one bucket).
   'kiosk_code',
@@ -97,6 +99,7 @@ export const SIGN_RATE_LIMITS: Readonly<
   form: { min: 100, default: 1000 },
   fit: { min: 300, default: 4000 },
   submit: { min: 30, default: 300 },
+  preview: { min: 60, default: 1000 },
   kiosk_code: { min: 30, default: 120 },
   kiosk_code_wrong_ip: { min: 3, default: 10 },
   kiosk_code_wrong: { min: 20, default: 100 },
@@ -124,6 +127,13 @@ export const signSubmitSchema = z.strictObject({
   drawings: z.record(z.string().max(50), imageText).optional(),
 });
 export type SignSubmitInput = z.infer<typeof signSubmitSchema>;
+
+/**
+ * `POST /api/sign/:token/preview` (6.5, B3a): the submit body without the reading statement,
+ * which she ticks on the preview screen. Strict like submit: an `acknowledged` key is a 400.
+ */
+export const signPreviewSchema = signSubmitSchema.omit({ acknowledged: true });
+export type SignPreviewInput = z.infer<typeof signPreviewSchema>;
 
 /** `POST /api/sign/:token/fit`: does her text fit its place in the document (FR-TPL-9)? */
 export const signFitSchema = z.strictObject({

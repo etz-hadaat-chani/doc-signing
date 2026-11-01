@@ -7,6 +7,7 @@ import {
   signFitSchema,
   signingReference,
   signingReferenceRange,
+  signPreviewSchema,
   signSubmitSchema,
   signVerifySchema,
 } from './signing.js';
@@ -66,6 +67,13 @@ describe('signing API schemas (3.13)', () => {
   it('a missing acknowledgement names its own error code', () => {
     const result = signSubmitSchema.safeParse({ ...submit, acknowledged: false });
     expect(result.error?.issues[0]?.message).toBe('SIGN_ACK_REQUIRED');
+  });
+
+  it('the preview takes the submit body without the reading statement', () => {
+    const preview = { signatureImage: submit.signatureImage };
+    expect(signPreviewSchema.safeParse(preview).success).toBe(true);
+    expect(signPreviewSchema.safeParse(submit).success).toBe(false);
+    expect(signPreviewSchema.safeParse({ ...preview, extra: 1 }).success).toBe(false);
   });
 
   it('the body limit fits a signature and 5 drawings at their largest', () => {

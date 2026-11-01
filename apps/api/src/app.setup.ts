@@ -34,7 +34,7 @@ function signingHeaders(_request: Request, response: Response, next: NextFunctio
 const signSubmitParser = json({ limit: SIGN_SUBMIT_MAX_BYTES });
 
 /**
- * The submit route's JSON parser (the signature and up to 5 drawings, ≈ 4 MB). Its own name on
+ * The JSON parser of submit and its preview (the signature and up to 5 drawings, ≈ 4 MB). Its own name on
  * purpose: Nest skips its default 100 KB parser for every route when it finds a middleware named
  * `jsonParser` already registered.
  */
@@ -67,10 +67,12 @@ export function configureApp(app: INestApplication): void {
   app.use(securityHeaders);
   app.use(SIGN_PATH, signingHeaders);
   app.use(KIOSK_PATH, signingHeaders);
-  // Only submit takes the signature and drawings (≈ 4 MB); registered before Nest's own JSON
+  // Only submit and its preview take the signature and drawings (≈ 4 MB); registered before Nest's own JSON
   // parser (100 KB, added at init), which then leaves the parsed body alone.
   app.use(`${SIGN_PATH}/:token/submit`, signSubmitJson);
   app.use(`${KIOSK_PATH}/submit`, signSubmitJson);
+  app.use(`${SIGN_PATH}/:token/preview`, signSubmitJson);
+  app.use(`${KIOSK_PATH}/preview`, signSubmitJson);
   app.use(EMAIL_WEBHOOK_PATH, emailWebhookRaw);
   // Reads the staff session cookie into request.cookies (unsigned; the token itself is random).
   app.use(cookieParser());

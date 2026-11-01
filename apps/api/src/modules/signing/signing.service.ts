@@ -3,6 +3,7 @@ import type {
   SignFitResult,
   SignFormResult,
   SignLinkStateResult,
+  SignPreviewInput,
   SignRateScope,
   SignSubmitInput,
   SignSubmittedResult,
@@ -84,6 +85,12 @@ export class SigningService {
     return this.steps.fit(access, input);
   }
 
+  /** `POST …/preview` (6.5, B3a, FR-SGN-11): the signed PDF, watermarked; saves nothing. */
+  async preview(token: string, body: SignPreviewInput, client: SigningClient): Promise<Uint8Array> {
+    const access = await this.openSession(token, 'preview', client);
+    return this.steps.preview(access, body, client);
+  }
+
   /** `POST …/submit` (FR-SGN-5, FR-SGN-6). */
   async submit(
     token: string,
@@ -103,7 +110,7 @@ export class SigningService {
     return link;
   }
 
-  /** The checks before document, form, fit and submit: limit, link, state, this link's session. */
+  /** The checks before document, form, fit, preview and submit: limit, link, state, this link's session. */
   private async openSession(
     token: string,
     scope: SignRateScope,
