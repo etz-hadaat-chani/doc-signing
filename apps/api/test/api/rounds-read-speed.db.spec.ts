@@ -13,6 +13,8 @@ const OTHER_ROUNDS = 5;
 const OTHER_ROUND_SIZE = 300;
 /** The target in task 3.11: each read under 1 s with 1,500 employees in a round. */
 const LIMIT_MS = 1000;
+/** The whole test, not the stopwatch: inserting 1,500 rows takes longer than Vitest's 5 s default on the slow CI runner. */
+const TEST_TIMEOUT_MS = 60_000;
 const DAY = 86_400_000;
 
 let app: INestApplication;
@@ -94,92 +96,98 @@ async function fillRound(roundId: string, employees: { id: string; departmentId:
   });
 }
 
-it(`reads a round of ${String(EMPLOYEES)} employees, the dashboard and the list in under ${String(LIMIT_MS)} ms each`, async () => {
-  const departments = await prisma.department.findMany({ orderBy: { code: 'asc' } });
-  await prisma.employee.createMany({
-    data: Array.from({ length: EMPLOYEES }, (_, i) => ({
-      employeeNumber: String(30_000 + i),
-      idNumber: String(400_000_000 + i),
-      firstName: ['שרה', 'רבקה', 'רחל', 'לאה'][i % 4] ?? 'שרה',
-      lastName: `כהן ${String(i)}`,
-      departmentId: departments[i % departments.length]?.id ?? '',
-      email: `e${String(i)}@example.com`,
-      emailStatus: 'valid' as const,
-    })),
-  });
-  const employees = await prisma.employee.findMany({
-    where: { employeeNumber: { gte: '30000', lt: '40000' } },
-    select: { id: true, departmentId: true, idNumber: true },
-    orderBy: { employeeNumber: 'asc' },
-  });
-  expect(employees).toHaveLength(EMPLOYEES);
-
-  const bigRound = await insertRound(prisma, world.managerId, {
-    name: 'חוזה שנתי 2027',
-    linkExpiresAt: new Date(Date.now() + 30 * DAY),
-  });
-  await fillRound(bigRound, employees);
-  for (let r = 0; r < OTHER_ROUNDS; r += 1) {
-    const roundId = await insertRound(prisma, world.managerId, {
-      name: `סבב ${String(r)}`,
-      linkExpiresAt: new Date(Date.now() + (r - 2) * DAY),
-      createdAt: new Date(Date.now() - (r + 1) * DAY),
+it(
+  `reads a round of ${String(EMPLOYEES)} employees, the dashboard and the list in under ${String(LIMIT_MS)} ms each`,
+  async () => {
+    const departments = await prisma.department.findMany({ orderBy: { code: 'asc' } });
+    await prisma.employee.createMany({
+      data: Array.from({ length: EMPLOYEES }, (_, i) => ({
+        employeeNumber: String(30_000 + i),
+        idNumber: String(400_000_000 + i),
+        firstName: ['שרה', 'רבקה', 'רחל', 'לאה'][i % 4] ?? 'שרה',
+        lastName: `כהן ${String(i)}`,
+        departmentId: departments[i % departments.length]?.id ?? '',
+        email: `e${String(i)}@example.com`,
+        emailStatus: 'valid' as const,
+      })),
     });
-    await fillRound(roundId, employees.slice(r * OTHER_ROUND_SIZE, (r + 1) * OTHER_ROUND_SIZE));
-  }
-  await prisma.$executeRawUnsafe('ANALYZE');
+    const employees = await prisma.employee.findMany({
+      where: { employeeNumber: { gte: '30000', lt: '40000' } },
+      select: { id: true, departmentId: true, idNumber: true },
+      orderBy: { employeeNumber: 'asc' },
+    });
+    expect(employees).toHaveLength(EMPLOYEES);
 
-  const cookie = world.managerCookie;
-  const timed = async (name: string, call: () => request.Test) => {
-    await call(); // warm-up: the first request of a route also compiles code paths
-    const started = performance.now();
-    const response = await call();
-    const elapsed = performance.now() - started;
-    expect(response.status, `${name}: ${JSON.stringify(response.body).slice(0, 300)}`).toBe(200);
-    return { name, elapsed, body: response.body as { total?: number } };
-  };
-  const server = httpServer(app);
-  const results = [
-    await timed('table page', () =>
-      request(server).get(`/api/rounds/${bigRound}/assignments?pageSize=100`).set('Cookie', cookie),
-    ),
-    await timed('table filtered', () =>
-      request(server)
-        .get(
-          `/api/rounds/${bigRound}/assignments?status=send_failed&status=locked&dept=${departments[0]?.id ?? ''}`,
-        )
-        .set('Cookie', cookie),
-    ),
-    await timed('search by name', () =>
-      request(server)
-        .post(`/api/rounds/${bigRound}/assignments/search`)
-        .set('Cookie', cookie)
-        .send({ q: 'רחל כהן' }),
-    ),
-    await timed('search by ID', () =>
-      request(server)
-        .post(`/api/rounds/${bigRound}/assignments/search`)
-        .set('Cookie', cookie)
-        .send({ q: employees[700]?.idNumber }),
-    ),
-    await timed('details', () =>
-      request(server).get(`/api/rounds/${bigRound}`).set('Cookie', cookie),
-    ),
-    await timed('dashboard', () =>
-      request(server).get('/api/dashboard/summary').set('Cookie', cookie),
-    ),
-    await timed('round list', () => request(server).get('/api/rounds').set('Cookie', cookie)),
-    await timed('history', () =>
-      request(server)
-        .get(`/api/employees/${employees[0]?.id ?? ''}/assignments`)
-        .set('Cookie', cookie),
-    ),
-  ];
+    const bigRound = await insertRound(prisma, world.managerId, {
+      name: 'חוזה שנתי 2027',
+      linkExpiresAt: new Date(Date.now() + 30 * DAY),
+    });
+    await fillRound(bigRound, employees);
+    for (let r = 0; r < OTHER_ROUNDS; r += 1) {
+      const roundId = await insertRound(prisma, world.managerId, {
+        name: `סבב ${String(r)}`,
+        linkExpiresAt: new Date(Date.now() + (r - 2) * DAY),
+        createdAt: new Date(Date.now() - (r + 1) * DAY),
+      });
+      await fillRound(roundId, employees.slice(r * OTHER_ROUND_SIZE, (r + 1) * OTHER_ROUND_SIZE));
+    }
+    await prisma.$executeRawUnsafe('ANALYZE');
 
-  expect(results[0]?.body.total).toBe(EMPLOYEES);
-  expect(results[3]?.body.total).toBe(1);
-  process.stdout.write(
-    `3.11 reads: ${results.map(({ name, elapsed }) => `${name} ${elapsed.toFixed(0)} ms`).join(', ')}\n`,
-  );
-  for (const { name, elapsed } of results) expect(elapsed, name).toBeLessThan(LIMIT_MS);
-});
+    const cookie = world.managerCookie;
+    const timed = async (name: string, call: () => request.Test) => {
+      await call(); // warm-up: the first request of a route also compiles code paths
+      const started = performance.now();
+      const response = await call();
+      const elapsed = performance.now() - started;
+      expect(response.status, `${name}: ${JSON.stringify(response.body).slice(0, 300)}`).toBe(200);
+      return { name, elapsed, body: response.body as { total?: number } };
+    };
+    const server = httpServer(app);
+    const results = [
+      await timed('table page', () =>
+        request(server)
+          .get(`/api/rounds/${bigRound}/assignments?pageSize=100`)
+          .set('Cookie', cookie),
+      ),
+      await timed('table filtered', () =>
+        request(server)
+          .get(
+            `/api/rounds/${bigRound}/assignments?status=send_failed&status=locked&dept=${departments[0]?.id ?? ''}`,
+          )
+          .set('Cookie', cookie),
+      ),
+      await timed('search by name', () =>
+        request(server)
+          .post(`/api/rounds/${bigRound}/assignments/search`)
+          .set('Cookie', cookie)
+          .send({ q: 'רחל כהן' }),
+      ),
+      await timed('search by ID', () =>
+        request(server)
+          .post(`/api/rounds/${bigRound}/assignments/search`)
+          .set('Cookie', cookie)
+          .send({ q: employees[700]?.idNumber }),
+      ),
+      await timed('details', () =>
+        request(server).get(`/api/rounds/${bigRound}`).set('Cookie', cookie),
+      ),
+      await timed('dashboard', () =>
+        request(server).get('/api/dashboard/summary').set('Cookie', cookie),
+      ),
+      await timed('round list', () => request(server).get('/api/rounds').set('Cookie', cookie)),
+      await timed('history', () =>
+        request(server)
+          .get(`/api/employees/${employees[0]?.id ?? ''}/assignments`)
+          .set('Cookie', cookie),
+      ),
+    ];
+
+    expect(results[0]?.body.total).toBe(EMPLOYEES);
+    expect(results[3]?.body.total).toBe(1);
+    process.stdout.write(
+      `3.11 reads: ${results.map(({ name, elapsed }) => `${name} ${elapsed.toFixed(0)} ms`).join(', ')}\n`,
+    );
+    for (const { name, elapsed } of results) expect(elapsed, name).toBeLessThan(LIMIT_MS);
+  },
+  TEST_TIMEOUT_MS,
+);

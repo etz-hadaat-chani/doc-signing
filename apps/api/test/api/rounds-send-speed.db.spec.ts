@@ -15,6 +15,8 @@ const seedPassword = 'test-seed-password';
 const EMPLOYEES = 1500;
 /** The target in task 3.10: the whole send request, 1,500 employees, 3 templates (no worker). */
 const LIMIT_MS = 3000;
+/** The whole test, not the stopwatch: inserting 1,500 rows takes longer than Vitest's 5 s default on the slow CI runner. */
+const TEST_TIMEOUT_MS = 60_000;
 
 /** 20 positions: every system value, the pension trio, the email pair and two signatures. */
 const SYSTEM_TYPES = [
@@ -63,110 +65,115 @@ afterAll(async () => {
   await app.close();
 });
 
-it(`sends a round of ${String(EMPLOYEES)} employees (values saved, jobs queued) in under ${String(LIMIT_MS)} ms`, async () => {
-  const login = await request(httpServer(app))
-    .post('/api/auth/login')
-    .send({ email: 'manager@doc-signing.local', password: seedPassword });
-  const cookie =
-    ((login.headers['set-cookie'] as unknown as string[])[0] ?? '').split(';')[0] ?? '';
-  const manager = await prisma.user.findUniqueOrThrow({
-    where: { email: 'manager@doc-signing.local' },
-  });
-  const departments = await prisma.department.findMany({ orderBy: { code: 'asc' } });
+it(
+  `sends a round of ${String(EMPLOYEES)} employees (values saved, jobs queued) in under ${String(LIMIT_MS)} ms`,
+  async () => {
+    const login = await request(httpServer(app))
+      .post('/api/auth/login')
+      .send({ email: 'manager@doc-signing.local', password: seedPassword });
+    const cookie =
+      ((login.headers['set-cookie'] as unknown as string[])[0] ?? '').split(';')[0] ?? '';
+    const manager = await prisma.user.findUniqueOrThrow({
+      where: { email: 'manager@doc-signing.local' },
+    });
+    const departments = await prisma.department.findMany({ orderBy: { code: 'asc' } });
 
-  // Made-up employees spread over the three departments; some without address or email.
-  await prisma.employee.createMany({
-    data: Array.from({ length: EMPLOYEES }, (_, i) => ({
-      employeeNumber: String(20_000 + i),
-      idNumber: String(500_000_000 + i),
-      firstName: FIRST_NAMES[i % FIRST_NAMES.length] ?? 'שרה',
-      lastName: `${LAST_NAMES[i % LAST_NAMES.length] ?? 'כהן'} ${String(i)}`,
-      departmentId: departments[i % departments.length]?.id ?? '',
-      email: i % 25 === 0 ? null : `e${String(i)}@example.com`,
-      emailStatus: i % 25 === 0 ? ('missing' as const) : ('valid' as const),
-      address: i % 40 === 0 ? null : `רחוב הנביאים ${String(i % 200)}`,
-      city: CITIES[i % CITIES.length] ?? null,
-      mobile: `050-${String(1_000_000 + i)}`,
-      birthDate: new Date(Date.UTC(1960 + (i % 40), i % 12, 1 + (i % 28))),
-      jobTitle: JOBS[i % JOBS.length] ?? null,
-      employmentStatus: i % 2 === 0 ? 'קבוע' : 'זמני',
-      jobPercent: [50, 75, 100][i % 3] ?? 100,
-      workDays: 'א-ה',
-      studyFund: 'קרן השתלמות לדוגמה',
-      pensionFundA: i % 3 === 0 ? null : 'קרן פנסיה לדוגמה',
-    })),
-  });
+    // Made-up employees spread over the three departments; some without address or email.
+    await prisma.employee.createMany({
+      data: Array.from({ length: EMPLOYEES }, (_, i) => ({
+        employeeNumber: String(20_000 + i),
+        idNumber: String(500_000_000 + i),
+        firstName: FIRST_NAMES[i % FIRST_NAMES.length] ?? 'שרה',
+        lastName: `${LAST_NAMES[i % LAST_NAMES.length] ?? 'כהן'} ${String(i)}`,
+        departmentId: departments[i % departments.length]?.id ?? '',
+        email: i % 25 === 0 ? null : `e${String(i)}@example.com`,
+        emailStatus: i % 25 === 0 ? ('missing' as const) : ('valid' as const),
+        address: i % 40 === 0 ? null : `רחוב הנביאים ${String(i % 200)}`,
+        city: CITIES[i % CITIES.length] ?? null,
+        mobile: `050-${String(1_000_000 + i)}`,
+        birthDate: new Date(Date.UTC(1960 + (i % 40), i % 12, 1 + (i % 28))),
+        jobTitle: JOBS[i % JOBS.length] ?? null,
+        employmentStatus: i % 2 === 0 ? 'קבוע' : 'זמני',
+        jobPercent: [50, 75, 100][i % 3] ?? 100,
+        workDays: 'א-ה',
+        studyFund: 'קרן השתלמות לדוגמה',
+        pensionFundA: i % 3 === 0 ? null : 'קרן פנסיה לדוגמה',
+      })),
+    });
 
-  const templateIds: string[] = [];
-  for (const department of departments) {
-    const created = await request(httpServer(app))
-      .post('/api/templates')
+    const templateIds: string[] = [];
+    for (const department of departments) {
+      const created = await request(httpServer(app))
+        .post('/api/templates')
+        .set('Cookie', cookie)
+        .field('name', `חוזה ${department.name}`)
+        .field('departmentIds', department.id)
+        .attach('file', await testPdf(), 'חוזה.pdf');
+      const id = templateItemSchema.parse(created.body).id;
+      const patched = await request(httpServer(app))
+        .patch(`/api/templates/${id}`)
+        .set('Cookie', cookie)
+        .send({ fields: layout(FIELDS) });
+      expect(templateItemSchema.parse(patched.body).isReady).toBe(true);
+      templateIds.push(id);
+    }
+
+    // 300 of them signed the first department's document in an earlier round.
+    const round = await prisma.round.create({
+      data: {
+        name: 'סבב קודם',
+        mode: 'single_template',
+        status: 'closed',
+        linkExpiryDays: 60,
+        createdById: manager.id,
+      },
+    });
+    const earlier = await prisma.employee.findMany({
+      where: { departmentId: departments[0]?.id },
+      take: 300,
+      select: { id: true, departmentId: true, employeeNumber: true },
+    });
+    await prisma.assignment.createMany({
+      data: earlier.map((employee) => ({
+        roundId: round.id,
+        employeeId: employee.id,
+        departmentId: employee.departmentId,
+        templateId: templateIds[0] ?? '',
+        status: 'signed' as const,
+        signedAt: new Date('2026-03-01T08:00:00Z'),
+        signMethod: 'digital' as const,
+        signedFileKey: `rounds/${round.id}/${employee.employeeNumber}.pdf`,
+      })),
+    });
+
+    const create = await request(httpServer(app))
+      .post('/api/rounds')
       .set('Cookie', cookie)
-      .field('name', `חוזה ${department.name}`)
-      .field('departmentIds', department.id)
-      .attach('file', await testPdf(), 'חוזה.pdf');
-    const id = templateItemSchema.parse(created.body).id;
-    const patched = await request(httpServer(app))
-      .patch(`/api/templates/${id}`)
+      .send({ name: 'חוזה שנתי 2027', mode: 'by_department', recipients: { all: true } });
+    expect(create.status).toBe(201);
+    const created = roundCreatedSchema.parse(create.body);
+
+    const started = performance.now();
+    const response = await request(httpServer(app))
+      .post(`/api/rounds/${created.id}/send`)
       .set('Cookie', cookie)
-      .send({ fields: layout(FIELDS) });
-    expect(templateItemSchema.parse(patched.body).isReady).toBe(true);
-    templateIds.push(id);
-  }
+      .send({});
+    const elapsed = performance.now() - started;
+    process.stdout.write(`3.10 send: ${elapsed.toFixed(0)} ms\n`);
 
-  // 300 of them signed the first department's document in an earlier round.
-  const round = await prisma.round.create({
-    data: {
-      name: 'סבב קודם',
-      mode: 'single_template',
-      status: 'closed',
-      linkExpiryDays: 60,
-      createdById: manager.id,
-    },
-  });
-  const earlier = await prisma.employee.findMany({
-    where: { departmentId: departments[0]?.id },
-    take: 300,
-    select: { id: true, departmentId: true, employeeNumber: true },
-  });
-  await prisma.assignment.createMany({
-    data: earlier.map((employee) => ({
-      roundId: round.id,
-      employeeId: employee.id,
-      departmentId: employee.departmentId,
-      templateId: templateIds[0] ?? '',
-      status: 'signed' as const,
-      signedAt: new Date('2026-03-01T08:00:00Z'),
-      signMethod: 'digital' as const,
-      signedFileKey: `rounds/${round.id}/${employee.employeeNumber}.pdf`,
-    })),
-  });
-
-  const create = await request(httpServer(app))
-    .post('/api/rounds')
-    .set('Cookie', cookie)
-    .send({ name: 'חוזה שנתי 2027', mode: 'by_department', recipients: { all: true } });
-  expect(create.status).toBe(201);
-  const created = roundCreatedSchema.parse(create.body);
-
-  const started = performance.now();
-  const response = await request(httpServer(app))
-    .post(`/api/rounds/${created.id}/send`)
-    .set('Cookie', cookie)
-    .send({});
-  const elapsed = performance.now() - started;
-
-  expect(response.status).toBe(202);
-  const sent = roundSentSchema.parse(response.body);
-  expect(sent.counts.queued).toBe(created.counts.willSendEmail);
-  expect(sent.counts.queued).toBeGreaterThan(1000);
-  expect(sent.counts.missingData).toBe(created.counts.missingData);
-  expect(sent.counts.noEmail).toBe(created.counts.noEmail);
-  const [jobs] = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
-    `SELECT count(*) AS n FROM "${QUEUE_SCHEMA}".job WHERE name = $1`,
-    INVITATION_QUEUE.name,
-  );
-  expect(Number(jobs?.n)).toBe(sent.counts.queued);
-  expect(await prisma.emailMessage.count()).toBe(sent.counts.queued);
-  expect(elapsed).toBeLessThan(LIMIT_MS);
-});
+    expect(response.status).toBe(202);
+    const sent = roundSentSchema.parse(response.body);
+    expect(sent.counts.queued).toBe(created.counts.willSendEmail);
+    expect(sent.counts.queued).toBeGreaterThan(1000);
+    expect(sent.counts.missingData).toBe(created.counts.missingData);
+    expect(sent.counts.noEmail).toBe(created.counts.noEmail);
+    const [jobs] = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM "${QUEUE_SCHEMA}".job WHERE name = $1`,
+      INVITATION_QUEUE.name,
+    );
+    expect(Number(jobs?.n)).toBe(sent.counts.queued);
+    expect(await prisma.emailMessage.count()).toBe(sent.counts.queued);
+    expect(elapsed).toBeLessThan(LIMIT_MS);
+  },
+  TEST_TIMEOUT_MS,
+);
