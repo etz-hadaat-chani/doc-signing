@@ -26,6 +26,7 @@ import { tokens } from '../../theme/tokens';
 import { parseDay } from './date-text';
 import { boxLabel, choiceSx, RADIO_MAX_CHOICES } from './box-ui';
 import { DrawingPad } from './DrawingPad';
+import type { Ink } from './ink';
 
 const text = he.sign.form;
 
@@ -36,12 +37,14 @@ export interface BoxFieldProps {
   box: TemplateFieldSettings;
   /** The draft's answer (a drawing box: its PNG data URL). */
   value: string | boolean | undefined;
-  /** The Hebrew error next to the box, after "check". */
+  /** The Hebrew error next to the box, after "סיום וחתימה". */
   error: string | null;
   /** "Too long for its place" while she types (never blocks). */
   tooLong: string | null;
   signingDay: string;
   onChange: (value: string | boolean) => void;
+  /** A drawing box: the ink of what she drew (null: unknown, or cleared). */
+  onInk?: (ink: Ink | null) => void;
 }
 
 /** One box of B3 (FR-TPL-9), by its type. */
@@ -293,7 +296,7 @@ function DateBox({ box, value, error, tooLong, signingDay, onChange }: BoxFieldP
  * A drawing box (FR-TPL-9): its own small pad and "ניקוי". A drawing larger than the server
  * takes (`SIGN_IMAGE_MAX_CHARS`) is not saved; she is asked to clear and draw again.
  */
-function DrawingBox({ box, value, error, onChange }: BoxFieldProps) {
+function DrawingBox({ box, value, error, onChange, onInk }: BoxFieldProps) {
   const [clearSignal, setClearSignal] = useState(0);
   const [tooLarge, setTooLarge] = useState(false);
   const labelId = useId();
@@ -312,13 +315,14 @@ function DrawingBox({ box, value, error, onChange }: BoxFieldProps) {
         height={DRAWING_PAD.height}
         maxWidth={DRAWING_PAD.width}
         clearSignal={clearSignal}
-        onDraw={(png) => {
+        onDraw={(png, ink) => {
           if (png.length > SIGN_IMAGE_MAX_CHARS) {
             setTooLarge(true);
             return;
           }
           setTooLarge(false);
           onChange(png);
+          onInk?.(ink);
         }}
       />
       <Box sx={{ mt: 1 }}>
@@ -328,6 +332,7 @@ function DrawingBox({ box, value, error, onChange }: BoxFieldProps) {
             setClearSignal((n) => n + 1);
             setTooLarge(false);
             onChange('');
+            onInk?.(null);
           }}
         >
           {text.clear}

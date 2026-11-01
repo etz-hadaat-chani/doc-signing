@@ -8,12 +8,15 @@ import { errorContent } from '../components/feedback/error-content';
 import { PageLoader } from '../components/feedback/PageLoader';
 import { he } from '../i18n/he';
 import { DocumentStep } from './DocumentStep';
+import { DoneScreen } from './DoneScreen';
 import { EMPTY_DRAFT, type FormDraft } from './form/form-draft';
 import { FormStep } from './FormStep';
 import type { VerifyOutcome } from './id-check-outcome';
 import { IdCheck } from './IdCheck';
 import { MessagePage, type SignMessageKind } from './MessagePage';
-import { linkDocument, linkFit, linkForm, linkState, verifyLink } from './sign.api';
+import { sessionDeadline } from './session-deadline';
+import { SessionWarning } from './SessionWarning';
+import { linkDocument, linkFit, linkForm, linkState, linkSubmit, verifyLink } from './sign.api';
 import { SignLayout } from './SignLayout';
 
 type View =
@@ -24,7 +27,9 @@ type View =
   | { kind: 'document'; hrContact: SignHrContact }
   /** The session ended on B2 or B3: the ID number again, then back where she was. */
   | { kind: 'reverify'; hrContact: SignHrContact; then: 'document' | 'form' }
-  | { kind: 'form'; hrContact: SignHrContact };
+  | { kind: 'form'; hrContact: SignHrContact }
+  /** B4. `copy`: false when it was found already signed (no copy is promised then). */
+  | { kind: 'done'; hrContact: SignHrContact; copy: boolean };
 
 /** The B5 screen of a link state that can't be signed. */
 const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
@@ -40,7 +45,9 @@ const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
  * for a valid link; the correct ID number opens B2. A refusal at any step (locked, signed
  * meanwhile …) shows B5 with the contact already read; a session that ended on B2 asks the ID
  * number again and goes back there (on B3 with every answer kept). Plain state, no query cache:
- * the token and her answers never sit in the data cache, and a focus never asks again.
+ * the token and her answers never sit in the data cache, and a focus never asks again. Two
+ * minutes before the session ends a calm notice says so. Signed → B4, and her answers and
+ * signature are dropped; the link then reads "already signed" (6.1).
  */
 export function SignLinkPage() {
   const { token = '' } = useParams();
@@ -48,6 +55,8 @@ export function SignLinkPage() {
   const [attempt, setAttempt] = useState(0);
   // Her B3 answers: here, above the ID check, so a session that ends keeps them (FR-SGN-8).
   const [draft, setDraft] = useState<FormDraft>(EMPTY_DRAFT);
+  // When the signing session ends (this computer's clock), for the notice before it does.
+  const [deadline, setDeadline] = useState<number | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -91,12 +100,13 @@ export function SignLinkPage() {
         <IdCheck
           key={view.kind}
           verify={(idNumber) => verifyLink(token, idNumber)}
-          onVerified={() =>
+          onVerified={(result) => {
+            setDeadline(sessionDeadline(result));
             setView({
               kind: view.kind === 'reverify' ? view.then : 'document',
               hrContact: view.hrContact,
-            })
-          }
+            });
+          }}
           onRefused={(outcome) => refused(outcome, view.hrContact)}
           notice={
             view.kind === 'reverify' && (
@@ -106,6 +116,9 @@ export function SignLinkPage() {
             )
           }
         />
+      )}
+      {(view.kind === 'document' || view.kind === 'form') && (
+        <SessionWarning deadline={deadline} channel="link" />
       )}
       {view.kind === 'document' && (
         <DocumentStep
@@ -121,6 +134,12 @@ export function SignLinkPage() {
         <FormStep
           load={(signal) => linkForm(token, signal)}
           fit={(answers, signal) => linkFit(token, answers, signal)}
+          submit={(body) => linkSubmit(token, body)}
+          onSigned={(kind) => {
+            setDraft(EMPTY_DRAFT);
+            setDeadline(null);
+            setView({ kind: 'done', hrContact: view.hrContact, copy: kind === 'signed' });
+          }}
           draft={draft}
           onDraftChange={setDraft}
           onSessionEnded={() =>
@@ -128,6 +147,9 @@ export function SignLinkPage() {
           }
           onRefused={(outcome) => refused(outcome, view.hrContact)}
         />
+      )}
+      {view.kind === 'done' && (
+        <DoneScreen copy={view.copy ? 'link' : 'none'} hrContact={view.hrContact} />
       )}
     </SignLayout>
   );

@@ -14,16 +14,25 @@ import { renderRoutes } from '../test/render';
 import { EMAIL_PAIR, formAnswer, formBox } from '../test/sign-form-stub';
 import { padStub } from '../test/signature-pad-stub';
 import { FIT_DELAY_MS } from './form/use-fit-check';
+import { replacePage } from './page-navigation';
 import { signRoutes } from './sign-routes';
 
 vi.mock('../pdf/pdf-document', () => import('../test/pdf-document-stub'));
 vi.mock('signature_pad', () => import('../test/signature-pad-stub'));
+vi.mock('./page-navigation', () => ({ replacePage: vi.fn() }));
 
 const text = he.sign.form;
 const TOKEN = 'T'.repeat(43);
 const STATE_URL = `/api/sign/${TOKEN}`;
 const FORM_URL = `${STATE_URL}/form`;
 const FIT_URL = `${STATE_URL}/fit`;
+const SUBMIT_URL = `${STATE_URL}/submit`;
+const SIGNED = () =>
+  jsonResponse(201, {
+    state: 'signed',
+    signedAt: '2026-10-29T10:05:00.000Z',
+    reference: '3F9A-1C2B-7D40',
+  });
 const RIGHT_ID = '000000018';
 const HR: SignHrContact = { name: 'מחלקת משאבי אנוש', phone: '02-5555555', email: null };
 const VERIFIED = { sessionExpiresAt: '2026-10-29T10:15:00.000Z' };
@@ -101,6 +110,7 @@ async function continueToForm(user: Rendered['user']) {
 async function linkAtForm(
   form: Handler | SignFormResult = FULL_FORM,
   fit: Handler = () => jsonResponse(200, { tooLong: [] }),
+  submit: Handler = SIGNED,
 ) {
   const mock = stubApi({
     [`GET ${STATE_URL}`]: () => jsonResponse(200, { state: 'valid', hrContact: HR }),
@@ -108,6 +118,7 @@ async function linkAtForm(
     [`GET ${STATE_URL}/document`]: pdfResponse,
     [`GET ${FORM_URL}`]: typeof form === 'function' ? form : () => jsonResponse(200, form),
     [`POST ${FIT_URL}`]: fit,
+    [`POST ${SUBMIT_URL}`]: submit,
   });
   const rendered = renderRoutes(`/sign/${TOKEN}`, signRoutes);
   await typeId(rendered.user);
@@ -116,7 +127,11 @@ async function linkAtForm(
 }
 
 /** The office computer after the code, the ID check and the document. */
-async function kioskAtForm(form: Handler, fit: Handler = () => jsonResponse(200, { tooLong: [] })) {
+async function kioskAtForm(
+  form: Handler,
+  fit: Handler = () => jsonResponse(200, { tooLong: [] }),
+  submit: Handler = SIGNED,
+) {
   const mock = stubApi({
     'POST /api/kiosk/code': () => jsonResponse(200, { code: 'L'.repeat(43) }),
     'POST /api/kiosk/state': () => jsonResponse(200, { state: 'valid', hrContact: HR }),
@@ -124,6 +139,7 @@ async function kioskAtForm(form: Handler, fit: Handler = () => jsonResponse(200,
     'GET /api/kiosk/document': pdfResponse,
     'GET /api/kiosk/form': form,
     'POST /api/kiosk/fit': fit,
+    'POST /api/kiosk/submit': submit,
   });
   const rendered = renderRoutes(KIOSK_PAGE_PATH, signRoutes);
   await rendered.user.type(
@@ -145,13 +161,26 @@ const bodyOf = (call: unknown[] | undefined): unknown => {
   const init = call?.[1] as RequestInit | undefined;
   return typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
 };
-const check = (user: Rendered['user']) =>
-  user.click(screen.getByRole('button', { name: text.check }));
+/** "סיום וחתימה". */
+const press = (user: Rendered['user']) =>
+  user.click(screen.getByRole('button', { name: text.submit.button }));
+const doneShown = () => screen.findByRole('heading', { level: 1, name: he.sign.done.title });
+const drawingGroup = () => screen.getByRole('group', { name: 'ראשי תיבות' });
+const signatureGroup = () => screen.getByRole('group', { name: text.signature.title });
+/** The big pad (the last one made: a new ID check makes it again). */
+const signaturePad = () =>
+  padStub.pads.findLast((pad) => pad.canvas.getAttribute('aria-label') === text.signature.area);
+/** Signs with the mouse and ticks the reading statement. */
+async function signAndTick(user: Rendered['user']) {
+  act(() => signaturePad()?.stroke());
+  await user.click(screen.getByRole('checkbox', { name: text.ack }));
+}
 const helperOf = (field: HTMLElement) =>
   field.closest('.MuiFormControl-root')?.querySelector('.MuiFormHelperText-root')?.textContent;
 
 beforeEach(() => {
   padStub.pads.length = 0;
+  vi.mocked(replacePage).mockClear();
   padStub.png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
   stubObserver();
   vi.stubGlobal('scrollTo', scrollTo);
@@ -168,10 +197,10 @@ describe('B3 form for a link (6.4 part A)', () => {
     expect(scrollTo).toHaveBeenCalledWith(0, 0);
     expect(urls(mock).some((url) => url.startsWith('/api/auth'))).toBe(false);
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
-    expect(screen.getByText(text.signaturePlaceholder)).toBeVisible();
+    expect(screen.getByText(text.signature.everywhere)).toBeVisible();
   });
 
-  it('each box with its label; a list of 3 as radio buttons, of 6 as a drop-down; filled → all good', async () => {
+  it('each box with its label; a list of 3 as radio buttons, of 6 as a drop-down; filled → signed', async () => {
     const { user } = await linkAtForm();
     await formShown();
     await user.type(screen.getByRole('textbox', { name: 'הערה' }), 'שלום');
@@ -185,10 +214,11 @@ describe('B3 form for a link (6.4 part A)', () => {
     await user.type(screen.getByRole('textbox', { name: 'תאריך התחלה' }), '5/11/2026');
     act(() => padStub.pads[0]?.stroke());
     await user.click(screen.getByRole('radio', { name: text.email.byEmail }));
-    await check(user);
-    expect(await screen.findByText(text.allGood)).toBeVisible();
     // The optional checkbox says so.
     expect(screen.getByRole('checkbox', { name: `יש לי רכב ${text.optional}` })).not.toBeChecked();
+    await signAndTick(user);
+    await press(user);
+    expect(await doneShown()).toBeVisible();
   });
 
   it('a box with a condition appears with its value; hidden again, its answer is dropped', async () => {
@@ -204,22 +234,25 @@ describe('B3 form for a link (6.4 part A)', () => {
     expect(await screen.findByRole('textbox', { name: 'מספר רכב' })).toHaveValue('');
   });
 
-  it('"check" with required boxes empty: a Hebrew error next to each, the first one focused', async () => {
-    const { user } = await linkAtForm();
+  it('"סיום וחתימה" with required boxes empty: a Hebrew error next to each, the first one focused', async () => {
+    const { mock, user } = await linkAtForm();
     await formShown();
-    await check(user);
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    await press(user);
     const required = errorMessage('ANSWER_REQUIRED');
     const note = screen.getByRole('textbox', { name: 'הערה' });
     expect(note).toHaveAttribute('aria-invalid', 'true');
     expect(helperOf(note)).toBe(required);
     expect(note).toHaveFocus();
     expect(screen.getAllByText(required).length).toBeGreaterThanOrEqual(5);
-    expect(screen.getByText(errorMessage('EMAIL_CHOICE_REQUIRED'))).toBeVisible();
-    expect(screen.getByRole('status', { name: '' })).toHaveTextContent(text.toFix(7));
+    expect(screen.getByText(errorMessage('SIGNATURE_EMPTY'))).toBeVisible();
+    expect(screen.getByText(errorMessage('SIGN_ACK_REQUIRED'))).toBeVisible();
+    expect(screen.getByText(text.toFix(8))).toBeVisible();
+    expect(calls(mock, SUBMIT_URL)).toHaveLength(0);
     // The errors follow her edits.
     await user.type(note, 'שלום');
     expect(helperOf(note)).not.toBe(required);
-    expect(screen.getByText(text.toFix(6))).toBeVisible();
+    expect(screen.getByText(text.toFix(7))).toBeVisible();
   });
 
   it('long text shows how many characters are left', async () => {
@@ -238,7 +271,8 @@ describe('B3 form for a link (6.4 part A)', () => {
     expect(date).toHaveAttribute('dir', 'ltr');
     expect(helperOf(date)).toContain(text.dateBetween('29/10/2026', '31/12/2026'));
     await user.type(date, '31/02/2026');
-    await check(user);
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    await press(user);
     expect(helperOf(date)).toBe(errorMessage('ANSWER_DATE_INVALID'));
     await user.clear(date);
     await user.type(date, '1/1/2026');
@@ -255,8 +289,14 @@ describe('B3 form for a link (6.4 part A)', () => {
     const field = screen.getByRole('textbox', { name: text.email.field });
     expect(field).toHaveValue('dana@example.test');
     expect(field).toHaveAttribute('dir', 'ltr');
-    await check(user);
-    expect(screen.getByText(errorMessage('EMAIL_CHOICE_REQUIRED'))).toBeVisible();
+    // No choice yet: "סיום וחתימה" is off, and says why.
+    const button = screen.getByRole('button', { name: text.submit.button });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription(text.submit.chooseFirst);
+    await user.click(office);
+    await user.click(byEmail);
+    expect(button).toBeEnabled();
+    await press(user);
 
     await user.clear(field);
     await user.type(field, 'not-an-email');
@@ -314,9 +354,10 @@ describe('B3 form for a link (6.4 part A)', () => {
     padStub.png = `data:image/png;base64,${'A'.repeat(SIGN_IMAGE_MAX_CHARS)}`;
     act(() => padStub.pads[0]?.stroke());
     expect(screen.getByText(text.drawingTooLarge)).toBeVisible();
-    await user.click(screen.getByRole('button', { name: text.clear }));
+    await user.click(within(drawingGroup()).getByRole('button', { name: text.clear }));
     expect(screen.queryByText(text.drawingTooLarge)).toBeNull();
-    await check(user);
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    await press(user);
     const group = screen.getByRole('group', { name: 'ראשי תיבות' });
     expect(within(group).getByText(errorMessage('ANSWER_REQUIRED'))).toBeVisible();
   });
@@ -366,5 +407,331 @@ describe('B3 form on the office computer (6.4 part A)', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: he.sign.messages.kioskCodeGone.title }),
     ).toBeVisible();
+  });
+});
+
+/** Fills every required box of `FULL_FORM` (no signature, no tick). */
+async function fillAll(user: Rendered['user']) {
+  await formShown();
+  await user.type(screen.getByRole('textbox', { name: 'הערה' }), 'שלום');
+  await user.type(screen.getByRole('textbox', { name: 'פירוט' }), 'טקסט');
+  await user.click(screen.getByRole('radio', { name: 'אפשרות 2' }));
+  await user.click(screen.getByRole('combobox', { name: 'עיר' }));
+  await user.click(await screen.findByRole('option', { name: 'אפשרות 6' }));
+  await user.type(screen.getByRole('textbox', { name: 'תאריך התחלה' }), '5/11/2026');
+  act(() => padStub.pads[0]?.stroke());
+}
+
+/** Every canvas reads as blank (too little ink), as a real canvas would before she draws. */
+function blankCanvases() {
+  return vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+    this: HTMLCanvasElement,
+  ) {
+    const data = new Uint8ClampedArray(this.width * this.height * 4);
+    return { scale: vi.fn(), getImageData: () => ({ data }) } as unknown as RenderingContext;
+  });
+}
+
+const errorAnswer = (status: number, code: string, details: object) => () =>
+  jsonResponse(status, { error: { code, message: 'x', details } });
+
+/** Office chosen, signed and ticked, then "סיום וחתימה". */
+async function officeSignPress(user: Rendered['user']) {
+  await user.click(screen.getByRole('radio', { name: text.email.office }));
+  await signAndTick(user);
+  await press(user);
+}
+
+describe('B3 signature and "סיום וחתימה" for a link (6.4 part B)', () => {
+  it('2 minutes before the session ends: a calm line, not an alert (here: the end already near)', async () => {
+    await linkAtForm();
+    await formShown();
+    const warning = screen.getByText(he.sign.sessionWarning.link);
+    expect(warning.closest('[role="status"]')).not.toBeNull();
+    expect(warning.closest('[role="alert"]')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('the large pad (≥ 500 × 200), the one-signature line, and "ניקוי" empties it', async () => {
+    const { user } = await linkAtForm();
+    await formShown();
+    const canvas = within(signatureGroup()).getByRole('img', { name: text.signature.area });
+    expect(canvas).toHaveStyle({ height: '224px', maxWidth: '560px', width: '100%' });
+    expect(within(signatureGroup()).getByText(text.signature.everywhere)).toBeVisible();
+    const pad = signaturePad();
+    act(() => pad?.stroke());
+    await user.click(within(signatureGroup()).getByRole('button', { name: text.clear }));
+    expect(pad?.clear).toHaveBeenCalled();
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    await press(user);
+    expect(within(signatureGroup()).getByText(errorMessage('SIGNATURE_EMPTY'))).toBeVisible();
+  });
+
+  it('the reading statement is required: its error at the box, focused, nothing sent', async () => {
+    const { mock, user } = await linkAtForm();
+    await fillAll(user);
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    act(() => signaturePad()?.stroke());
+    await press(user);
+    const ack = screen.getByRole('checkbox', { name: text.ack });
+    expect(ack).toHaveAttribute('aria-invalid', 'true');
+    expect(ack).toHaveFocus();
+    expect(screen.getByText(errorMessage('SIGN_ACK_REQUIRED'))).toBeVisible();
+    expect(calls(mock, SUBMIT_URL)).toHaveLength(0);
+  });
+
+  it('too little ink in the signature or a drawing: a Hebrew error at that pad, nothing sent', async () => {
+    const canvases = blankCanvases();
+    const { mock, user } = await linkAtForm();
+    await fillAll(user);
+    await officeSignPress(user);
+    expect(within(signatureGroup()).getByText(errorMessage('SIGNATURE_EMPTY'))).toBeVisible();
+    expect(within(drawingGroup()).getByText(errorMessage('DRAWING_EMPTY'))).toBeVisible();
+    expect(within(drawingGroup()).getByRole('button', { name: text.clear })).toHaveFocus();
+    expect(calls(mock, SUBMIT_URL)).toHaveLength(0);
+    canvases.mockRestore();
+  });
+
+  it('a signature larger than the server takes is not saved: a Hebrew error at the pad', async () => {
+    const { mock, user } = await linkAtForm();
+    await fillAll(user);
+    padStub.png = `data:image/png;base64,${'A'.repeat(SIGN_IMAGE_MAX_CHARS)}`;
+    act(() => signaturePad()?.stroke());
+    expect(within(signatureGroup()).getByText(text.signature.tooLarge)).toBeVisible();
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    await user.click(screen.getByRole('checkbox', { name: text.ack }));
+    await press(user);
+    expect(calls(mock, SUBMIT_URL)).toHaveLength(0);
+  });
+
+  it('the body: the signature, the statement, the shown answers only, the email for "email"', async () => {
+    const { mock, user, queryClient } = await linkAtForm();
+    await fillAll(user);
+    const agree = screen.getByRole('checkbox', { name: `יש לי רכב ${text.optional}` });
+    await user.click(agree);
+    await user.type(await screen.findByRole('textbox', { name: 'מספר רכב' }), '12-345-67');
+    await user.click(agree);
+    await user.click(screen.getByRole('radio', { name: text.email.byEmail }));
+    await signAndTick(user);
+    await press(user);
+    expect(await doneShown()).toBeVisible();
+    expect(calls(mock, SUBMIT_URL)).toHaveLength(1);
+    expect(calls(mock, SUBMIT_URL)[0]?.[1]?.method).toBe('POST');
+    expect(bodyOf(calls(mock, SUBMIT_URL)[0])).toEqual({
+      signatureImage: padStub.png,
+      acknowledged: true,
+      emailChoice: 'email',
+      email: 'dana@example.test',
+      answers: {
+        note: 'שלום',
+        story: 'טקסט',
+        size: 'אפשרות 2',
+        city: 'אפשרות 6',
+        start: '2026-11-05',
+      },
+      drawings: { initials: padStub.png },
+    });
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
+  });
+
+  it("B4 for a link: signed, the copy to the link's address, the contact; her answers gone", async () => {
+    const { user } = await linkAtForm();
+    await fillAll(user);
+    await user.click(screen.getByRole('radio', { name: text.email.byEmail }));
+    await signAndTick(user);
+    await press(user);
+    expect(await doneShown()).toBeVisible();
+    expect(screen.getByText(he.sign.done.linkCopy)).toBeVisible();
+    expect(screen.getByText(HR.name)).toBeVisible();
+    expect(document.body.textContent).not.toContain('dana@example.test');
+    expect(document.body.textContent).not.toContain('שלום');
+    expect(screen.queryByRole('img', { name: text.signature.area })).toBeNull();
+  });
+
+  it('"office" and a double click: one request, no address in it', async () => {
+    let answer: (response: Response) => void = () => {};
+    const submit = () => new Promise<Response>((done) => (answer = done));
+    const { mock, user } = await linkAtForm(FULL_FORM, undefined, submit as unknown as Handler);
+    await fillAll(user);
+    await user.click(screen.getByRole('radio', { name: text.email.office }));
+    await signAndTick(user);
+    await user.dblClick(screen.getByRole('button', { name: text.submit.button }));
+    expect(screen.getByRole('button', { name: text.submit.sending })).toBeDisabled();
+    expect(calls(mock, SUBMIT_URL)).toHaveLength(1);
+    const body = bodyOf(calls(mock, SUBMIT_URL)[0]) as Record<string, unknown>;
+    expect(body.emailChoice).toBe('office');
+    expect(body).not.toHaveProperty('email');
+    act(() => answer(SIGNED()));
+    expect(await doneShown()).toBeVisible();
+  });
+
+  it("the server's 400s land at their box or pad: the first scrolled to and focused", async () => {
+    const submit = inTurn(
+      errorAnswer(400, 'VALIDATION_FAILED', {
+        fields: [{ field: 'answers.story', code: 'ANSWER_TOO_LONG', message: 'x' }],
+      }),
+      errorAnswer(400, 'ANSWER_DOES_NOT_FIT', { key: 'note' }),
+      errorAnswer(400, 'DRAWING_IMAGE_INVALID', { key: 'initials' }),
+      () => apiErrorResponse(400, 'SIGNATURE_IMAGE_INVALID'),
+      SIGNED,
+    );
+    const { user } = await linkAtForm(FULL_FORM, undefined, submit);
+    await fillAll(user);
+    await officeSignPress(user);
+    const story = screen.getByRole('textbox', { name: 'פירוט' });
+    await waitFor(() => expect(helperOf(story)).toBe(errorMessage('ANSWER_TOO_LONG')));
+    expect(story).toHaveFocus();
+    // Her edit clears the server's error at that box.
+    await user.type(story, 'א');
+    expect(helperOf(story)).not.toBe(errorMessage('ANSWER_TOO_LONG'));
+    await press(user);
+    const note = screen.getByRole('textbox', { name: 'הערה' });
+    await waitFor(() => expect(helperOf(note)).toBe(errorMessage('ANSWER_DOES_NOT_FIT')));
+    expect(note).toHaveFocus();
+    await user.type(note, 'א');
+    await press(user);
+    expect(
+      await within(drawingGroup()).findByText(errorMessage('DRAWING_IMAGE_INVALID')),
+    ).toBeVisible();
+    act(() => padStub.pads[0]?.stroke());
+    await press(user);
+    expect(
+      await within(signatureGroup()).findByText(errorMessage('SIGNATURE_IMAGE_INVALID')),
+    ).toBeVisible();
+    act(() => signaturePad()?.stroke());
+    await press(user);
+    expect(await doneShown()).toBeVisible();
+  });
+
+  it('the session ended at "סיום וחתימה": the ID again, the form with everything kept; she presses again', async () => {
+    const submit = inTurn(() => apiErrorResponse(401, 'SIGN_SESSION_EXPIRED'), SIGNED);
+    const { mock, user } = await linkAtForm(FULL_FORM, undefined, submit);
+    await fillAll(user);
+    await officeSignPress(user);
+    expect(await screen.findByText(he.sign.document.sessionEnded)).toBeVisible();
+    await typeId(user);
+    await formShown();
+    expect(calls(mock, SUBMIT_URL)).toHaveLength(1);
+    expect(screen.getByRole('textbox', { name: 'הערה' })).toHaveValue('שלום');
+    expect(screen.getByRole('radio', { name: text.email.office })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: text.ack })).toBeChecked();
+    await press(user);
+    expect(await doneShown()).toBeVisible();
+    // The same body again: the signature was kept too.
+    const [first, second] = calls(mock, SUBMIT_URL).map(bodyOf);
+    expect(second).toEqual(first);
+    expect((second as { signatureImage: string }).signatureImage).toBe(padStub.png);
+  });
+
+  it('already signed (409, e.g. a second tab): B4 without promising a copy', async () => {
+    const submit = errorAnswer(409, 'SIGN_ALREADY_SIGNED', { state: 'signed' });
+    const { user } = await linkAtForm(FULL_FORM, undefined, submit);
+    await fillAll(user);
+    await officeSignPress(user);
+    expect(await doneShown()).toBeVisible();
+    expect(screen.queryByText(he.sign.done.linkCopy)).toBeNull();
+  });
+
+  it('cancelled meanwhile (409): the B5 page', async () => {
+    const submit = errorAnswer(409, 'SIGN_CANCELLED', { state: 'cancelled' });
+    const { user } = await linkAtForm(FULL_FORM, undefined, submit);
+    await fillAll(user);
+    await officeSignPress(user);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: he.sign.messages.cancelled.title }),
+    ).toBeVisible();
+  });
+
+  it('429: "wait N minutes" and the button off until then; the answers stay', async () => {
+    const submit = () => apiErrorResponse(429, 'SIGN_TOO_MANY_REQUESTS', { 'Retry-After': '120' });
+    const { user } = await linkAtForm(FULL_FORM, undefined, submit);
+    await fillAll(user);
+    await officeSignPress(user);
+    expect(await screen.findByText(he.sign.document.wait(2))).toBeVisible();
+    expect(screen.getByRole('button', { name: text.submit.button })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'הערה' })).toHaveValue('שלום');
+  });
+
+  it('no connection: an error with "try again"; every answer stays, and it sends again', async () => {
+    const submit = inTurn(() => {
+      throw new TypeError('Failed to fetch');
+    }, SIGNED);
+    const { mock, user } = await linkAtForm(FULL_FORM, undefined, submit);
+    await fillAll(user);
+    await officeSignPress(user);
+    const alert = (await screen.findByText(he.feedback.networkText)).closest<HTMLElement>(
+      '[role="alert"]',
+    );
+    if (!alert) throw new Error('no alert');
+    expect(screen.getByRole('textbox', { name: 'הערה' })).toHaveValue('שלום');
+    expect(screen.getByRole('checkbox', { name: text.ack })).toBeChecked();
+    await user.click(within(alert).getByRole('button', { name: text.submit.retry }));
+    expect(await doneShown()).toBeVisible();
+    expect(calls(mock, SUBMIT_URL)).toHaveLength(2);
+  });
+});
+
+describe('B3 on the office computer: the ending (6.4 part B)', () => {
+  const form = () => jsonResponse(200, FULL_FORM);
+
+  it('2 minutes before the session ends: the answers would be lost, ask the manager', async () => {
+    await kioskAtForm(form);
+    await formShown();
+    expect(screen.getByText(he.sign.sessionWarning.kiosk)).toBeVisible();
+    expect(screen.queryByText(he.sign.sessionWarning.link)).toBeNull();
+  });
+
+  it('"email": the address once more in a confirm, then signed through location.replace', async () => {
+    const { mock, user } = await kioskAtForm(form);
+    await fillAll(user);
+    await user.click(screen.getByRole('radio', { name: text.email.byEmail }));
+    await signAndTick(user);
+    await press(user);
+    const dialog = await screen.findByRole('dialog', { name: text.submit.confirmTitle });
+    const address = within(dialog).getByText('dana@example.test');
+    expect(address.tagName).toBe('BDI');
+    expect(address).toHaveAttribute('dir', 'ltr');
+    // Back to fix it: nothing sent.
+    await user.click(within(dialog).getByRole('button', { name: text.submit.back }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(calls(mock, '/api/kiosk/submit')).toHaveLength(0);
+    await press(user);
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: text.submit.confirm }),
+    );
+    await waitFor(() => expect(replacePage).toHaveBeenCalledWith('/kiosk?done'));
+    expect(calls(mock, '/api/kiosk/submit')).toHaveLength(1);
+    expect(bodyOf(calls(mock, '/api/kiosk/submit')[0])).toMatchObject({
+      emailChoice: 'email',
+      email: 'dana@example.test',
+      acknowledged: true,
+    });
+    expect(urls(mock).some((url) => url.startsWith('/api/sign'))).toBe(false);
+  });
+
+  it('"office": no confirm; already signed (409) → the "signed" ending without a copy', async () => {
+    const { mock, user } = await kioskAtForm(
+      form,
+      undefined,
+      errorAnswer(409, 'SIGN_ALREADY_SIGNED', { state: 'signed' }),
+    );
+    await fillAll(user);
+    await officeSignPress(user);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(replacePage).toHaveBeenCalledWith('/kiosk?signed'));
+    expect(calls(mock, '/api/kiosk/submit')).toHaveLength(1);
+  });
+
+  it('the session ended at "סיום וחתימה" (401): "ask the manager", her answers dropped', async () => {
+    const { user } = await kioskAtForm(form, undefined, () =>
+      apiErrorResponse(401, 'SIGN_SESSION_EXPIRED'),
+    );
+    await fillAll(user);
+    await officeSignPress(user);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: he.sign.messages.kioskCodeGone.title }),
+    ).toBeVisible();
+    expect(replacePage).not.toHaveBeenCalled();
   });
 });

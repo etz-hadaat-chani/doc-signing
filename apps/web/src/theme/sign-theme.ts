@@ -45,5 +45,11 @@ export const signTheme = createTheme(theme, {
     MuiAlert: {
       styleOverrides: { message: { fontSize: sign.bodySize } },
     },
+    // A dialog on a signing page (the office computer's email confirm): the same large text.
+    MuiDialogTitle: {
+      styleOverrides: {
+        root: { fontSize: sign.bodySize, fontWeight: tokens.font.weight.semibold },
+      },
+    },
   },
 });

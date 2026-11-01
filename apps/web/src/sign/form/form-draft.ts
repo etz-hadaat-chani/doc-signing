@@ -15,7 +15,8 @@ import { parseDay } from './date-text';
 /**
  * Her answers on B3 while she fills them in, in this screen's memory only (never the address,
  * storage, the data cache or a log). Dates are kept as typed (DD/MM/YYYY). `email: null` = not
- * touched yet, so the field shows the stored email (FR-SGN-9).
+ * touched yet, so the field shows the stored email (FR-SGN-9). The signature and the reading
+ * statement are here too, so a new ID check keeps them (FR-SGN-8).
  */
 export interface FormDraft {
   emailChoice: EmailChoice | null;
@@ -23,15 +24,32 @@ export interface FormDraft {
   answers: Record<string, string | boolean>;
   /** PNG data URLs of the drawing boxes. */
   drawings: Record<string, string>;
+  /** Her signature as a PNG data URL; '' = none. */
+  signature: string;
+  /** The reading statement is ticked. */
+  acknowledged: boolean;
+  /** Pads (a drawing box key or `SIGNATURE_ITEM`) whose drawing has too little ink to count. */
+  faint: Record<string, true>;
 }
 
-export const EMPTY_DRAFT: FormDraft = { emailChoice: null, email: null, answers: {}, drawings: {} };
+export const EMPTY_DRAFT: FormDraft = {
+  emailChoice: null,
+  email: null,
+  answers: {},
+  drawings: {},
+  signature: '',
+  acknowledged: false,
+  faint: {},
+};
 
 /** The items errors of the email section belong to: the choice, and the address. */
 export const EMAIL_CHOICE_ITEM = EMAIL_CHOICE_KEY;
 export const EMAIL_ITEM = EMAIL_ANSWER_KEY;
 /** The fit check measures the address under the email box's own key. */
 export const EMAIL_FIT_KEY = 'email_input';
+/** The signature pad and the reading statement: their names in the submit body (and its errors). */
+export const SIGNATURE_ITEM = 'signatureImage';
+export const ACK_ITEM = 'acknowledged';
 
 /** One thing on the form, in the template's order: a box, or the email section (once). */
 export type FormItem = { kind: 'box'; box: TemplateFieldSettings } | { kind: 'email' };
@@ -48,7 +66,8 @@ export function formItems(fields: readonly TemplateFieldSettings[]): FormItem[] 
   return items;
 }
 
-const hasEmailSection = (form: SignFormResult) =>
+/** The template has the email section (FR-SGN-9). */
+export const hasEmailSection = (form: SignFormResult) =>
   form.fields.some(({ fieldType }) => TEMPLATE_FIELD_GROUPS[fieldType] === 'email');
 
 /** The address in the email box: what she typed, else the stored email. */
@@ -61,7 +80,7 @@ export function isShown(box: TemplateFieldSettings, form: SignFormResult, draft:
   return conditionMatches(box.showWhen, form.fields, draft);
 }
 
-function without<T>(record: Record<string, T>, key: string): Record<string, T> {
+export function without<T>(record: Record<string, T>, key: string): Record<string, T> {
   return Object.fromEntries(Object.entries(record).filter(([name]) => name !== key));
 }
 
@@ -71,15 +90,16 @@ function without<T>(record: Record<string, T>, key: string): Record<string, T> {
  * pass is enough.
  */
 export function withHiddenDropped(form: SignFormResult, draft: FormDraft): FormDraft {
-  let { answers, drawings } = draft;
+  let { answers, drawings, faint } = draft;
   for (const box of form.fields) {
     if (isShown(box, form, draft)) continue;
     if (box.key in answers) answers = without(answers, box.key);
     if (box.key in drawings) drawings = without(drawings, box.key);
+    if (box.key in faint) faint = without(faint, box.key);
   }
-  return answers === draft.answers && drawings === draft.drawings
+  return answers === draft.answers && drawings === draft.drawings && faint === draft.faint
     ? draft
-    : { ...draft, answers, drawings };
+    : { ...draft, answers, drawings, faint };
 }
 
 const asDay = (box: TemplateFieldSettings, text: string) =>

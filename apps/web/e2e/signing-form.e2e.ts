@@ -2,6 +2,7 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import {
   checkPage,
+  drawOn,
   openLink,
   type Person,
   RUN,
@@ -10,7 +11,7 @@ import {
 } from './signing-helpers';
 
 // Task 6.4 part A: the form half of B3 after the document, for a link and for the office
-// computer. Nothing is submitted (the signature comes in part B). Needs `pnpm dev` (with the
+// computer. Nothing is submitted here (no signature is drawn; signing-submit.e2e.ts signs). Needs `pnpm dev` (with the
 // worker, so the invitation reaches Mailpit).
 // DANGER rules: see signing-helpers.ts (fake rows only, all cleaned up in afterAll).
 // Nothing she types is ever printed: values are compared inside the test, never shown by an
@@ -26,11 +27,12 @@ const T = {
   continue: 'המשך לחתימה',
   form: 'טופס וחתימה',
   correction: 'תיקון נדרש:',
-  check: 'בדיקת התשובות',
-  allGood: 'כל התשובות תקינות.',
+  finish: 'סיום וחתימה',
+  chooseFirst: 'הכפתור יופעל אחרי בחירה איך לקבל את תלוש השכר וההודעות.',
+  signatureEmpty: 'לא נמצאה חתימה. יש לחתום עם העכבר בתוך המסגרת',
+  ackRequired: 'יש לסמן שקראת את המסמך ושהחתימה שלך',
   toFix: (count: number) => `יש לתקן ${String(count)} שדות.`,
   required: 'יש למלא שדה זה',
-  choiceRequired: 'יש לבחור אחת משתי האפשרויות: כתובת אימייל, או "אין לי אימייל"',
   invalidEmail: 'כתובת האימייל אינה תקינה',
   doesNotFit: 'הטקסט ארוך מדי למקום שלו במסמך. יש לקצר אותו',
   byEmail: 'לקבל באימייל',
@@ -179,19 +181,6 @@ function todayIL(): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem' }).format(new Date());
 }
 
-/** A few strokes of the mouse inside a pad. */
-async function drawOn(page: Page, pad: Locator) {
-  const area = await pad.boundingBox();
-  if (!area) throw new Error('the pad is not on the screen');
-  const { x, y, width, height } = area;
-  await page.mouse.move(x + width * 0.2, y + height * 0.3);
-  await page.mouse.down();
-  for (let step = 1; step <= 12; step += 1) {
-    await page.mouse.move(x + width * (0.2 + step * 0.05), y + height * (0.3 + (step % 4) * 0.12));
-  }
-  await page.mouse.up();
-}
-
 /** A value is in the field, without ever printing it. */
 async function holds(field: Locator, value: string) {
   expect((await field.inputValue()) === value, 'the field keeps what was typed').toBe(true);
@@ -218,7 +207,7 @@ async function checkSizes(page: Page) {
 
 test.use({ viewport: { width: 1280, height: 720 } });
 
-test('a link: required errors, every box filled, the condition, a bad email, the fit warning, all good', async ({
+test('a link: required errors, every box filled, the condition, a bad email, the fit warning, only the signature left', async ({
   page,
 }) => {
   const path = await setup.linkPathFor(people.link.email ?? '');
@@ -229,13 +218,18 @@ test('a link: required errors, every box filled, the condition, a bad email, the
   await checkSizes(page);
   await shot(page, '1-top');
 
-  // Nothing filled in: an error next to each required box, the first one focused.
-  await page.getByRole('button', { name: T.check }).click();
+  // No email choice yet: "סיום וחתימה" is off and says why.
+  const finish = page.getByRole('button', { name: T.finish });
+  await expect(finish).toBeDisabled();
+  await expect(page.getByText(T.chooseFirst)).toBeVisible();
+  // Nothing filled in: an error next to each required box (7), the signature and the
+  // statement, the first one focused.
+  await page.getByRole('radio', { name: T.office }).check();
+  await finish.click();
   const note = page.getByRole('textbox', { name: L.note });
   await expect(note).toHaveAttribute('aria-invalid', 'true');
   await expect(note).toBeFocused();
-  await expect(page.getByText(T.choiceRequired)).toBeVisible();
-  await expect(page.getByText(T.toFix(8))).toBeVisible();
+  await expect(page.getByText(T.toFix(9))).toBeVisible();
   await shot(page, '2-errors');
 
   await note.fill('בדיקה אוטומטית');
@@ -254,11 +248,13 @@ test('a link: required errors, every box filled, the condition, a bad email, the
   await page.getByRole('textbox', { name: L.start }).fill(todayIL());
   await drawOn(page, page.getByRole('img', { name: T.drawing }));
 
-  // The email: a bad address is refused next to the box; "office" greys it out.
+  // The email ("office" was chosen above, which greys it out): back to "email", a bad address
+  // is refused next to the box.
   const email = page.getByRole('textbox', { name: T.emailField });
+  await expect(email).toBeDisabled();
   await holds(email, people.link.email ?? '');
+  await page.getByRole('radio', { name: T.byEmail }).check();
   await email.fill('not-an-email');
-  await expect(page.getByRole('radio', { name: T.byEmail })).toBeChecked();
   await expect(page.getByText(T.invalidEmail)).toBeVisible();
   await shot(page, '3-bad-email');
   await page.getByRole('radio', { name: T.office }).check();
@@ -276,10 +272,14 @@ test('a link: required errors, every box filled, the condition, a bad email, the
   await tiny.fill('אב');
   await expect(page.getByText(T.doesNotFit)).toHaveCount(0);
 
-  await page.getByRole('button', { name: T.check }).click();
-  await expect(page.getByText(T.allGood)).toBeVisible();
+  // Every box is good: only the signature and the reading statement are left; nothing sent.
+  await finish.click();
   await expect(page.getByText(T.required)).toHaveCount(0);
-  await shot(page, '5-all-good');
+  await expect(page.getByText(T.signatureEmpty)).toBeVisible();
+  await expect(page.getByText(T.ackRequired)).toBeVisible();
+  await expect(page.getByText(T.toFix(2))).toBeVisible();
+  expect(urls.some((url) => url.endsWith('/submit'))).toBe(false);
+  await shot(page, '5-only-signature-left');
   await shot(page, '6-full', true);
 
   // The conditional box hidden again: its answer is dropped.

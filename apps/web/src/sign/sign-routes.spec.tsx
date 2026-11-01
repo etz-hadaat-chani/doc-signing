@@ -6,9 +6,11 @@ import { he } from '../i18n/he';
 import { apiErrorResponse, jsonResponse, stubApi } from '../test/fetch-stub';
 import { pdfResponse } from '../test/pdf-document-stub';
 import { renderRoutes } from '../test/render';
+import { replacePage } from './page-navigation';
 import { signRoutes } from './sign-routes';
 
 vi.mock('../pdf/pdf-document', () => import('../test/pdf-document-stub'));
+vi.mock('./page-navigation', () => ({ replacePage: vi.fn() }));
 
 /** A request's JSON body (the stub's `init`), or null. */
 const bodyOf = (init?: RequestInit): unknown =>
@@ -117,6 +119,29 @@ describe('/kiosk (the office computer, 5.7)', () => {
     await typeCode('ABC1');
     expect(await screen.findByText(text.shape)).toBeVisible();
     await waitFor(() => expect(mock).not.toHaveBeenCalled());
+  });
+});
+
+describe('/kiosk after signing (6.4 part B, B4 on the office computer)', () => {
+  it('?done: signed, where the copy goes, and "a new code" loads an empty /kiosk; no request', async () => {
+    const mock = stubApi({});
+    const { user } = renderRoutes(`${KIOSK_PAGE_PATH}?done`, signRoutes);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: he.sign.done.title }),
+    ).toBeVisible();
+    expect(screen.getByText(he.sign.done.kioskCopy)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: he.sign.done.next }));
+    expect(replacePage).toHaveBeenCalledWith(KIOSK_PAGE_PATH);
+    expect(mock).not.toHaveBeenCalled();
+  });
+
+  it('?signed (found already signed): no copy promised', async () => {
+    stubApi({});
+    renderRoutes(`${KIOSK_PAGE_PATH}?signed`, signRoutes);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: he.sign.done.title }),
+    ).toBeVisible();
+    expect(screen.queryByText(he.sign.done.kioskCopy)).toBeNull();
   });
 });
 
@@ -250,6 +275,9 @@ describe('the signing bundle loads no staff code', () => {
   it('follows the imports (the shared PDF code is reached)', () => {
     expect(reached.has('/src/sign/DocumentStep.tsx')).toBe(true);
     expect(reached.has('/src/pdf/pdf-document.ts')).toBe(true);
+    expect(reached.has('/src/sign/form/SignatureSection.tsx')).toBe(true);
+    expect(reached.has('/src/sign/DoneScreen.tsx')).toBe(true);
+    expect(reached.has('/src/components/dialogs/ConfirmDialog.tsx')).toBe(true);
   });
 
   it('reaches nothing under src/admin/ and no staff request', () => {

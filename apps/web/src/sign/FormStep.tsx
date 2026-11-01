@@ -1,4 +1,4 @@
-import type { SignFormResult } from '@doc-signing/shared';
+import type { SignFormResult, SignSubmitInput } from '@doc-signing/shared';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -9,7 +9,7 @@ import { PageLoader } from '../components/feedback/PageLoader';
 import { he } from '../i18n/he';
 import { documentOutcome, type DocumentOutcome } from './document-outcome';
 import type { FormDraft } from './form/form-draft';
-import { SignForm } from './form/SignForm';
+import { SignForm, type SignedKind } from './form/SignForm';
 import type { FitCall } from './form/use-fit-check';
 
 type Fetched =
@@ -23,6 +23,12 @@ interface FormStepProps {
   load: (signal: AbortSignal) => Promise<SignFormResult>;
   /** `POST …/fit` of the same channel. */
   fit: FitCall;
+  /** `POST …/submit` of the same channel. */
+  submit: (body: SignSubmitInput) => Promise<unknown>;
+  /** The office computer: the copy's address once more before sending. */
+  confirmEmail?: boolean;
+  /** Signed (or found already signed): the caller shows B4 and drops everything. */
+  onSigned: (kind: SignedKind) => void;
   /** Her answers, kept by the page (so a new ID check keeps them). */
   draft: FormDraft;
   onDraftChange: Dispatch<SetStateAction<FormDraft>>;
@@ -33,12 +39,13 @@ interface FormStepProps {
 }
 
 /**
- * B3 (FR-SGN-4): reads the form once (plain state, no data cache) and shows it from the top
+ * B3 (FR-SGN-4, FR-SGN-5): reads the form once (plain state, no data cache) and shows it from the top
  * (B2 left the page scrolled to its end). The same answers as B2: a session that ended, a
  * refusal (B5), a 429 wait, or "try again".
  */
 export function FormStep(props: FormStepProps) {
-  const { load, fit, draft, onDraftChange, onSessionEnded, onRefused } = props;
+  const { load, fit, submit, confirmEmail = false, onSigned } = props;
+  const { draft, onDraftChange, onSessionEnded, onRefused } = props;
   const [fetched, setFetched] = useState<Fetched>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [waiting, setWaiting] = useState(false);
@@ -107,6 +114,9 @@ export function FormStep(props: FormStepProps) {
       draft={draft}
       onDraftChange={onDraftChange}
       fit={fit}
+      submit={submit}
+      confirmEmail={confirmEmail}
+      onSigned={onSigned}
       onSessionEnded={onSessionEnded}
       onRefused={onRefused}
     />

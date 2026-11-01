@@ -9,6 +9,7 @@ import { formAnswer } from '../test/sign-form-stub';
 import { signRoutes } from './sign-routes';
 
 vi.mock('../pdf/pdf-document', () => import('../test/pdf-document-stub'));
+vi.mock('signature_pad', () => import('../test/signature-pad-stub'));
 
 const text = he.sign.document;
 const TOKEN = 'T'.repeat(43);

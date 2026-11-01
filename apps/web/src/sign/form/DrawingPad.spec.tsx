@@ -81,8 +81,15 @@ describe('DrawingPad', () => {
     expect(pad?.fromDataURL).toHaveBeenCalledTimes(1);
   });
 
-  it('a stroke gives the whole drawing as PNG; an empty pad draws nothing back', () => {
+  it('a stroke gives the whole drawing as PNG with its ink; an empty pad draws nothing back', () => {
     const onDraw = vi.fn();
+    // The canvas pixels the ink is counted from (jsdom has none): a blank pad.
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+      this: HTMLCanvasElement,
+    ) {
+      const data = new Uint8ClampedArray(this.width * this.height * 4);
+      return { scale: vi.fn(), getImageData: () => ({ data }) } as unknown as RenderingContext;
+    });
     render(
       <DrawingPad
         value=""
@@ -96,6 +103,7 @@ describe('DrawingPad', () => {
     const pad = padStub.pads[0];
     expect(pad?.fromDataURL).not.toHaveBeenCalled();
     act(() => pad?.stroke());
-    expect(onDraw).toHaveBeenCalledWith(padStub.png);
+    expect(onDraw).toHaveBeenCalledWith(padStub.png, { pixels: 0, span: 0 });
+    vi.restoreAllMocks();
   });
 });

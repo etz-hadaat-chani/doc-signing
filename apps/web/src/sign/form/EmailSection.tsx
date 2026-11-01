@@ -56,7 +56,7 @@ export function EmailSection(props: EmailSectionProps) {
         label={text.byEmail}
         sx={choiceSx}
       />
-      <Box sx={{ paddingInlineStart: 6, mb: 1 }}>
+      <Box sx={{ paddingInlineStart: 6, mt: 2, mb: 1 }}>
         <TextField
           fullWidth
           type="email"

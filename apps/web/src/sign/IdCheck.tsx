@@ -1,4 +1,4 @@
-import { isValidIdNumber } from '@doc-signing/shared';
+import { isValidIdNumber, type SignVerifiedResult } from '@doc-signing/shared';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
@@ -14,8 +14,9 @@ const ID_MAX_LENGTH = 9;
 
 interface IdCheckProps {
   /** `POST …/verify` of a link or of the office computer, the number only in its body. */
-  verify: (idNumber: string) => Promise<unknown>;
-  onVerified: () => void;
+  verify: (idNumber: string) => Promise<SignVerifiedResult>;
+  /** Correct: the session started (`sessionExpiresAt` for the warning before it ends). */
+  onVerified: (result: SignVerifiedResult) => void;
   /** The link or code can't be used (any more): the caller shows the B5 screen. */
   onRefused: (outcome: Exclude<VerifyOutcome, { kind: 'retry' }>) => void;
   /** Above the field, e.g. "the code was accepted" on the office computer. */
@@ -59,8 +60,7 @@ export function IdCheck({ verify, onVerified, onRefused, notice }: IdCheckProps)
     setError(null);
     setBusy(true);
     try {
-      await verify(idNumber);
-      onVerified();
+      onVerified(await verify(idNumber));
     } catch (failure) {
       const outcome = verifyOutcome(failure);
       if (outcome.kind !== 'retry') {

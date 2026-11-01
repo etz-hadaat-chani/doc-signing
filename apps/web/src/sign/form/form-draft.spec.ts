@@ -89,6 +89,29 @@ describe('withHiddenDropped', () => {
     const shown = draft({ answers: { agree: true, reason: 'כי' } });
     expect(withHiddenDropped(form, shown)).toBe(shown);
   });
+
+  it('a hidden drawing box loses its drawing and its "too little ink" mark; the signature stays', () => {
+    const withDrawing = formAnswer({
+      fields: [
+        formBox('agree', { fieldType: 'checkbox', isRequired: false, options: null }),
+        formBox('sketch', {
+          fieldType: 'drawing',
+          options: null,
+          showWhen: { key: 'agree', equals: 'true' },
+        }),
+      ],
+    });
+    const before = draft({
+      answers: { agree: false },
+      drawings: { sketch: PNG },
+      signature: PNG,
+      faint: { sketch: true, signatureImage: true },
+    });
+    const after = withHiddenDropped(withDrawing, before);
+    expect(after.drawings).toEqual({});
+    expect(after.faint).toEqual({ signatureImage: true });
+    expect(after.signature).toBe(PNG);
+  });
 });
 
 describe('checkAnswers', () => {

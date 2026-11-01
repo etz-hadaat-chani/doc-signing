@@ -1,12 +1,16 @@
 import Box from '@mui/material/Box';
 import { useEffect, useRef } from 'react';
 import SignaturePad from 'signature_pad';
+import { canvasInk, type Ink } from './ink';
 
 interface DrawingPadProps {
   /** The saved drawing (PNG data URL), or '' for none: drawn again whenever the pad is resized. */
   value: string;
-  /** A stroke ended: the whole drawing as a PNG data URL. */
-  onDraw: (png: string) => void;
+  /**
+   * A stroke ended: the whole drawing as a PNG data URL, and its ink (null where the canvas
+   * can't be read) for the "not empty" pre-check.
+   */
+  onDraw: (png: string, ink: Ink | null) => void;
   /** The accessible name of the drawing area. */
   label: string;
   /** Height on screen in CSS pixels; the width follows the card (up to `maxWidth`). */
@@ -18,7 +22,7 @@ interface DrawingPadProps {
 
 /**
  * A drawing area for the mouse (touch also works), smoothed by signature_pad: a drawing box on
- * B3 (FR-TPL-9), and in part B the signature itself. The canvas has the screen's pixel density,
+ * B3 (FR-TPL-9), and the signature itself. The canvas has the screen's pixel density,
  * so a resize, a browser zoom or a `devicePixelRatio` change resizes it; it is then drawn again
  * from the saved PNG, so nothing she drew is lost. Nothing is kept outside the caller's state.
  */
@@ -62,7 +66,7 @@ export function DrawingPad({
       }
     };
     const strokeEnded = () => {
-      if (!pad.isEmpty()) onDrawRef.current(pad.toDataURL('image/png'));
+      if (!pad.isEmpty()) onDrawRef.current(pad.toDataURL('image/png'), canvasInk(canvas));
     };
 
     fit();

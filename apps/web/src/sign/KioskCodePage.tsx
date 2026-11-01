@@ -1,9 +1,11 @@
 import {
   isKioskShortCodeShape,
+  KIOSK_PAGE_PATH,
   KIOSK_SHORT_CODE_LENGTH,
   normalizeKioskShortCode,
   type SignLinkState,
   type SignLinkStateResult,
+  type SignVerifiedResult,
 } from '@doc-signing/shared';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -11,10 +13,13 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { type FormEvent, useRef, useState } from 'react';
+import { useLocation } from 'react-router';
 import { isApiRequestError } from '../api/api-error';
 import { he } from '../i18n/he';
 import { DocumentStep } from './DocumentStep';
+import { DoneScreen } from './DoneScreen';
 import { EMPTY_DRAFT, type FormDraft } from './form/form-draft';
+import type { SignedKind } from './form/SignForm';
 import { FormStep } from './FormStep';
 import type { VerifyOutcome } from './id-check-outcome';
 import { IdCheck } from './IdCheck';
@@ -24,12 +29,25 @@ import {
   kioskFit,
   kioskForm,
   kioskState,
+  kioskSubmit,
   verifyKiosk,
 } from './kiosk.api';
 import { MessagePage, type SignMessageKind } from './MessagePage';
+import { replacePage } from './page-navigation';
+import { sessionDeadline } from './session-deadline';
+import { SessionWarning } from './SessionWarning';
 import { SignLayout } from './SignLayout';
 
 const text = he.sign.kiosk;
+
+/**
+ * The address after signing: a fresh page (`location.replace`), so nothing she entered is left
+ * in memory and "Back" can't return to it. It carries only which ending, never an answer.
+ */
+const DONE_PATH: Record<SignedKind, string> = {
+  signed: `${KIOSK_PAGE_PATH}?done`,
+  alreadySigned: `${KIOSK_PAGE_PATH}?signed`,
+};
 
 /** Room for the hyphen and spaces a code may be typed with. */
 const FIELD_MAX_LENGTH = KIOSK_SHORT_CODE_LENGTH + 4;
@@ -59,9 +77,34 @@ const MESSAGE_OF: Record<Exclude<SignLinkState, 'valid'>, SignMessageKind> = {
  * API's 409 text. The long code is dropped once the ID is correct (the `kiosk_sid` cookie
  * carries the session from there): B2 (6.3) reads the document with the cookie only. A session
  * that ended there or on B3 can't ask the ID again (the code is used up): "ask the manager";
- * her B3 answers are dropped with it.
+ * her B3 answers are dropped with it. Two minutes before the session ends a notice warns that
+ * the answers would be lost. Signed: the copy's address is confirmed on B3, then
+ * `location.replace('/kiosk?done')` loads B4 afresh with nothing of hers; "הקלדת קוד חדש" opens
+ * the empty code field for the next employee.
  */
 export function KioskCodePage() {
+  const { search } = useLocation();
+  const ending = new URLSearchParams(search);
+  if (ending.has('done') || ending.has('signed')) {
+    return (
+      <SignLayout>
+        <DoneScreen
+          copy={ending.has('done') ? 'kiosk' : 'none'}
+          hrContact={null}
+          action={
+            <Button variant="contained" onClick={() => replacePage(KIOSK_PAGE_PATH)}>
+              {he.sign.done.next}
+            </Button>
+          }
+        />
+      </SignLayout>
+    );
+  }
+  return <KioskSigning />;
+}
+
+/** The code, then B1–B3 on the office computer. */
+function KioskSigning() {
   const [typed, setTyped] = useState('');
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -74,6 +117,8 @@ export function KioskCodePage() {
   const kioskCode = useRef<string | null>(null);
   // Her B3 answers. A session that ends here can't be resumed (the code is used up): dropped.
   const [draft, setDraft] = useState<FormDraft>(EMPTY_DRAFT);
+  // When the signing session ends (this computer's clock), for the notice before it does.
+  const [deadline, setDeadline] = useState<number | null>(null);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -105,6 +150,7 @@ export function KioskCodePage() {
   const again = () => {
     kioskCode.current = null;
     setDraft(EMPTY_DRAFT);
+    setDeadline(null);
     setStep(null);
     setResult(null);
     setRefused(null);
@@ -119,8 +165,9 @@ export function KioskCodePage() {
 
   const verify = (idNumber: string) => verifyKiosk(kioskCode.current ?? '', idNumber);
 
-  const onVerified = () => {
+  const onVerified = (result: SignVerifiedResult) => {
     kioskCode.current = null;
+    setDeadline(sessionDeadline(result));
     setStep('document');
   };
 
@@ -128,13 +175,21 @@ export function KioskCodePage() {
     kioskCode.current = null;
     setRefused(outcome.kind === 'gone' ? 'kioskCodeGone' : MESSAGE_OF[outcome.state]);
     setDraft(EMPTY_DRAFT);
+    setDeadline(null);
     setStep(null);
+  };
+
+  const onSigned = (kind: SignedKind) => {
+    kioskCode.current = null;
+    setDraft(EMPTY_DRAFT);
+    replacePage(DONE_PATH[kind]);
   };
 
   const message = refused ?? (result && result.state !== 'valid' ? MESSAGE_OF[result.state] : null);
 
   return (
     <SignLayout wide={step === 'document'}>
+      {step !== null && !message && <SessionWarning deadline={deadline} channel="kiosk" />}
       {result && message ? (
         <MessagePage kind={message} hrContact={result.hrContact} action={againButton} />
       ) : step === 'document' ? (
@@ -148,6 +203,9 @@ export function KioskCodePage() {
         <FormStep
           load={kioskForm}
           fit={kioskFit}
+          submit={kioskSubmit}
+          confirmEmail
+          onSigned={onSigned}
           draft={draft}
           onDraftChange={setDraft}
           onSessionEnded={() => onRefused({ kind: 'gone' })}

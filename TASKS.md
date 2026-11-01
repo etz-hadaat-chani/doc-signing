@@ -978,14 +978,23 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
   - 6.4: replace `FormStepPlaceholder` (rendered by `SignLinkPage` view `form` and by `KioskCodePage` step `form`). The link's 401 path (`reverify` view: `IdCheck` with a notice, then back) is the one to reuse for the form and submit, keeping answers in memory. On the office computer a 401 can't ask the ID again (the code is used up): today it shows `kioskCodeGone`; her answers are lost there, so warn before minute 15 (`sessionExpiresAt`). Moving from B2 to B3 keeps the scroll position; scroll the form to the top.
   - 6.4 / 7.1: Firefox is still to be tested (by hand here; Playwright's Firefox download is blocked by the filter).
 
-### [ ] 6.4 Signature and done (B3, B4)
+### [x] 6.4 Signature and done (B3, B4)
 - **Build:** Email section, signature_pad ≥ 500×200 with smoothing, Clear, reading statement, submit, done screen; office kiosk variant.
 - **Depends on:** 6.3
 - **Note (PRD FR-SGN-9, B3):** Above the pad: two clear choices, exactly one: (a) the email box, pre-filled with the stored email (she can keep or correct it), or (b) "I have no email and want my payslip and notices at the institution's office in my city". Submit stays disabled until one is chosen. Validate with the shared zod schema (3.13); Hebrew errors from `he.ts`. The email box is left to right inside the right-to-left page. Explain in one line that one signature is placed everywhere the document needs it.
 - **Note (3.20, email pre-fill):** The email pair's fill mode is `employee`, yet the email box starts pre-filled (from the form endpoint, 3.13); the fill mode never empties it.
 - **Note (form, PRD FR-SGN-4, B3, NFR-USE-3):** Build the form from `GET /sign/:token/form` (3.13): the boxes and the email section in the template's order, each with its Hebrew label: one-line field, multi-line field, a list (radio buttons for a few options, a drop-down for many), checkbox, a date picker showing DD/MM/YYYY, and a small drawing pad with Clear for each drawing box. Boxes with a condition appear and disappear as she answers (a hidden box's answer is dropped). Validate with the same shared schema as the server (3.20); on Confirm, Hebrew errors appear next to each box and the page scrolls to the first one. Long text shows how many characters are left. All on B3, so the flow stays at 4 screens. For a correction round, a short box at the top: "תיקון נדרש: <note>" (from the form endpoint, after the ID check). The kiosk variant uses the same form.
 - **Done when:** A mouse signature appears in the stored PDF, in every matching position; can't submit without a choice; a bad email shows a Hebrew error; can't submit with a required box empty; a conditional box shows only with its value; each box type's answer and a drawing appear in the stored PDF; a correction round shows the manager's note.
-- **Split:** part A done (the form half of B3). Part B (next): the signature pad, reading statement, submit, B4, the office-computer ending, the session warning; 6.4 is ticked at the end of part B.
+- **Split:** part A done (the form half of B3). Part B done (the signature pad, reading statement, submit, B4, the office-computer ending, the session warning); 6.4 ticked.
+- **Status:** part B tested by e2e on Chromium only (Edge can run it with `E2E_CHANNEL=msedge`, not run here); **Firefox is still a manual check by the owner** (Playwright's Firefox download is blocked by the filter here).
+- **Done when → test:**
+  - A mouse signature in the stored PDF at every matching position: `e2e/signing-submit.e2e.ts` (link test: the stored PDF read with pdf.js in memory, an image with ink at both signature places).
+  - Can't submit without a choice: `FormStep.spec` ("the email section…": the button off with its reason), and both signing e2e files (off before a choice).
+  - A bad email shows a Hebrew error: `FormStep.spec` and `signing-form.e2e.ts`.
+  - Can't submit with a required box empty: `FormStep.spec` ("required boxes empty", no submit call) and both signing e2e files (the errors, no `/submit` request).
+  - A conditional box shows only with its value: `FormStep.spec`, `signing-form.e2e.ts`, and its answer in the stored PDF (`signing-submit.e2e.ts`).
+  - Each box type's answer and a drawing in the stored PDF: `signing-submit.e2e.ts` (text, long text, list, the conditional text, date and email from the PDF's text; the drawing as an inked image in its place).
+  - A correction round shows the manager's note: `signing-submit.e2e.ts` (returned with a two-line note → sent again → the new link's form shows "תיקון נדרש:" with the note), and `FormStep.spec` (plain text with its lines).
 - **Done (part A):**
   - No API or `packages/shared` change. New dependency `signature_pad` 5.1.4 (exact; released 2026-07-31), web only.
   - Calls (plain `request()`, session cookie only): `sign.api.ts` `linkForm(token)` → `GET /api/sign/:token/form`, `linkFit(token, answers)` → `POST …/fit { answers }`; `kiosk.api.ts` `kioskForm()` / `kioskFit(answers)` → `/api/kiosk/form` / `/api/kiosk/fit`. Answers checked with web-side zod `signFormResultSchema` / `signFitResultSchema` (`satisfies` the shared types, built from the shared option / condition schemas).
@@ -1004,6 +1013,71 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
   - B4 and the office-computer ending: show the email she gave once more on the office computer (the copy goes there), then the done screen with `location.replace`, the answers dropped.
   - Session warning: pass `sessionExpiresAt` up from verify (today `IdCheck`'s `onVerified` takes no argument) and warn at minute 13; on the office computer say the answers will be lost.
   - Firefox (6.3 note) still by hand.
+- **Done (part B):**
+  - No API or `packages/shared` change; no migration; no new dependency. Changed: `web/src/sign/`, `theme/sign-theme.ts` (a dialog title at 20 px), `i18n/he.ts` and the signing e2e files.
+  - B3 second half: `form/SignatureSection.tsx` has two parts:
+    - `SignatureField`: h2 "חתימה", the FR-SGN-10 line, `DrawingPad` at most 560 × 224 (≥ 500 × 200 at 1280 px, checked in e2e) and "ניקוי". A PNG over `SIGN_IMAGE_MAX_CHARS` is not saved.
+    - `ReadingStatement`: a checkbox row like the other boxes.
+  - "בדיקת התשובות" and "כל התשובות תקינות" are gone: "סיום וחתימה" does the check. The button is off until the email choice is made (only when there is an email section; the reason line through `aria-describedby`). It is also off while sending, with a ref guard, so a double click sends once.
+  - Checks before sending (pure `form/submit-check.ts`, `checkSubmit`), in order:
+    1. `checkAnswers`
+    2. the reading statement (`SIGN_ACK_REQUIRED`)
+    3. the ink of the signature and of each shown drawing (`form/ink.ts`)
+    4. the image size
+    5. `signSubmitSchema` on the whole body
+
+    The ink rule is the server's (darkest channel over white < 160) with the shared `DRAWN_IMAGE_MIN_INK_*`. `DrawingPad` measures it with `getImageData` at each stroke end; where the canvas can't be read, the value is null and the server decides.
+  - Every error shows at once, each at its item. The first one (screen order: boxes, then the signature, then the statement) is scrolled to and focused, and "יש לתקן N שדות" appears (`role="status"`). After that, the errors follow her edits. The items are box keys, `email_choice`, `email`, `signatureImage` and `acknowledged`; `itemOfField` maps the API's field names to the same items.
+  - `FormDraft` gained `signature`, `acknowledged` and `faint` (pads with too little ink). All three live in the page's state, so a new ID check keeps them. `withHiddenDropped` also drops a hidden drawing's `faint` mark.
+  - Submit: the body is `{ signatureImage, acknowledged: true, ...answersOf(form, draft) }` (the parsed `signSubmitSchema` output).
+    - Link: `sign.api.ts` `linkSubmit` → `POST /api/sign/:token/submit`.
+    - Office computer: `kiosk.api.ts` `kioskSubmit` → `POST /api/kiosk/submit` (cookie only).
+    - Both answers are checked with `signSubmittedResultSchema`.
+  - How each answer is handled (pure `submit-outcome.ts`):
+    - 400 errors land at their item and clear when she edits it: `VALIDATION_FAILED` `details.fields`, `ANSWER_DOES_NOT_FIT` `details.key` (`email_input` → the email), `SIGNATURE_*`, `DRAWING_*` `details.key`.
+    - 401 on a link: the existing `reverify`, then the form with everything kept. **She presses again**: nothing is sent by itself (PRD FR-SGN-8 updated).
+    - 401 on the office computer: `kioskCodeGone`.
+    - 409 `SIGN_ALREADY_SIGNED`: B4 without the copy line. Other 409 / 423 / 404: B5.
+    - 429: "יש לחכות N דקות", and the button stays off until `Retry-After`.
+    - No connection, `KIOSK_STAFF_SIGNED_IN`, 413 or 5xx: an error `Alert` with "לנסות שוב", and every answer is kept.
+  - B4 (`DoneScreen.tsx`, `role="status"`, opens scrolled to the top): "המסמך נחתם" and "תודה. החתימה שלך נשמרה.".
+    - Link: "a copy was sent to the address the link came to" (FR-SGN-6; the typed address is never shown) and the HR contact. The draft is reset to `EMPTY_DRAFT`; the PDF already left memory with B2. A reload shows "already signed" (6.1).
+  - Office computer ending:
+    - With "email" chosen, a `ConfirmDialog` "לאן יישלח העותק החתום" shows the address on its own line (`<bdi dir="ltr">`), with "חתימה ושליחה" / "חזרה לתיקון". With "office" there is no dialog.
+    - Once signed, the draft and the ref are dropped, then `replacePage('/kiosk?done')` (`page-navigation.ts`, `location.replace`; `?signed` after a 409). It is a fresh page, so "Back" can't return (checked in e2e). The address carries no data.
+    - `KioskCodePage` reads `?done` / `?signed` and shows B4 with a fixed text ("email": the copy goes to the address she confirmed; "office": no copy). There is no HR contact after the reload. "הקלדת קוד חדש" → `/kiosk` with an empty code field.
+  - Session warning:
+    - `IdCheck`'s `verify` now returns `SignVerifiedResult`, and `onVerified` receives it.
+    - `session-deadline.ts` `sessionDeadline` = the time left from now, at most `SIGN_SESSION_MINUTES`.
+    - `SessionWarning.tsx`: one `setTimeout` for 2 minutes before the end, cleared on unmount or a new deadline. A sticky line at the top of B2 / B3 inside a `role="status"` box; the MUI `Alert` has `role="none"` so it is never assertive. Never a dialog, and the focus never moves.
+    - Link text: the answers are kept. Office computer text: the answers will be lost; finish now or ask the manager.
+  - Fixes:
+    - More space above the email box: its raised label no longer touches "לקבל באימייל".
+    - "סיום וחתימה" no longer uses `size="large"`: MUI's large size made its text smaller than the sign theme's 20 px (caught in a screenshot).
+  - Unit tests (web):
+    - New: `form/ink.spec` (6), `form/submit-check.spec` (7), `submit-outcome.spec` (4), `SessionWarning.spec` (4, fake timers).
+    - `FormStep.spec` (30): part A adjusted to the new button, plus 16 new tests:
+      - Link: pad size, Clear, the statement, faint ink, a too-large signature, the body (no hidden box, the email only for "email"), "office" + double click → one POST, each 400 at its box or pad and focused, 401 → ID → everything kept → pressed again → the same body, 409 signed → B4 without the copy line, 409 cancelled, 429, no connection + retry, the B4 text with nothing of hers left, both warnings.
+      - Office computer: the confirm with the address (`bdi`, LTR), back, confirm → `/kiosk?done`; "office" + 409 → `?signed`; 401 → "ask the manager".
+    - `DrawingPad.spec` (the ink comes with the PNG), `form-draft.spec` (+1).
+    - `sign-routes.spec` (+2): `?done` / `?signed` with no request. The bundle guard reaches `SignatureSection`, `DoneScreen` and `ConfirmDialog`, still with no admin import or staff request.
+    - `DocumentStep.spec` now stubs `signature_pad`, because the form always has the pad.
+  - Playwright:
+    - `signing-form.e2e.ts` adjusted: the button is off before a choice; the errors include the signature and the statement; at the end only those two remain, and no `/submit` is sent.
+    - New `signing-submit.e2e.ts` (2 tests, prefix `96`) covers the link and the office computer as in "Done when → test". It also checks:
+      - the button (20 px, ≥ 56 px) and the pad (≥ 500 × 200)
+      - the confirm dialog: 20 px text and title, buttons ≥ 56 px, RTL, the address LTR (masked in the screenshot, never printed)
+      - the signed copy in Mailpit (counts only)
+      - `/kiosk?done` → "Back" → no form → "הקלדת קוד חדש" → an empty code field
+    - Every test also checks that all requests stay on `localhost:5173`, storage is empty and there is no sideways scroll. The signed PDF is read in memory only, never written to disk.
+    - `signing-helpers.ts`: `drawOn` (moved here; scrolls the pad into view first), `assignmentOf`, `trackRound` (the correction round is cancelled in `finish()`), `mailCount`.
+    - Screenshots in `apps/web/test-results/signing/`: `b3-sign-*`, `b4-1-link-done`, `b5-already-signed`, `k-confirm-email`, `k-done`, `k-next-code`.
+- **Note for later tasks:**
+  - 7.1: `signing-submit.e2e.ts` already signs through a link and through the office computer, and reads the stored PDF in memory (`readSignedPdf`). Reuse it for the import → round → sign chain.
+  - 7.1: an API restart mid-run (seen once here, from a file-watch rebuild under `pnpm dev`) fails `finish()` and leaves that run's fake rows to clean by hand.
+  - 7.1 / 7.3: Firefox on Windows still needs a manual check: B1–B4, the mouse signature, the confirm dialog, `/kiosk?done` and "Back".
+  - 7.2: `/kiosk?done` and `?signed` carry no data. Serve `/kiosk` with `no-store` (5.7 note) so the back-forward cache keeps nothing. The signing pages still load nothing from outside.
+  - Later, if wanted: the web's ink rule copies the server's 160 level (`form/ink.ts` `INK_LEVEL`). Moving it to `packages/shared` would stop the two from drifting apart.
 
 ---
 

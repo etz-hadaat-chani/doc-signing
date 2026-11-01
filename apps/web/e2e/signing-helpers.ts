@@ -1,4 +1,4 @@
-import { type APIRequestContext, expect, type Page, request } from '@playwright/test';
+import { type APIRequestContext, expect, type Locator, type Page, request } from '@playwright/test';
 import { seedPassword } from './helpers';
 
 // Shared by the signing e2e files (6.3, 6.4). DANGER rules (nothing is ever deleted here):
@@ -131,15 +131,29 @@ export class SigningSetup {
     return id;
   }
 
-  /** Opens the office computer for this employee's row: the short code (never printed). */
-  async openKiosk(roundId: string, employeeId: string): Promise<string> {
+  /** A round made another way (e.g. a correction round): cancelled in `finish()` too. */
+  trackRound(id: string) {
+    this.roundIds.push(id);
+  }
+
+  /** This employee's row in the round. */
+  async assignmentOf(
+    roundId: string,
+    employeeId: string,
+  ): Promise<{ assignmentId: string; status: string }> {
     const rows = await this.api.get(`/api/rounds/${roundId}/assignments?pageSize=100`);
     expect(rows.status()).toBe(200);
     const { items } = (await rows.json()) as {
-      items: { assignmentId: string; employeeId: string }[];
+      items: { assignmentId: string; employeeId: string; status: string }[];
     };
     const row = items.find((item) => item.employeeId === employeeId);
     if (!row) throw new Error('fake employee not in the round');
+    return row;
+  }
+
+  /** Opens the office computer for this employee's row: the short code (never printed). */
+  async openKiosk(roundId: string, employeeId: string): Promise<string> {
+    const row = await this.assignmentOf(roundId, employeeId);
     const opened = await this.api.post(`/api/assignments/${row.assignmentId}/kiosk`);
     expect(opened.status()).toBe(201);
     return ((await opened.json()) as { shortCode: string }).shortCode;
@@ -170,6 +184,15 @@ export class SigningSetup {
     return path;
   }
 
+  /** How many emails reached this address in Mailpit (the count only, nothing of their text). */
+  async mailCount(address: string): Promise<number> {
+    const search = await this.api.get(`${MAILPIT}/api/v1/search`, {
+      params: { query: `to:"${address}"` },
+    });
+    if (search.status() !== 200) return -1;
+    return ((await search.json()) as { messages: unknown[] }).messages.length;
+  }
+
   /** Cancels every round, deactivates every employee, archives every template made here. */
   async finish() {
     const statuses: [string, number][] = [];
@@ -191,6 +214,20 @@ export class SigningSetup {
     await this.api.dispose();
     for (const [what, status] of statuses) expect(status, what).toBe(200);
   }
+}
+
+/** A few strokes of the mouse inside a pad (scrolled into view first: the mouse can't reach it). */
+export async function drawOn(page: Page, pad: Locator) {
+  await pad.scrollIntoViewIfNeeded();
+  const area = await pad.boundingBox();
+  if (!area) throw new Error('the pad is not on the screen');
+  const { x, y, width, height } = area;
+  await page.mouse.move(x + width * 0.2, y + height * 0.3);
+  await page.mouse.down();
+  for (let step = 1; step <= 12; step += 1) {
+    await page.mouse.move(x + width * (0.2 + step * 0.05), y + height * (0.3 + (step % 4) * 0.12));
+  }
+  await page.mouse.up();
 }
 
 export async function openLink(page: Page, path: string) {

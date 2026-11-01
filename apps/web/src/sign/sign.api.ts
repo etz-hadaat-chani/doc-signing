@@ -2,6 +2,8 @@ import {
   type SignFitResult,
   type SignFormResult,
   signLinkStateResultSchema,
+  type SignSubmitInput,
+  type SignSubmittedResult,
   type SignVerifiedResult,
   showWhenSchema,
   TEMPLATE_FIELD_TYPES,
@@ -48,6 +50,13 @@ export const signFitResultSchema = z.object({
   tooLong: z.array(z.string()),
 }) satisfies z.ZodType<SignFitResult>;
 
+/** `POST …/submit` (201): signed. */
+export const signSubmittedResultSchema = z.object({
+  state: z.literal('signed'),
+  signedAt: z.iso.datetime(),
+  reference: z.string(),
+}) satisfies z.ZodType<SignSubmittedResult>;
+
 const linkPath = (token: string) => `/api/sign/${encodeURIComponent(token)}` as const;
 
 /** The link's state and whom to ask. Nothing about her. */
@@ -81,5 +90,14 @@ export function linkFit(token: string, answers: Record<string, string>, signal?:
     body: { answers },
     schema: signFitResultSchema,
     signal,
+  });
+}
+
+/** Signs (FR-SGN-5): her signature, the statement and her answers, in the body only. */
+export function linkSubmit(token: string, body: SignSubmitInput) {
+  return request(`${linkPath(token)}/submit`, {
+    method: 'POST',
+    body,
+    schema: signSubmittedResultSchema,
   });
 }

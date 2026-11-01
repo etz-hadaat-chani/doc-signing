@@ -1,6 +1,15 @@
-import { kioskCodeEnteredSchema, signLinkStateResultSchema } from '@doc-signing/shared';
+import {
+  kioskCodeEnteredSchema,
+  signLinkStateResultSchema,
+  type SignSubmitInput,
+} from '@doc-signing/shared';
 import { request, requestBytes } from '../api/http';
-import { signFitResultSchema, signFormResultSchema, signVerifiedResultSchema } from './sign.api';
+import {
+  signFitResultSchema,
+  signFormResultSchema,
+  signSubmittedResultSchema,
+  signVerifiedResultSchema,
+} from './sign.api';
 
 /**
  * The office computer's calls (5.7, FR-MAN-4) through the plain request(): no staff code, no
@@ -51,5 +60,14 @@ export function kioskFit(answers: Record<string, string>, signal?: AbortSignal) 
     body: { answers },
     schema: signFitResultSchema,
     signal,
+  });
+}
+
+/** Signs at the office (FR-MAN-4) with the `kiosk_sid` cookie only; the session then ends. */
+export function kioskSubmit(body: SignSubmitInput) {
+  return request('/api/kiosk/submit', {
+    method: 'POST',
+    body,
+    schema: signSubmittedResultSchema,
   });
 }
