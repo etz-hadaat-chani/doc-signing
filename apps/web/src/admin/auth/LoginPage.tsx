@@ -8,6 +8,7 @@ import Typography from '@mui/material/Typography';
 import { type FormEvent, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { isApiRequestError } from '../../api/api-error';
+import { Wordmark } from '../../components/brand/Wordmark';
 import { he } from '../../i18n/he';
 import { tokens } from '../../theme/tokens';
 import { type LoginRedirectState, safeRedirectPath } from './safe-redirect';
@@ -35,7 +36,7 @@ function submitErrorText(error: unknown): string[] {
     : [error.message];
 }
 
-/** A1. Calm and centered: organization, system name, two fields, one button. */
+/** A1. Calm and centered: wordmark, system name, two fields, one button. */
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -65,14 +66,21 @@ export function LoginPage() {
       component="main"
       sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', px: 2, py: 6 }}
     >
-      <Paper variant="outlined" sx={{ width: '100%', maxWidth: 400, p: { xs: 3, sm: 5 } }}>
+      <Paper
+        variant="outlined"
+        sx={{
+          width: '100%',
+          maxWidth: 400,
+          p: { xs: 3, sm: 5 },
+          borderTop: `${tokens.layout.edgeWidth}px solid ${tokens.color.accent}`,
+        }}
+      >
+        <Wordmark fontSize={tokens.font.size.section} />
+        {/* The wordmark already carries the accent rule; no title bar here. */}
         <Typography
-          color="text.secondary"
-          sx={{ fontSize: tokens.font.size.body, fontWeight: tokens.font.weight.medium }}
+          variant="h1"
+          sx={{ mt: 1.5, mb: 4, borderInlineStart: 'none', paddingInlineStart: 0 }}
         >
-          {he.app.organization}
-        </Typography>
-        <Typography variant="h1" sx={{ mb: 4 }}>
           {he.app.systemName}
         </Typography>
 

@@ -5,18 +5,34 @@
  */
 export const tokens = {
   color: {
-    background: '#F7F7F5',
+    /** Page background: a slightly warm paper tone behind the white surfaces. */
+    background: '#F7F4F0',
     surface: '#FFFFFF',
     text: '#1F2328',
     textSecondary: '#5F6368',
     border: '#E3E3DE',
     /** Border of outlined buttons: a little stronger than `border`, so they read as buttons. */
     borderStrong: '#C4C4BD',
-    /** The one brand color: primary button, active menu item, links, focus ring. */
+    /** The brand color: primary button, active menu item text, links, focus ring. */
     brand: '#2F5D50',
     brandHover: '#264C41',
-    /** Very light brand tint for hover backgrounds of menu items. */
+    /** Very light brand tint: hover and active backgrounds of menu items. */
     brandTint: '#EEF3F1',
+    /**
+     * The one warm accent (TASKS 4.3): lines and edges only, never text (4.45:1 on white). Tile
+     * edges, the bar before a page title, the active menu item's bar, the wordmark rule.
+     */
+    accent: '#B4613C',
+    /** Background of empty states and the login card's top band. */
+    accentTint: '#F7EDE6',
+    /** Text on `accentTint`. */
+    accentText: '#8A4A22',
+    /** The staff top bar: a deeper green than `brand`, so the brand button stays distinct. */
+    topBar: '#1E3F36',
+    /** On the top bar: main text, the quieter second line, the accent and the focus ring. */
+    onTopBar: '#FFFFFF',
+    onTopBarMuted: '#D5E3DD',
+    accentOnTopBar: '#E6CFA0',
     error: '#B3261E',
     errorTint: '#FBEFEE',
     warning: '#8A5A00',
@@ -33,7 +49,8 @@ export const tokens = {
     family: "'Heebo Variable', 'Heebo', Arial, sans-serif",
     /** Sizes in px: page title, section, body, small; `stat` = the big number of a dashboard tile. */
     size: { title: 24, section: 18, body: 16, small: 14, stat: 32 },
-    weight: { regular: 400, medium: 500, semibold: 600 },
+    /** `bold`: page titles and the big tile numbers only. */
+    weight: { regular: 400, medium: 500, semibold: 600, bold: 700 },
   },
   /** Base unit of the 8 px grid (MUI `spacing(1)`). */
   spacing: 8,
@@ -45,6 +62,10 @@ export const tokens = {
     topBarHeight: 56,
     contentMaxWidth: 1200,
     activeBarWidth: 3,
+    /** The colored start-side edge of a dashboard tile and the bar before a page title. */
+    edgeWidth: 3,
+    /** The wordmark's short accent rule. */
+    wordmarkRuleWidth: 20,
   },
   control: { minHeight: 40, largeMinHeight: 44 },
   /**

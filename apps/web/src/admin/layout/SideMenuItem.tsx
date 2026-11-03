@@ -7,7 +7,10 @@ import type { MenuItem } from '../navigation';
 
 const { color, font, layout, control, focusRing } = tokens;
 
-/** One menu line: outline icon + text. Active = brand color and a thin bar, no filled pill. */
+/**
+ * One menu line: outline icon + text. Active = brand text on the light brand tint with a thin
+ * accent bar at the start; a flat block, no rounded pill.
+ */
 export function SideMenuItem({ item, active }: { item: MenuItem; active: boolean }) {
   const Icon = item.icon;
   return (
@@ -22,6 +25,7 @@ export function SideMenuItem({ item, active }: { item: MenuItem; active: boolean
           gap: 1.5,
           px: 2.5,
           color: active ? color.brand : color.text,
+          bgcolor: active ? color.brandTint : 'transparent',
           '&:hover': { bgcolor: color.brandTint },
           // The menu scrolls, which would clip a ring drawn outside the item.
           '&.Mui-focusVisible': { outlineOffset: focusRing.insetOffset },
@@ -32,7 +36,7 @@ export function SideMenuItem({ item, active }: { item: MenuItem; active: boolean
             insetInlineStart: 0,
             width: layout.activeBarWidth,
             borderRadius: '2px',
-            bgcolor: active ? color.brand : 'transparent',
+            bgcolor: active ? color.accent : 'transparent',
           },
         }}
       >

@@ -12,6 +12,7 @@ import { ErrorState } from '../../components/feedback/ErrorState';
 import { PageLoader } from '../../components/feedback/PageLoader';
 import { useNotify } from '../../components/notifications/notify-context';
 import { he } from '../../i18n/he';
+import { tokens } from '../../theme/tokens';
 import { useAuthUser } from '../auth/session';
 import { AttentionRounds } from './AttentionRounds';
 import { OpenDrafts } from './OpenDrafts';
@@ -75,11 +76,14 @@ export function DashboardPage() {
           onRetry={() => void summary.refetch()}
         />
       ) : data.activeRounds === 0 && data.drafts.count === 0 ? (
-        <Paper variant="outlined" sx={{ p: 5, textAlign: 'center' }}>
+        <Paper
+          variant="outlined"
+          sx={{ p: 5, textAlign: 'center', bgcolor: tokens.color.accentTint }}
+        >
           <Typography variant="h2" sx={{ mb: 1 }}>
             {he.dashboard.emptyTitle}
           </Typography>
-          <Typography color="text.secondary">{he.dashboard.emptyText}</Typography>
+          <Typography sx={{ color: tokens.color.accentText }}>{he.dashboard.emptyText}</Typography>
         </Paper>
       ) : (
         <Box sx={{ display: 'grid', gap: 5 }}>

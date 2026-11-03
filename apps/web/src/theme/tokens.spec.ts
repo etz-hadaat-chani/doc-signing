@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TONE_STYLES } from '../components/status/status-tones';
 import { tokens } from './tokens';
 
 /** WCAG 2 relative luminance of a #RRGGBB color. */
@@ -38,7 +39,40 @@ describe('design tokens: text contrast (WCAG AA, 4.5:1)', () => {
     ['info text on its tint', color.info, color.infoTint],
     ['secondary text on the neutral tint', color.textSecondary, color.neutralTint],
     ['text on the neutral tint', color.text, color.neutralTint],
+    // 4.3: the warm background, the accent tint and the dark top bar.
+    ['brand links on background', color.brand, color.background],
+    ['error text on background', color.error, color.background],
+    ['warning text on background', color.warning, color.background],
+    ['success text on background', color.success, color.background],
+    ['info text on background', color.info, color.background],
+    ['text on the accent tint', color.text, color.accentTint],
+    ['secondary text on the accent tint', color.textSecondary, color.accentTint],
+    ['accent text on the accent tint', color.accentText, color.accentTint],
+    ['text on the top bar', color.onTopBar, color.topBar],
+    ['muted text on the top bar', color.onTopBarMuted, color.topBar],
+    ['top bar text on its hover (brand)', color.onTopBar, color.brand],
   ])('%s', (_name, foreground, background) => {
     expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('design tokens: lines, edges and focus rings (WCAG non-text, 3:1)', () => {
+  it.each([
+    ['accent edge on surface', color.accent, color.surface],
+    ['accent bar on background', color.accent, color.background],
+    ['accent bar on the active menu tint', color.accent, color.brandTint],
+    ['accent edge on the accent tint', color.accent, color.accentTint],
+    ['wordmark rule on the top bar', color.accentOnTopBar, color.topBar],
+    ['focus ring on surface', color.brand, color.surface],
+    ['focus ring on background', color.brand, color.background],
+    ['focus ring on the menu tint', color.brand, color.brandTint],
+    ['focus ring on the top bar', color.onTopBar, color.topBar],
+  ])('%s', (_name, line, background) => {
+    expect(contrast(line, background)).toBeGreaterThanOrEqual(3);
+  });
+
+  // Dashboard tiles (StatTiles) take their status tone color as the start edge.
+  it.each(Object.entries(TONE_STYLES))('%s tile edge on surface', (_tone, style) => {
+    expect(contrast(style.color, color.surface)).toBeGreaterThanOrEqual(3);
   });
 });

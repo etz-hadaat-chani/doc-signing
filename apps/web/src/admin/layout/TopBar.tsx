@@ -3,16 +3,26 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
+import { Wordmark } from '../../components/brand/Wordmark';
 import { he } from '../../i18n/he';
 import { tokens } from '../../theme/tokens';
 import { useLogout } from '../auth/session';
 
-const { color, font, layout } = tokens;
+const { color, font, layout, focusRing } = tokens;
 
 /** A thin line before an item, to set it apart from the one next to it. */
-const separatedStart = { borderInlineStart: `1px solid ${color.border}`, paddingInlineStart: 2 };
+const separatedStart = {
+  borderInlineStart: `1px solid ${color.onTopBarMuted}`,
+  paddingInlineStart: 2,
+};
 
-/** Thin white bar: organization on the right; user, role and "יציאה" on the left. */
+/** A white ring: the brand-green one would not show on the dark bar. */
+const focusOnTopBar = {
+  outline: `${focusRing.width}px solid ${color.onTopBar}`,
+  outlineOffset: focusRing.offset,
+};
+
+/** Thin dark-green bar: wordmark on the right; user, role and "יציאה" on the left. */
 export function TopBar({ user }: { user: AuthUser }) {
   const logout = useLogout();
   const [leaving, setLeaving] = useState(false);
@@ -35,14 +45,12 @@ export function TopBar({ user }: { user: AuthUser }) {
         alignItems: 'center',
         gap: 2,
         px: 3,
-        bgcolor: color.surface,
-        borderBottom: `1px solid ${color.border}`,
+        bgcolor: color.topBar,
+        color: color.onTopBar,
       }}
     >
-      <Typography sx={{ fontSize: font.size.section, fontWeight: font.weight.semibold }}>
-        {he.app.organization}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={separatedStart}>
+      <Wordmark onTopBar fontSize={font.size.section} />
+      <Typography variant="body2" sx={{ ...separatedStart, color: color.onTopBarMuted }}>
         {he.app.systemName}
       </Typography>
 
@@ -50,11 +58,20 @@ export function TopBar({ user }: { user: AuthUser }) {
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <Typography>{user.fullName}</Typography>
-        <Typography variant="body2" color="text.secondary" sx={separatedStart}>
+        <Typography variant="body2" sx={{ ...separatedStart, color: color.onTopBarMuted }}>
           {he.roles[user.role]}
         </Typography>
       </Box>
-      <Button color="inherit" onClick={handleLogout} disabled={leaving}>
+      <Button
+        color="inherit"
+        onClick={handleLogout}
+        disabled={leaving}
+        sx={{
+          '&.Mui-focusVisible': focusOnTopBar,
+          '&:hover': { bgcolor: color.brand },
+          '&.Mui-disabled': { color: color.onTopBarMuted },
+        }}
+      >
         {he.topBar.logout}
       </Button>
     </Box>

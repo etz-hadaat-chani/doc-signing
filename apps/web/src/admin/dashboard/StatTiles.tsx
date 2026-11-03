@@ -8,9 +8,12 @@ import { he } from '../../i18n/he';
 import { tokens } from '../../theme/tokens';
 import { TOTAL_TILES } from './dashboard-view';
 
-const { font } = tokens;
+const { font, layout } = tokens;
 
-/** FR-TRK-1: the totals across sending and active rounds, one number tile per status. */
+/**
+ * FR-TRK-1: the totals across sending and active rounds, one number tile per status. The start
+ * edge has the status tone's color (as its icon), so the color still means something.
+ */
 export function StatTiles({ summary }: { summary: DashboardSummary }) {
   const { totals, activeRounds } = summary;
   return (
@@ -45,7 +48,10 @@ export function StatTiles({ summary }: { summary: DashboardSummary }) {
               variant="outlined"
               key={status}
               data-status={status}
-              sx={{ p: 2 }}
+              sx={{
+                p: 2,
+                borderInlineStart: `${layout.edgeWidth}px solid ${TONE_STYLES[look.tone].color}`,
+              }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Icon
@@ -61,7 +67,7 @@ export function StatTiles({ summary }: { summary: DashboardSummary }) {
                 sx={{
                   mt: 1,
                   fontSize: font.size.stat,
-                  fontWeight: font.weight.semibold,
+                  fontWeight: font.weight.bold,
                   lineHeight: 1.2,
                   fontVariantNumeric: 'tabular-nums',
                 }}

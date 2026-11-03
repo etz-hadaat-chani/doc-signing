@@ -17,11 +17,12 @@ export interface CountTile {
   note?: string;
 }
 
-const { font } = tokens;
+const { font, color, layout } = tokens;
 
 /**
  * Numbers as a row of tiles (a list), each a label and a big number. `fit`: as many per row as
- * fit (for longer lists, so a last tile doesn't sit alone); else up to six.
+ * fit (for longer lists, so a last tile doesn't sit alone); else up to six. A thin accent edge on
+ * the start side marks them as numbers.
  */
 export function CountTiles({
   tiles,
@@ -54,7 +55,13 @@ export function CountTiles({
           key={tile.key}
           data-count={tile.key}
           // The numbers stay on one line when a label wraps.
-          sx={{ p: 2, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+          sx={{
+            p: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            borderInlineStart: `${layout.edgeWidth}px solid ${color.accent}`,
+          }}
         >
           <Typography variant="body2" color="text.secondary">
             {tile.to === undefined ? (
@@ -70,7 +77,7 @@ export function CountTiles({
             sx={{
               mt: 1,
               fontSize: font.size.stat,
-              fontWeight: font.weight.semibold,
+              fontWeight: font.weight.bold,
               lineHeight: 1.2,
               fontVariantNumeric: 'tabular-nums',
             }}

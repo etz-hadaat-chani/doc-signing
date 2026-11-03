@@ -10,7 +10,13 @@ const { sign } = tokens;
  */
 export const signTheme = createTheme(theme, {
   typography: {
-    h1: { fontSize: sign.titleSize },
+    // The staff title's accent bar and bold weight stay off the signing pages (layout unchanged).
+    h1: {
+      fontSize: sign.titleSize,
+      fontWeight: tokens.font.weight.semibold,
+      borderInlineStart: 'none',
+      paddingInlineStart: 0,
+    },
     h2: { fontSize: sign.bodySize },
     body1: { fontSize: sign.bodySize },
     body2: { fontSize: sign.smallSize },

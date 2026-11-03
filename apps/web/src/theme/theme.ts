@@ -1,7 +1,7 @@
 import { createTheme, type Shadows } from '@mui/material/styles';
 import { tokens } from './tokens';
 
-const { color, font, radius, shadow, control, focusRing } = tokens;
+const { color, font, radius, shadow, control, focusRing, layout } = tokens;
 
 const focusOutline = {
   outline: `${focusRing.width}px solid ${color.brand}`,
@@ -31,7 +31,14 @@ export const theme = createTheme({
     fontFamily: font.family,
     fontSize: font.size.small,
     htmlFontSize: 16,
-    h1: { fontSize: font.size.title, fontWeight: font.weight.semibold, lineHeight: 1.35 },
+    // A page title: bold, with a short accent bar on its start side (the signing pages drop it).
+    h1: {
+      fontSize: font.size.title,
+      fontWeight: font.weight.bold,
+      lineHeight: 1.35,
+      borderInlineStart: `${layout.edgeWidth}px solid ${color.accent}`,
+      paddingInlineStart: 12,
+    },
     h2: { fontSize: font.size.section, fontWeight: font.weight.semibold, lineHeight: 1.4 },
     h3: { fontSize: font.size.body, fontWeight: font.weight.semibold, lineHeight: 1.5 },
     h4: { fontSize: font.size.body, fontWeight: font.weight.semibold, lineHeight: 1.5 },

@@ -3,6 +3,7 @@ import Paper from '@mui/material/Paper';
 import { ThemeProvider } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
+import { Wordmark } from '../components/brand/Wordmark';
 import { he } from '../i18n/he';
 import { signTheme } from '../theme/sign-theme';
 import { tokens } from '../theme/tokens';
@@ -25,9 +26,7 @@ export function SignLayout({ children, wide = false }: { children: ReactNode; wi
         }}
       >
         <Box sx={{ mb: 3, textAlign: 'center' }}>
-          <Typography sx={{ fontWeight: tokens.font.weight.semibold, color: 'primary.main' }}>
-            {he.app.organization}
-          </Typography>
+          <Wordmark center />
           <Typography color="text.secondary">{he.sign.areaName}</Typography>
         </Box>
         <Paper variant="outlined" sx={{ p: { xs: 3, sm: 5 } }}>

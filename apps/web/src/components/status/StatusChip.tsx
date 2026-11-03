@@ -37,7 +37,7 @@ export function ToneChip({
         backgroundColor: style.background,
         color: style.color,
         fontSize: font.size.small,
-        fontWeight: font.weight.medium,
+        fontWeight: font.weight.semibold,
         lineHeight: 1.5,
         whiteSpace: 'nowrap',
         verticalAlign: 'middle',
