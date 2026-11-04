@@ -1,6 +1,6 @@
 import { type APIRequestContext, expect, type Page, request, test } from '@playwright/test';
-import ExcelJS from 'exceljs';
 import { logIn, seedPassword } from './helpers';
+import { type FakeRow, harGalFile } from './import-helpers';
 
 // Task 5.3: the Excel import from the UI, with files this test builds itself.
 // DANGER: departments are matched by code, so a wrong name would RENAME a real department. The
@@ -18,25 +18,6 @@ const CITY = 'עיר בדיקה';
 const OTHER_CITY = 'עיר בדיקה אחרת';
 const employeeNumber = (index: number) => `98${RUN}${String(index)}`;
 
-// The Har Gal headers the import reads (shared HAR_GAL_HEADERS), one optional extra column
-// (יישוב) and one column the import must ignore.
-const HEADERS = [
-  'שם משפחה',
-  'שכר בסיס',
-  'מספר עובד',
-  'מחלקה',
-  'שם פרטי',
-  'E-Mail',
-  'תעודת זהות',
-  'נייד פרטי - קידומת',
-  'נייד פרטי - מספר',
-  'קידומת',
-  'טלפון',
-  'יישוב',
-] as const;
-type Header = (typeof HEADERS)[number];
-type FakeRow = Partial<Record<Header, string | number>>;
-
 /** 8 random digits + the Israeli check digit. */
 function fakeIdNumber(): string {
   const body = Array.from({ length: 8 }, () => Math.floor(Math.random() * 10));
@@ -51,18 +32,6 @@ function fakeIdNumber(): string {
 function badIdNumber(): string {
   const good = fakeIdNumber();
   return `${good.slice(0, 8)}${String((Number(good.charAt(8)) + 1) % 10)}`;
-}
-
-async function harGalFile(rows: FakeRow[]) {
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('עובדים');
-  sheet.addRow([...HEADERS]);
-  for (const row of rows) sheet.addRow(HEADERS.map((header) => row[header] ?? null));
-  return {
-    name: 'בדיקה אוטומטית.xlsx',
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    buffer: Buffer.from(await workbook.xlsx.writeBuffer()),
-  };
 }
 
 let api: APIRequestContext;

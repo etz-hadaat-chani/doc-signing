@@ -1132,6 +1132,40 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
 - **Build:** Playwright: import → template → round → open link from Mailpit → sign → status signed → file in storage.
 - **Depends on:** Phase 6
 - **Done when:** Passes in CI.
+- **Status:** passes locally (Chromium, 13 s test / 18 s run); waiting for the first green CI run.
+- **Done (rules):**
+  - No app, API, `packages/shared` or `he.ts` change. New `apps/web/e2e/full-flow.e2e.ts` (1 test, serial, 240 s limit):
+    - **Setup:** `SigningSetup('95')` takes the first existing department. Safety check first: `POST /api/employees/search` with the made-up employee number, then with the generated ID number, must find no row at all (even a partial match stops the test before any file is built).
+    - **Import (UI):** one Har Gal row with a unique `@example.test` address. Confirmed only when the preview shows new 1, updated 0, errors 0 and no department tile; Mailpit has 0 emails for the address afterwards.
+    - **Template:** uploaded in the UI (`/templates/new`), id from the 201 answer. Positions (name, ID, date, signature) set through `PATCH /api/templates/:id`, because the editor is already covered by `template-positions.e2e.ts`; the template must report ready.
+    - **Round (UI wizard):** the one employee hand-picked; summary 1 to email; sent.
+    - **Signing (UI):** in a separate browser context (no staff cookie): link from Mailpit → ID → document to its end → mouse signature → B3a (watermark on every page) → statement → sign → B4. `checkPage` checks that every request stays on :5173 and browser storage is empty.
+    - **Proof:**
+      - The API row is `signed`, `digital`, `hasSignedFile`, and the round details screen shows "נחתם".
+      - `GET /api/assignments/:id/document` with `maxRedirects: 0` answers 302. The presigned link's path must end in `rounds/{roundId}/{departmentCode}/{employeeNumber}.pdf` (checked as true / false, never printed).
+      - The file starts with `%PDF-` and has the signature ink, ID, date and name, and no watermark (pdf.js, in memory).
+      - Mailpit has 2 emails for the address. The PDF attachment has the same SHA-256 as the stored file.
+    - **afterAll:** round cancelled, employee made inactive (also found by its exact name if the test failed before recording its id), template archived.
+  - Helpers moved, not copied, with behavior unchanged:
+    - `import-helpers.ts`: `HEADERS`, `harGalFile`, from employee-import.
+    - `wizard-helpers.ts`: `screen`, `next`, `pick`, `summaryToSend`, and `sendAndConfirm(page, roundIds)`, from round-wizard.
+    - `signing-steps.ts`: `T`, `Rect`, `reachForm`, `openPreview`, `tickAndSign`, `watermarkPerPage`, `readSignedPdf`, `inkedImageIn`, from signing-submit.
+    - `SigningSetup` gains `department {id, code, name}`, `trackEmployee` and `trackTemplate`.
+    - The 3 source files were run once locally after the move: all pass.
+  - `playwright.config.ts`: `forbidOnly` in CI; in CI only, `trace: 'retain-on-failure'` and `screenshot: 'only-on-failure'`. Local runs keep none.
+  - CI, new `e2e` job in `ci.yml` (in parallel with `checks`, ubuntu-24.04, 20 min limit):
+    - **Services:** postgres (database `docsign`) and Mailpit, same images as `checks`, plus the same pinned MinIO.
+    - **Environment:** every value is a throwaway written in the workflow (`SEED_USER_PASSWORD`, MinIO keys); no GitHub secrets, nothing from a local `.env`.
+    - **Steps:** `prisma migrate deploy`, `pnpm db:seed`, `nest build`. Then `node dist/main.js`, `node dist/worker/main.js` and `vite --strictPort` start in the background, logging to `e2e-logs/`, and the job waits up to 60 s for `/api/health`, `:5173` and "Worker started".
+    - **Test:** `playwright install --with-deps chromium`, then **only** `e2e/full-flow.e2e.ts` (option A).
+    - **On failure only:** `actions/upload-artifact@v7` uploads `apps/web/test-results/` and `e2e-logs/` for 7 days (fake data only).
+- **Note for later tasks:**
+  - The other 16 e2e files are not in CI yet (option B). Before adding them, check:
+    - the login and signing rate limits with parallel workers (maybe `workers: 1` in CI);
+    - `signing-form.e2e.ts`, which has not run since 6.5;
+    - any file that assumes local data (`components-demo`, `settings`, `users`).
+  - Under `pnpm dev`, running `pnpm typecheck` rebuilds `packages/shared/dist`, and the API's watcher then restarts. An e2e run started right after can fail with 502 or a blank login page (seen twice here); wait for `/api/health`.
+  - 7.3 / 7.4: `full-flow.e2e.ts` is the template for a bigger chain (more employees, several departments); the storage-path check through the 302 works only with path-style storage links (MinIO).
 
 ### [ ] 7.2 Security pass
 - **Build:** Helmet headers and CSP, CSRF protection, review of rate limits, test listing every route and confirming a role check.

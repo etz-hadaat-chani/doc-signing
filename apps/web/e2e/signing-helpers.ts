@@ -37,6 +37,8 @@ export function fakeIdNumber(): string {
 export class SigningSetup {
   api!: APIRequestContext;
   departmentId = '';
+  /** The same department with its code and current name (an import must write it exactly). */
+  department = { id: '', code: 0, name: '' };
   /** An employer signature is already uploaded (read only; never uploaded here). */
   employerSignature = false;
   private readonly templateIds: string[] = [];
@@ -53,10 +55,13 @@ export class SigningSetup {
     });
     expect(login.status()).toBe(200);
     const answer = await this.api.get('/api/departments');
-    const { items } = (await answer.json()) as { items: { id: string }[] };
+    const { items } = (await answer.json()) as {
+      items: { id: string; code: number; name: string }[];
+    };
     const first = items[0];
     if (!first) throw new Error('The seed has no department');
     this.departmentId = first.id;
+    this.department = { id: first.id, code: first.code, name: first.name };
     const settings = await this.api.get('/api/settings');
     expect(settings.status()).toBe(200);
     this.employerSignature =
@@ -134,6 +139,16 @@ export class SigningSetup {
   /** A round made another way (e.g. a correction round): cancelled in `finish()` too. */
   trackRound(id: string) {
     this.roundIds.push(id);
+  }
+
+  /** An employee made another way (e.g. an import): deactivated in `finish()` too. */
+  trackEmployee(id: string) {
+    if (!this.employeeIds.includes(id)) this.employeeIds.push(id);
+  }
+
+  /** A template made another way (e.g. uploaded from the screen): archived in `finish()` too. */
+  trackTemplate(id: string) {
+    this.templateIds.push(id);
   }
 
   /** This employee's row in the round. */

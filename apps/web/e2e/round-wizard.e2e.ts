@@ -1,6 +1,7 @@
 import { type APIRequestContext, expect, type Page, request, test } from '@playwright/test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { logIn, seedPassword } from './helpers';
+import { next, pick, screen, sendAndConfirm, summaryToSend } from './wizard-helpers';
 
 // Task 5.5: the new round wizard (A5).
 // DANGER rules (nothing is ever deleted in this system):
@@ -21,7 +22,6 @@ const BASE_URL = 'http://localhost:5173';
 const RUN = Date.now().toString().slice(-9);
 // Hebrew letters only (digits inside a Hebrew name show in a confusing order): 0 → א, 1 → ב, …
 const TAG = [...RUN].map((digit) => 'אבגדהוזחטי'.charAt(Number(digit))).join('');
-const SCREENS = 'test-results/round-wizard';
 
 interface Department {
   id: string;
@@ -167,26 +167,6 @@ function keepRoundIds(page: Page) {
 
 const asNumber = (text: string | null) => Number((text ?? '').replace(/[^\d]/g, ''));
 
-/**
- * The page in viewport-sized parts (`name`, `name-2`, …): Chromium draws Hebrew in another font
- * in one very tall capture.
- */
-async function screen(page: Page, name: string) {
-  // Strings: the e2e files have no DOM types.
-  const height = Number(await page.evaluate('document.documentElement.scrollHeight'));
-  const view = page.viewportSize()?.height ?? 720;
-  for (let part = 0; part * view < height; part += 1) {
-    await page.evaluate(`window.scrollTo(0, ${String(part * view)})`);
-    const suffix = part === 0 ? '' : `-${String(part + 1)}`;
-    await page.screenshot({ path: `${SCREENS}/${name}${suffix}.png` });
-  }
-  await page.evaluate('window.scrollTo(0, 0)');
-}
-
-async function next(page: Page) {
-  await page.getByRole('button', { name: 'הבא', exact: true }).click();
-}
-
 const COUNT_KEYS = [
   'willSendEmail',
   'noEmail',
@@ -264,57 +244,6 @@ test('officer: no permission on the wizard', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'הבא', exact: true })).toHaveCount(0);
 });
 
-/** Finds a fake employee by number in the picker (POST search) and clicks "add" / "choose". */
-async function pick(page: Page, employeeNumber: string, label: RegExp = /^הוספת /) {
-  const search = page.getByRole('searchbox', { name: 'חיפוש' });
-  await search.fill(employeeNumber);
-  await search.press('Enter');
-  await page
-    .getByRole('table', { name: 'תוצאות החיפוש' })
-    .getByRole('button', { name: label })
-    .click();
-}
-
-/** From the summary to the send step, with a screenshot of each when `shots` is given. */
-async function summaryToSend(page: Page, shots?: string) {
-  await next(page);
-  await expect(page.getByRole('heading', { level: 2, name: 'הגדרות הסבב' })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'תוקף הקישור (בימים)' })).toHaveValue(/\d+/);
-  if (shots) await screen(page, `${shots}-5-settings`);
-  await next(page);
-  await expect(page.getByRole('heading', { level: 2, name: 'תצוגה מקדימה' })).toBeVisible();
-  await expect(page.getByText(/^עמוד 1 מתוך/)).toBeVisible();
-  await expect(page.getByTestId('email-subject')).toBeVisible();
-  // The email really draws in its sandboxed frame, with the placeholder link only.
-  const email = page.frameLocator('iframe[title="תצוגה מקדימה של המייל"]');
-  await expect(email.getByText(/\/sign\/example-link/)).toBeVisible();
-  if (shots) {
-    await screen(page, `${shots}-6-preview`);
-    await page
-      .locator('iframe[title="תצוגה מקדימה של המייל"]')
-      .screenshot({ path: `${SCREENS}/${shots}-6-email.png` });
-  }
-  await next(page);
-  await expect(page.getByRole('heading', { level: 2, name: 'שליחה' })).toBeVisible();
-  if (shots) await screen(page, `${shots}-7-send`);
-}
-
-/** "Send" → confirm; returns the create answer (its id is kept for afterAll). */
-async function sendAndConfirm(page: Page) {
-  const createdAnswer = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === '/api/rounds' && response.request().method() === 'POST',
-  );
-  await page.getByRole('button', { name: 'שליחה', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'לשלוח את הסבב?' });
-  await dialog.getByRole('button', { name: 'שליחה', exact: true }).click();
-  const response = await createdAnswer;
-  if (response.status() === 201) roundIds.push(((await response.json()) as { id: string }).id);
-  // Screens after this show the page, not the dialog fading out.
-  await expect(dialog).toBeHidden();
-  return response;
-}
-
 /** Messages in Mailpit to exactly this address (searched by it alone); nothing printed. */
 async function mailpitCount(address: string): Promise<{ count: number; subjects: string[] }> {
   const answer = await api.get(`${MAILPIT}/api/v1/search`, {
@@ -366,7 +295,7 @@ test('a) from the card to one employee, sent and in Mailpit; then hand-picked on
   await screen(page, 'a-4-summary');
 
   await summaryToSend(page, 'a');
-  const created = await sendAndConfirm(page);
+  const created = await sendAndConfirm(page, roundIds);
   expect(created.status()).toBe(201);
   await expect(page.getByRole('heading', { level: 2, name: 'הסבב נשלח' })).toBeVisible();
   const done = page.getByRole('list', { name: 'תוצאות השליחה' });
@@ -390,7 +319,7 @@ test('a) from the card to one employee, sent and in Mailpit; then hand-picked on
   await expect(page.getByRole('list', { name: 'מספרי הסבב' })).toBeVisible();
   await expect(page.getByTestId('round-recipients-total')).toHaveText('נבחרו 2 עובדים');
   await summaryToSend(page);
-  expect((await sendAndConfirm(page)).status()).toBe(201);
+  expect((await sendAndConfirm(page, roundIds)).status()).toBe(201);
   await expect(page.getByRole('heading', { level: 2, name: 'הסבב נשלח' })).toBeVisible();
   const second = page.getByRole('list', { name: 'תוצאות השליחה' });
   expect(asNumber(await second.locator('[data-count="noEmail"] [data-value]').textContent())).toBe(
@@ -427,7 +356,7 @@ test('c) blocked at create, then an outdated template confirmed at send', async 
   await toSendStep(blockedTemplate, 'חסום');
   const archived = await api.post(`/api/templates/${blockedTemplate.id}/archive`);
   expect(archived.status()).toBe(200);
-  const refused = await sendAndConfirm(page);
+  const refused = await sendAndConfirm(page, roundIds);
   expect(refused.status()).toBe(409);
   await expect(page.getByRole('heading', { level: 2, name: 'סיכום' })).toBeVisible();
   await expect(page.getByText(/הסבב לא נוצר: הנתונים השתנו/)).toBeVisible();
@@ -455,7 +384,7 @@ test('c) blocked at create, then an outdated template confirmed at send', async 
     }
     await route.continue();
   });
-  expect((await sendAndConfirm(page)).status()).toBe(201);
+  expect((await sendAndConfirm(page, roundIds)).status()).toBe(201);
   const panel = page.getByTestId('round-outdated');
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('גרסה 2');
