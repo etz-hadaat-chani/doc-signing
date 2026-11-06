@@ -13,7 +13,7 @@ The system automates sending, signing and tracking employee documents for about 
 | Product | Internal web system for digital document signing and tracking |
 | Users | About 1,500 employees, plus managers and officers |
 | Interface language | Hebrew only, right to left (RTL) |
-| Hosting | Cloud, Israel region |
+| Hosting | AWS, Tel Aviv region (il-central-1); DNS on Cloudflare |
 | Delivery approach | Lean MVP first; everything not essential moves to later phases (section 4) |
 | Status | Approved for development, with the open items in section 14 |
 
@@ -397,9 +397,9 @@ The API puts jobs (send emails, build signed PDFs) in a queue inside PostgreSQL;
 | PDF | pdf-lib + fontkit, a Hebrew font (Heebo or Noto Sans Hebrew), bidi-js | Draws text and the signature onto the PDF; right-to-left ordering |
 | Signature pad | signature\_pad | Smooth drawing with a mouse |
 | Excel | ExcelJS | Reads and writes `.xlsx` |
-| File storage | AWS S3 or Azure Blob, private | Templates and signed PDFs |
+| File storage | AWS S3 (il-central-1), private; MinIO locally | Templates and signed PDFs |
 | Email | Amazon SES, Postmark or SendGrid | Bulk sending, bounce notices |
-| Hosting | AWS Tel Aviv region or Azure Israel Central | Keeps data in Israel |
+| Hosting | AWS Tel Aviv region (il-central-1); DNS on Cloudflare | Keeps data in Israel |
 
 ### Key technical decisions
 
@@ -975,7 +975,7 @@ The biggest risk to launch is not the code but internet filters blocking the sig
 - [x] Reminders: every 3 days until signed, no maximum; they stop when the link expires or the manager cancels.
 - [x] Link expiry: 60 days by default, changeable per round; resending gives a fresh link.
 - [x] Filter companies: NetFree, Etrog, Nativ, Rimon.
-- [ ] Cloud provider (AWS or Azure): decide before the deployment phase. Development runs locally in Docker, and storage and email sit behind adapters, so either works.
+- [x] Cloud provider: AWS, Tel Aviv region (il-central-1), storage S3, DNS on Cloudflare (decided 2026-11-06). Storage and email stay behind adapters.
 - [ ] Har Gal export format: unknown; the later phase keeps all options open.
 - [x] Office signing station (FR-MAN-4): decided 2026-10-28 (5.7): a separate office computer with no staff user signed in, reached with a short typed code; the kiosk routes refuse a request with a valid staff session. A row locked for good opens there with the kiosk session's own 5 ID attempts; her links stay locked.
 - [ ] After-school contract (צהרונית / סייעת צהרון): fields not decided yet. Nothing is built for it now; when it is, its pension field uses "ב only" (FR-TPL-5).

@@ -1192,11 +1192,13 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
 ### [ ] 7.5 Real email provider
 - **Build:** Provider adapter (SES or Postmark) and its bounce webhook; SPF, DKIM, DMARC setup notes.
 - **Depends on:** 3.15
+- **Note (open):** SES or Postmark (check that SES is offered in il-central-1). The SPF, DKIM and DMARC records are added in Cloudflare DNS.
 - **Done when:** Test emails pass SPF, DKIM and DMARC.
 
 ### [ ] 7.6 Deployment
-- **Build:** Docker images, migrations on deploy, secrets, backups, Israel region. Needs the AWS/Azure decision.
+- **Build:** Docker images, migrations on deploy, secrets, backups, Israel region. AWS chosen (il-central-1, S3, DNS on Cloudflare).
 - **Depends on:** 7.2, 7.5
+- **Note (open, Cloudflare):** Is Cloudflare a proxy (orange cloud) or DNS only? That decides `TRUST_PROXY_HOPS` or reading `CF-Connecting-IP`, and whether Cloudflare's bot checks must be off for `/sign` and `/kiosk`. Cloudflare must not cache `/api`, `/sign` or `/kiosk`. Web and API are served on one origin (path routing). Request bodies are kept out of the Cloudflare and load balancer logs.
 - **Note:** In production the app connects as a separate non-owner database role with no UPDATE, DELETE or TRUNCATE on `audit_log` (an owner could disable its triggers); migrations run as the owner.
 - **Note (pg-boss, 2.7):** pg-boss creates and upgrades its own `pgboss` schema on first start, which the non-owner app role can't do. **Recommended:** the deploy step, run as the owner together with the Prisma migrations, runs `CREATE SCHEMA IF NOT EXISTS pgboss AUTHORIZATION <app_role>` once. The app role then owns that one schema and nothing else: pg-boss can install and upgrade its tables there and rebuild its indexes during maintenance, and the app role still has no extra rights on `public` or `audit_log` (job data is IDs only). **Not recommended:** the owner installs the pg-boss tables and the app gets only read/write rights on them. pg-boss upgrades change its tables and its maintenance rebuilds indexes, and both need ownership, so this would break on the first pg-boss upgrade.
 - **Note:** Set Express "trust proxy" to match the real proxy chain (e.g. one hop) so `req.ip` is the client's IP, not the load balancer's (see 3.13). Don't trust all hops: `X-Forwarded-For` could then be spoofed.
@@ -1209,5 +1211,5 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
 ### [ ] 7.7 Filter whitelisting and pilot
 - **Build:** Whitelist with NetFree, Etrog, Nativ, Rimon; test from each; pilot with one department.
 - **Depends on:** 7.6 (start the whitelisting requests now)
-- **Note:** Signed-document download links (2.5) point straight to the storage domain (e.g. the S3 bucket host in il-central-1, or the Azure blob host), so whitelist that domain too with all 4 filters, not only the app domain. Test a download through each.
+- **Note:** Signed-document download links (2.5) point straight to the storage domain (the S3 bucket host in il-central-1), so whitelist that domain too with all 4 filters, not only the app domain. Test a download through each.
 - **Done when:** Signing works through all 4 filters; pilot department over 80% signed.

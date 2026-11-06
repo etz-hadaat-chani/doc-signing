@@ -12,10 +12,10 @@ Internal web system that sends personalized PDFs to ~1,500 employees, collects a
 - **DB:** PostgreSQL 16 · **Jobs:** pg-boss (queue + cron inside Postgres, no Redis)
 - **PDF:** pdf-lib + fontkit + bidi-js (Hebrew RTL drawing)
 - **Excel:** ExcelJS · **Passwords:** Argon2
-- **Storage:** S3-compatible (MinIO locally; AWS S3 or Azure Blob in prod — undecided, keep behind adapter)
+- **Storage:** AWS S3 (il-central-1); MinIO locally. Keep behind the storage adapter.
 - **Email:** adapter; Mailpit (SMTP) locally, SES/Postmark in prod
 - **Tests:** Vitest (unit), Supertest (API), Playwright (E2E)
-- **Hosting:** cloud, Israel region (provider TBD)
+- **Hosting:** AWS il-central-1; DNS on Cloudflare
 
 ## 3. Architecture
 Modular monolith, one codebase, **two processes**: `api` (HTTP) and `worker` (jobs). API enqueues; worker sends emails, runs reminders, builds signed PDFs.
