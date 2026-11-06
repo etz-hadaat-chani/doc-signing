@@ -1128,11 +1128,11 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
 
 ## Phase 7: Integration, testing and launch
 
-### [ ] 7.1 End-to-end test
+### [x] 7.1 End-to-end test
 - **Build:** Playwright: import → template → round → open link from Mailpit → sign → status signed → file in storage.
 - **Depends on:** Phase 6
 - **Done when:** Passes in CI.
-- **Status:** passes locally (Chromium, 13 s test / 18 s run); waiting for the first green CI run.
+- **Status:** green in CI (both jobs); passes locally (Chromium, 13 s test / 18 s run).
 - **Done (rules):**
   - No app, API, `packages/shared` or `he.ts` change. New `apps/web/e2e/full-flow.e2e.ts` (1 test, serial, 240 s limit):
     - **Setup:** `SigningSetup('95')` takes the first existing department. Safety check first: `POST /api/employees/search` with the made-up employee number, then with the generated ID number, must find no row at all (even a partial match stops the test before any file is built).
