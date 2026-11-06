@@ -1177,7 +1177,7 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
 - **Note (signing page, 6.1):** the page address `/sign/<token>` holds the link token. The web app must send `Referrer-Policy: no-referrer` on the signing pages (meta tag or header) and load no outside resources there (fonts, scripts, images from our own host only), or the token leaks in the `Referer` header.
 - **Note (3.13, signing routes):** the six `/api/sign/*` routes are public on purpose and send `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` and `frame-ancestors 'none'` (a middleware in `configureApp`); Helmet must not loosen them. The per-IP limits only stop floods (one filter IP can carry hundreds of employees; the 5-attempt lock per link is the real guard): after the pilot, compare them with the `sign.rate_limited` audit rows and the `signing_rate_hits` counters (kept 1 day) and adjust the `SIGN_RATE_LIMIT_*` values, never below their minimums.
 - **Done when:** No route without a role check except `/sign/*`, login, webhook.
-- **Status:** parts A (headers + CSP) and B (CSRF) done; C (limits, routes), D (dependencies) open.
+- **Status:** parts A (headers + CSP), B (CSRF) and C (limits, routes, search text) done; D (dependencies) open.
 - **Done (rules):**
   - **A, API headers** (`app.setup.ts`, `helmet` 8.3.0 pinned): Helmet runs first, then our middlewares, whose values win. Helmet's CSP is off; we set our own per kind of answer:
     - every answer: `no-store`, `nosniff`, no `X-Powered-By`, Helmet's HSTS `max-age=15552000` (no `includeSubDomains`, no `preload`), COOP / CORP `same-origin`, `Origin-Agent-Cluster`, `X-DNS-Prefetch-Control: off`, `X-Download-Options`, `X-Permitted-Cross-Domain-Policies: none`, `X-XSS-Protection: 0`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, CSP `API_CSP` = `default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
@@ -1197,10 +1197,28 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
     - Covers every staff change, login, logout, the signing routes (verify, fit, preview, submit) and the kiosk. Exempt: only `/api/webhooks/email` (server to server, no cookie, the provider's signature).
     - `request()` / `requestBytes()` unchanged (comment only): the browser sends the headers itself. Swagger in development passes too (same-origin on the API's port); no `requestInterceptor` needed. No e2e or db test file needed a change for it.
   - Tests: `csrf.spec.ts` (the rule); `csrf.db.spec.ts` (every refused case on login, logout, a staff POST and PATCH, sign verify / submit / preview / fit, kiosk code / verify / submit / preview; a refused login sets no cookie, a refused PATCH changes nothing and writes no audit row; a 200 KB body refused with 403 before the 100 KB parser; same-origin, the exact app Origin and no header pass; the 5 MB submit parser still reads 1 MB; reads and the webhook are not checked). `full-flow.e2e.ts` now fails on any CSP violation on the staff screens and the signing pages.
+  - **C, rate limits reviewed** (per IP per 15 minutes unless said): all kept, no pilot data yet. Only change them with the `sign.rate_limited` audit rows / `signing_rate_hits` counters after the pilot, never below the minimum.
+
+    | Limit | Now (default) | Minimum | Decision |
+    |---|---|---|---|
+    | Login per email / per IP (`auth.constants.ts`, NFR-SEC-6) | 5 / 20 failed | fixed | keep |
+    | Signing: all routes / link state / ID checks / wrong ID | 6000 / 2000 / 1000 / 300 | 600 / 200 / 100 / 30 | keep |
+    | Signing: document / form / fit / submit / preview | 1000 / 1000 / 4000 / 300 / 1000 | 60 / 100 / 300 / 30 / 60 | keep |
+    | Kiosk codes typed / wrong per IP / wrong all IPs | 120 / 10 / 100 | 30 / 3 / 20 | keep |
+    | Email webhook (`EMAIL_WEBHOOK_RATE_LIMIT`) | 3000 | 300 | keep; check against the provider's sending IPs in 7.5 |
+  - **C, search text:** no route takes it in a query string. `GET /api/employees` (3.2) has no `q` any more; the search is `POST /api/employees/search` (body). Proved by `route-access.db.spec.ts` (below), not by a list kept by hand.
+  - **C, `route-access.db.spec.ts`** (scans every route of the real AppModule), new checks:
+    - public routes match only health, `/auth/login`, `/sign/*`, `/kiosk/*`, `/webhooks/email` (as well as the exact list already there), and every `/sign` / `/kiosk` route is public (no staff route under them);
+    - every `@Roles` names only manager / officer;
+    - the officer is read-only: the only non-GET routes open to the officer are logout and the two searches (`POST /employees/search`, `POST /rounds/:id/assignments/search`); a new one fails the test until it is reviewed and listed;
+    - every `@Query()` is checked by a zod object schema (read from its `ZodValidationPipe`), and accepts only listed parameters (`page`, `pageSize`, `dept`, `emailStatus`, `active`, `roundId`, `kind`, `includeArchived`, `employeeId`, `linkExpiryDays`, `status`, `approval`, `returned`): no `q`, search or name. A new parameter is added there on purpose.
   - Tests: `security-headers.db.spec.ts` (every header per kind of answer; template preview, print, document 302, export, ZIP and a 409 ZIP answer still work with their headers; Swagger); `vite/security-headers.spec.ts` (the exact policy, dev vs build, no-store on pages only, `/api` untouched).
 - **Note for later tasks:**
   - 7.6: production has no web server yet. Whatever serves `apps/web/dist` (or Cloudflare / the balancer) must send the same headers as `vite/security-headers.ts` with `webCsp({ dev: false, storageOrigin })`, where `storageOrigin` is the S3 bucket host in il-central-1 (with `S3_ENDPOINT` unset, set it explicitly), `no-store` on the HTML pages, and HSTS. Final HSTS value (`includeSubDomains`, `preload`) decided with the Cloudflare setup; today the API sends `max-age=15552000` only.
   - 7.6: if the web build is served by a server that can add a nonce per answer, `style-src 'unsafe-inline'` could become a nonce passed to the emotion cache (`theme/RtlCacheProvider.tsx`); the srcdoc email preview would then need `style-src-attr 'unsafe-inline'`.
+  - 7.6: keep request bodies out of every log: Cloudflare (no body logging / Logpush fields), the load balancer and the app (verify carries the ID number, user screens carry passwords). Only the query string may reach access logs, and it never holds search text (`route-access.db.spec.ts`).
+  - 7.6: Cloudflare must not cache `/api`, `/sign` or `/kiosk` (the answers already say `no-store`) and must not add or rewrite `Content-Security-Policy`, `X-Frame-Options` or `Referrer-Policy`. If its bot checks or "Email Address Obfuscation" / "Rocket Loader" inject scripts, turn them off: the web CSP refuses inline scripts.
+  - 7.6: set the `SIGN_RATE_LIMIT_*` and `EMAIL_WEBHOOK_RATE_LIMIT` values per environment; with Cloudflare as a proxy every request comes from Cloudflare's IPs unless the client IP is read correctly (`TRUST_PROXY_HOPS` or `CF-Connecting-IP`), and one per-IP limit would then block everyone.
   - 7.6: the CSRF check needs the browser's `Sec-Fetch-Site` / `Origin` to reach the API unchanged through Cloudflare and the load balancer, and `APP_PUBLIC_URL` to be the exact public origin (scheme, host, no port unless used). Web and API on one origin (path routing) keeps every call same-origin.
 
 ### [ ] 7.3 Hebrew quality check
