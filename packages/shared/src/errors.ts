@@ -17,6 +17,8 @@ export const ERROR_MESSAGES = {
   INVALID_CREDENTIALS: 'האימייל או הסיסמה שגויים',
   UNAUTHORIZED: 'יש להתחבר למערכת',
   FORBIDDEN: 'אין לך הרשאה לבצע פעולה זו',
+  // A change sent from a page of another site (CSRF, 7.2): refused before anything is read.
+  CSRF_REFUSED: 'הבקשה נחסמה מטעמי אבטחה. יש לרענן את הדף ולנסות שוב',
   NOT_FOUND: 'הפריט המבוקש לא נמצא',
   CONFLICT: 'קיים כבר פריט עם אותם פרטים',
   EMAIL_TAKEN: 'כתובת האימייל כבר רשומה במערכת',

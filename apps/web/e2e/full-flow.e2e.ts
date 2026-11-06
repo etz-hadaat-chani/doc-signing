@@ -213,6 +213,20 @@ async function sendRound(page: Page) {
   return roundId;
 }
 
+/**
+ * CSP violations the browser reports on this page (7.2). Only the directive is kept, never the
+ * blocked address (it could be a link).
+ */
+function watchCsp(page: Page): string[] {
+  const violations: string[] = [];
+  page.on('console', (message) => {
+    const text = message.text();
+    if (!text.includes('Content Security Policy')) return;
+    violations.push(/directive:? "([^"]*)"/.exec(text)?.[1] ?? 'a CSP violation');
+  });
+  return violations;
+}
+
 /** B1 → B2 → B3 → B3a → B4 on the employee's own browser (no staff cookie). */
 async function signThroughLink(browser: Browser) {
   const context = await browser.newContext({
@@ -225,6 +239,7 @@ async function signThroughLink(browser: Browser) {
     const employee = await context.newPage();
     const path = await setup.linkPathFor(address);
     const urls = watchRequests(employee);
+    const blocked = watchCsp(employee);
     await openLink(employee, path);
     await reachForm(employee, idNumber);
     await drawOn(employee, employee.getByRole('img', { name: T.signatureArea }));
@@ -235,6 +250,7 @@ async function signThroughLink(browser: Browser) {
     await expect(employee.getByRole('heading', { level: 1, name: T.done })).toBeVisible();
     await expect(employee.getByText(T.linkCopy)).toBeVisible();
     await checkPage(employee, urls, [idNumber, address]);
+    expect(blocked, 'CSP violations on the signing pages').toEqual([]);
   } finally {
     await context.close();
   }
@@ -291,6 +307,7 @@ test('import → template → round → link from Mailpit → signed → stored 
   browser,
 }) => {
   test.setTimeout(240_000);
+  const blocked = watchCsp(page);
   await logIn(page, 'manager@doc-signing.local', seedPassword());
   await expect(page.getByRole('heading', { level: 1, name: 'לוח בקרה' })).toBeVisible();
 
@@ -341,4 +358,7 @@ test('import → template → round → link from Mailpit → signed → stored 
   expect(attached !== null && startsAsPdf(attached), 'a PDF attached to the copy').toBe(true);
   const same = attached !== null && sha256(attached) === sha256(stored);
   expect(same, 'the attachment is the stored file').toBe(true);
+
+  // 8. The staff screens ran under the CSP (7.2) without a single blocked load.
+  expect(blocked, 'CSP violations on the staff screens').toEqual([]);
 });

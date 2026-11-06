@@ -5,6 +5,7 @@ import { type Express, json, type NextFunction, raw, type Request, type Response
 import helmet from 'helmet';
 import { API_DOCS_PATH } from './common/api-docs/api-docs.js';
 import { AppConfig } from './common/config/config.schema.js';
+import { csrfProtection } from './common/security/csrf.js';
 import { KIOSK_PATH, SIGN_PATH } from './modules/signing/signing.constants.js';
 import { EMAIL_WEBHOOK_PATH } from './modules/webhooks/webhooks.constants.js';
 
@@ -142,6 +143,9 @@ export function configureApp(app: INestApplication): void {
   app.use('/api/assignments/:id/print', tabPdfHeaders);
   app.use('/api/rounds/:id/export', selfFrameHeaders);
   app.use('/api/rounds/:id/download', selfFrameHeaders);
+  // CSRF (7.2): after the headers (a refusal carries them), before every body parser. The email
+  // webhook is server-to-server (no cookie) and checked by the provider's signature.
+  app.use(csrfProtection(config.email.publicUrl, [EMAIL_WEBHOOK_PATH]));
   // Only submit and its preview take the signature and drawings (≈ 4 MB); registered before Nest's own JSON
   // parser (100 KB, added at init), which then leaves the parsed body alone.
   app.use(`${SIGN_PATH}/:token/submit`, signSubmitJson);

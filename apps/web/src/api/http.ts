@@ -14,7 +14,9 @@ export interface RequestOptions<T> {
 /**
  * The one way the web app calls the API (staff and signing areas alike). The session is the
  * browser's httpOnly cookie, sent by the browser itself: no token is ever read or added here.
- * Every failure becomes an ApiRequestError. A later CSRF header (7.2) goes here, in one place.
+ * Every failure becomes an ApiRequestError. No CSRF token either (7.2): the browser itself sends
+ * `Sec-Fetch-Site: same-origin` / `Origin` on every call, and the API refuses a change sent from
+ * another site's page (`CSRF_REFUSED`, shown from ERROR_MESSAGES like any other code).
  */
 export async function request<T>(path: `/api/${string}`, options: RequestOptions<T>): Promise<T> {
   const { schema, method = 'GET', body, signal } = options;
