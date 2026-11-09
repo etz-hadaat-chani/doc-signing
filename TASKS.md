@@ -1177,7 +1177,7 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
 - **Note (signing page, 6.1):** the page address `/sign/<token>` holds the link token. The web app must send `Referrer-Policy: no-referrer` on the signing pages (meta tag or header) and load no outside resources there (fonts, scripts, images from our own host only), or the token leaks in the `Referer` header.
 - **Note (3.13, signing routes):** the six `/api/sign/*` routes are public on purpose and send `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` and `frame-ancestors 'none'` (a middleware in `configureApp`); Helmet must not loosen them. The per-IP limits only stop floods (one filter IP can carry hundreds of employees; the 5-attempt lock per link is the real guard): after the pilot, compare them with the `sign.rate_limited` audit rows and the `signing_rate_hits` counters (kept 1 day) and adjust the `SIGN_RATE_LIMIT_*` values, never below their minimums.
 - **Done when:** No route without a role check except `/sign/*`, login, webhook.
-- **Status:** parts A (headers + CSP), B (CSRF) and C (limits, routes, search text) done; D (dependencies) open.
+- **Status:** done, waiting for CI (parts A headers + CSP, B CSRF, C limits / routes / search text, D dependencies).
 - **Done (rules):**
   - **A, API headers** (`app.setup.ts`, `helmet` 8.3.0 pinned): Helmet runs first, then our middlewares, whose values win. Helmet's CSP is off; we set our own per kind of answer:
     - every answer: `no-store`, `nosniff`, no `X-Powered-By`, Helmet's HSTS `max-age=15552000` (no `includeSubDomains`, no `preload`), COOP / CORP `same-origin`, `Origin-Agent-Cluster`, `X-DNS-Prefetch-Control: off`, `X-Download-Options`, `X-Permitted-Cross-Domain-Policies: none`, `X-XSS-Protection: 0`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, CSP `API_CSP` = `default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
@@ -1212,10 +1212,26 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
     - every `@Roles` names only manager / officer;
     - the officer is read-only: the only non-GET routes open to the officer are logout and the two searches (`POST /employees/search`, `POST /rounds/:id/assignments/search`); a new one fails the test until it is reviewed and listed;
     - every `@Query()` is checked by a zod object schema (read from its `ZodValidationPipe`), and accepts only listed parameters (`page`, `pageSize`, `dept`, `emailStatus`, `active`, `roundId`, `kind`, `includeArchived`, `employeeId`, `linkExpiryDays`, `status`, `approval`, `returned`): no `q`, search or name. A new parameter is added there on purpose.
+  - **D, dependencies** (`pnpm audit --prod` on 2026-11-09: 8 packages, 14 advisories → 4 packages, 5 advisories, all accepted below). A fix only if released 14+ days before the install and inside its parent's range; exact versions only; one row per commit, the lock file checked to change only for that row.
+
+    | Package | Severity | Pulled in by (range) | Fixed version (released) | Action |
+    |---|---|---|---|---|
+    | nodemailer | moderate ×3 | api, direct | 10.1.7 (2026-10-18) | upgraded from 10.0.13 |
+    | multer | high | api, direct (`single-file.interceptor.ts`) | 2.5.0 (2026-10-22) | upgraded from 2.4.0 |
+    | qs | moderate | express `^6.14.0`, body-parser `^6.15.2` / 2.4.0 `^6.16.1`, superagent (dev) `^6.14.1` | 6.16.1 (2026-10-14) | root override `qs: 6.16.1` (fits every range; 6.16.2 / 6.17.x too new) |
+    | body-parser | high | express 5.2.1 `^2.2.1` | 2.4.0 (2026-10-22) | override `express>body-parser: 2.4.0` (after qs: alone it pulled qs 6.17.1, too new) |
+    | fast-uri | moderate ×3, low | ajv 8.20.0 `^3.0.1` (Prisma CLI tooling) | 3.1.9 (2026-10-19) | override `fast-uri: 3.1.9` |
+    | multer (Nest's copy) | high | `@nestjs/platform-express` 12.1.2 pins `2.4.0` | Nest 12.3.0 (2026-10-27) | **accepted:** out of range; loaded but never used (no `FileInterceptor`; uploads go through our own interceptor on 2.5.0) |
+    | uuid | moderate | exceljs 4.4.0 `^8.3.0` | 11.1.1 | **accepted:** out of range; the bug is in v3 / v5 / v6 with a buffer, exceljs uses v4 only |
+    | mysql2 | high, moderate | prisma 7.10.0 pins `3.15.3` | 3.23.1 | **accepted:** out of range; Prisma CLI only, the app never uses MySQL |
+    | deepmerge-ts | high | `@prisma/config` 7.10.0 pins `7.1.5` | 8.0.0 | **accepted:** out of range; merges only our own Prisma config |
+  - Overrides live in the root `package.json` (`pnpm.overrides`), exact versions. No app code changed.
   - Tests: `security-headers.db.spec.ts` (every header per kind of answer; template preview, print, document 302, export, ZIP and a 409 ZIP answer still work with their headers; Swagger); `vite/security-headers.spec.ts` (the exact policy, dev vs build, no-store on pages only, `/api` untouched).
 - **Note for later tasks:**
   - 7.6: production has no web server yet. Whatever serves `apps/web/dist` (or Cloudflare / the balancer) must send the same headers as `vite/security-headers.ts` with `webCsp({ dev: false, storageOrigin })`, where `storageOrigin` is the S3 bucket host in il-central-1 (with `S3_ENDPOINT` unset, set it explicitly), `no-store` on the HTML pages, and HSTS. Final HSTS value (`includeSubDomains`, `preload`) decided with the Cloudflare setup; today the API sends `max-age=15552000` only.
   - 7.6: if the web build is served by a server that can add a nonce per answer, `style-src 'unsafe-inline'` could become a nonce passed to the emotion cache (`theme/RtlCacheProvider.tsx`); the srcdoc email preview would then need `style-src-attr 'unsafe-inline'`.
+  - Upgrade all @nestjs/* to 12.3.0 (exact) as its own small task after 7.2 (qualifies from 2026-11-10); then pnpm audit should drop multer.
+  - Before 7.6: look again at the accepted findings: uuid (a new exceljs release), mysql2 and deepmerge-ts (the next Prisma upgrade). Remove the `qs`, `express>body-parser` and `fast-uri` overrides once express / ajv ship those versions themselves.
   - 7.6: keep request bodies out of every log: Cloudflare (no body logging / Logpush fields), the load balancer and the app (verify carries the ID number, user screens carry passwords). Only the query string may reach access logs, and it never holds search text (`route-access.db.spec.ts`).
   - 7.6: Cloudflare must not cache `/api`, `/sign` or `/kiosk` (the answers already say `no-store`) and must not add or rewrite `Content-Security-Policy`, `X-Frame-Options` or `Referrer-Policy`. If its bot checks or "Email Address Obfuscation" / "Rocket Loader" inject scripts, turn them off: the web CSP refuses inline scripts.
   - 7.6: set the `SIGN_RATE_LIMIT_*` and `EMAIL_WEBHOOK_RATE_LIMIT` values per environment; with Cloudflare as a proxy every request comes from Cloudflare's IPs unless the client IP is read correctly (`TRUST_PROXY_HOPS` or `CF-Connecting-IP`), and one per-IP limit would then block everyone.
