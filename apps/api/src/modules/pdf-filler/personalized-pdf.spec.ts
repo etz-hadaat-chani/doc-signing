@@ -95,6 +95,47 @@ describe('renderPersonalizedPdf: Hebrew reads correctly (NFR-HEB-3)', () => {
     }
   });
 
+  // 7.3: made-up names, departments and template names with hyphens, quotes, numbers, Latin,
+  // parentheses and final letters, each drawn in one box and read back with pdf.js. Two known
+  // pdf.js habits, not drawing faults (the visual order is pinned in pdf-text.spec.ts):
+  // - it doesn't mirror brackets back when it turns the page's visual order into reading order;
+  // - "3 - IT ..." is drawn in the Unicode bidi order a browser shows (from the right: 3, -, IT,
+  //   then the Hebrew), and pdf.js reads that "IT - 3" stretch back as one left-to-right run.
+  it.each([
+    ['שרה-לאה בן-דוד', 'שרה-לאה בן-דוד'],
+    ["צ'רניחובסקי", "צ'רניחובסקי"],
+    ['צה"ל', 'צה"ל'],
+    ['רמח״ל', 'רמח״ל'],
+    ['דוד 2', 'דוד 2'],
+    ['2 דוד', '2 דוד'],
+    ['דוד-3', 'דוד-3'],
+    ['מיכל Smith', 'מיכל Smith'],
+    ['ברוך נחמן אברהם יוסף פרץ', 'ברוך נחמן אברהם יוסף פרץ'],
+    ["120 - מחלקה ב'-2", "120 - מחלקה ב'-2"],
+    ['יוסף (Joe) לוי', 'יוסף )Joe( לוי'],
+    ['לוי (בן-דוד)', 'לוי )בן-דוד('],
+    ['15 - חינוך מיוחד (בנות)', '15 - חינוך מיוחד )בנות('],
+    ['חוזה 2026-2027 (מחליפה)', 'חוזה 2026-2027 )מחליפה('],
+    ['3 - IT ומחשוב', 'IT - 3 ומחשוב'],
+    ['טופס 101 - IT', 'טופס IT - 101'],
+  ])('%s reads back in order', async (name, read) => {
+    const { pdf, text } = await render([{ fieldType: 'full_name' }], { full_name: name });
+    expect(text).toEqual({ tooLong: [], unsupported: [] });
+    expect((await readBack(pdf)).map(({ str, dir }) => [str, dir])).toEqual([[read, 'rtl']]);
+  });
+
+  it('a long name keeps 11 pt in a 200 pt box, shrinks in a 120 pt box, and reads in order', async () => {
+    const name = 'אלישבע-חיה רבקה פרנקנטל-שטרנברג הכהן';
+    for (const width of [200, 120]) {
+      const { pdf, text } = await render([{ fieldType: 'full_name', width }], { full_name: name });
+      expect(text).toEqual({ tooLong: [], unsupported: [] });
+      const read = await readBack(pdf);
+      expect(read.map(({ str }) => str)).toEqual([name]);
+      const [item] = read;
+      expect(item?.width ?? 0).toBeLessThanOrEqual(width - 2 * TEXT_PADDING + 0.5);
+    }
+  });
+
   it('draws the document date as DD/MM/YYYY', async () => {
     const { pdf } = await render([{ fieldType: 'date' }], {});
     expect((await readBack(pdf)).map(({ str }) => str)).toEqual(['17/10/2026']);

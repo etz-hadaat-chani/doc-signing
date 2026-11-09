@@ -29,6 +29,21 @@ describe('contentDisposition', () => {
     expect(header).toContain('filename="12345____-___ 2.pdf"');
   });
 
+  // 7.3: made-up download names with hyphens, quotes, numbers, Latin, brackets, final letters.
+  it.each([
+    'חוזה 2026-2027 (מחליפה) - שרה-לאה בן-דוד.pdf',
+    "הצהרת סודיות - נוסח ב' - ג׳ורג׳ צ'רניחובסקי.pdf",
+    'נוהל צה"ל ורמח״ל - דוד 2.pdf',
+    'טופס 101 - IT - מיכל Smith.pdf',
+    'סבב 2026 - 15 - חינוך מיוחד (בנות) - מסמכים חתומים.zip',
+    'ברוך נחמן אברהם יוסף פרץ.pdf',
+  ])('carries %s exactly in filename*, with a printable ASCII fallback', (name) => {
+    const header = contentDisposition(name);
+    expect(utf8Name(header)).toBe(name);
+    expect(header).toMatch(/^[\x20-\x7e]+$/);
+    expect(header).toMatch(/^attachment; filename="[\x20-\x7e]+"; filename\*=UTF-8''/);
+  });
+
   it('escapes quotes, backslashes and RFC 5987 special characters', () => {
     const header = contentDisposition(`a"b\\c'(d)*%.pdf`);
     expect(header).toContain(`filename="a_b_c'(d)*_.pdf"`);

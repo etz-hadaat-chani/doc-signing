@@ -88,6 +88,25 @@ describe.each(templates)('%s email', (_name, render, hasLink) => {
   });
 });
 
+// 7.3: made-up names and template names with hyphens, quotes, numbers, Latin and brackets.
+describe.each(templates)('%s email with tricky Hebrew names', (_name, render) => {
+  it.each([
+    ['שרה-לאה בן-דוד', 'חוזה 2026-2027 (מחליפה)'],
+    ["ג׳ורג׳ צ'רניחובסקי", "הצהרת סודיות - נוסח ב'"],
+    ['דוד 2 רמח״ל', 'נוהל צה"ל 2026'],
+    ['מיכל Smith', 'טופס 101 - IT'],
+  ])('%s / %s: kept in the text and subject, escaped in the HTML', (employeeName, documentName) => {
+    const email = render({ employeeName, documentName, hrContact });
+    const html = (value: string) => value.replaceAll("'", '&#39;').replaceAll('"', '&quot;');
+    expect(email.text).toContain(`שלום ${employeeName},`);
+    expect(email.text).toContain(documentName);
+    expect(email.html).toContain(`שלום ${html(employeeName)},`);
+    expect(email.html).toContain(html(documentName));
+    expect(email.subject).toContain(documentName);
+    expect(email.subject).not.toMatch(/[\r\n]/);
+  });
+});
+
 describe('subjects', () => {
   it('gives the reminder a different subject from the invitation', () => {
     const invitation = renderInvitation({ ...realistic, link });

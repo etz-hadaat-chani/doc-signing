@@ -52,6 +52,20 @@ describe('attachmentName', () => {
     );
   });
 
+  // 7.3: made-up names with the tricky characters.
+  it.each([
+    'חוזה 2026-2027 (מחליפה) - שרה-לאה בן-דוד.pdf',
+    "הצהרת סודיות - נוסח ב' - ג׳ורג׳ צ'רניחובסקי.pdf",
+    'טופס 101 - IT - מיכל Smith.pdf',
+    'נוהל רמח״ל - ברוך נחמן אברהם יוסף פרץ.pdf',
+  ])('keeps %s as written', (name) => {
+    expect(attachmentName(name)).toBe(name);
+  });
+
+  it('drops the ASCII double quote Windows refuses; gershayim ״ stays', () => {
+    expect(attachmentName('נוהל צה"ל - רמח״ל.pdf')).toBe('נוהל צהל - רמח״ל.pdf');
+  });
+
   it('removes characters Windows refuses and control characters', () => {
     expect(attachmentName('a/b\\c:d*e?f"g<h>i|j\r\nk.pdf')).toBe('abcdefghijk.pdf');
   });

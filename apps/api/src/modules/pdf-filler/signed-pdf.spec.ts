@@ -56,6 +56,7 @@ interface SignOptions {
   pdf?: Uint8Array;
   signedAt?: Date;
   signatureImage?: string;
+  documentName?: string;
 }
 
 async function signInput(
@@ -83,7 +84,7 @@ async function signInput(
         : options.employerPng,
     signedAt: options.signedAt ?? SIGNED_AT,
     reference: REFERENCE,
-    documentName: 'חוזה לדוגמה',
+    documentName: options.documentName ?? 'חוזה לדוגמה',
     font,
   };
 }
@@ -441,6 +442,18 @@ describe('renderSignedPdf: the file (NFR-SIG-1, NFR-SIG-2, NFR-PRV-7)', () => {
     const raw = Buffer.from(result.pdf).toString('latin1');
     expect(raw).not.toContain('Staff Person');
     expect(raw).not.toContain('012345674');
+  });
+
+  // 7.3: the title a reader shows in its window and file properties (made-up template names).
+  it.each([
+    'חוזה 2026-2027 (מחליפה)',
+    "הצהרת סודיות - נוסח ב'",
+    'טופס 101 - IT',
+    'נוהל צה"ל ורמח״ל',
+  ])('the title keeps the template name %s as written', async (documentName) => {
+    const result = await sign(fields, { values, documentName });
+    const doc = await PDFDocument.load(result.pdf, { updateMetadata: false });
+    expect(doc.getTitle()).toBe(documentName);
   });
 
   it('the footer reads right to left on every page, with the Israel date, time and reference', async () => {
