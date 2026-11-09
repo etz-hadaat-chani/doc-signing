@@ -28,7 +28,8 @@
     "job:reminders": "tsx scripts/run-reminders.ts",
     "import:sample": "tsx scripts/import-sample.ts",
     "pdf:sample": "tsx scripts/pdf-sample.ts",
-    "hebrew:samples": "tsx scripts/hebrew-samples.ts"
+    "hebrew:samples": "tsx scripts/hebrew-samples.ts",
+    "load:test": "tsx scripts/load-test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1150.0",

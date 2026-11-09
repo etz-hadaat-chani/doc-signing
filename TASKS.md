@@ -1254,10 +1254,37 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
   - Part B, after 7.5: `pnpm email:preview <address>` (or `hebrew:samples` with its guards relaxed on purpose for a real test inbox) to Outlook (desktop and web) and Gmail: right-to-left layout, the button, the written-out link, the Hebrew subject and the attachment name (RFC 2047). Then tick 7.3.
   - If an office computer or 7-Zip shows broken ZIP names, the 3.17 note applies (add the 0x7075 field; needs another ZIP library).
 
-### [ ] 7.4 Load test
+### [x] 7.4 Load test
 - **Build:** Round of 1,500 recipients with a fake email provider; time dashboard and list queries.
 - **Depends on:** 7.1
 - **Done when:** Sending finishes cleanly; lists load in under 1 second.
+- **Done (rules):**
+  - `pnpm --filter @doc-signing/api load:test` (`apps/api/scripts/load-test.ts`). No app code change, no migration, no new library.
+  - Isolation: its own database (`LOAD_DATABASE_URL`, default `docsign_load`; refused unless the name ends in `_load`, and refused if it already exists), created, migrated (`prisma migrate deploy`) and seeded by the script with a random manager password kept in memory only; its own bucket (`documents-load`, must end in `-load`); its own API (3100) and worker compiled into the git-ignored `apps/api/tmp/load-dist` (never `dist/`; own build info; deleted at the end), from where `main.ts` finds no `.env`. Every variable is passed by the script (`process.loadEnvFile` never overrides a set variable, checked on Node 24.21); the only values read from the root `.env` are the two S3 keys. Proofs printed each run: the seed manager logs in to the load API with the random password; the 1,500 employees are in the load database and 0 in `docsign`; `docsign` counts of employees, rounds, assignments, email_messages and templates unchanged (audit_log reported apart); Mailpit's message total unchanged.
+  - Fake email provider: 2.6 has only the SMTP adapter, so the script runs a counting SMTP sink on `127.0.0.1:2525` (`node:net`, answers OK, throws messages away, counts messages and recipients). The real nodemailer path runs end to end. Addresses `@example.test` only.
+  - Data: one Excel import through the API (`harGalXlsx`): 1,500 made-up employees ("בדיקה" / "אוטומטית" + Hebrew letters, numbers 900001–901500, generated valid ID numbers) in 20 new departments (101–120). Then 20 templates (one per department) and a by-department round through the API, like the wizard (recipients preview → create → send).
+  - Measured (this dev machine, 09/11/2026, `EMAIL_SEND_RATE_PER_SECOND=10`, as in production): import preview 253 ms, commit 1,013 ms; recipients preview 329 ms, round create 525 ms, send request 551 ms; **all 1,500 invitations settled in 155 s** (the rate limit: 1,500 ÷ 10/s); 1,500 sent, 0 failed, 0 unconfirmed; the sink counted exactly 1,500 emails, all `@example.test`; pg-boss `round-invitation` jobs 1,500 completed, 0 retried / failed / stuck; 1,500 assignments `sent`; worker log 0 errors, 0 warnings; worker peak memory 265 MB.
+  - Screens over HTTP (seed manager, 10 runs after one warm-up; limit 1,000 ms):
+
+    | Screen | Median ms | Worst ms |
+    |---|---|---|
+    | Dashboard summary | 6 | 7 |
+    | Rounds list | 7 | 7 |
+    | Round details | 7 | 8 |
+    | Round table, page 1 (100) | 16 | 25 |
+    | Round table, department filter | 13 | 14 |
+    | Round table, status filter | 20 | 32 |
+    | Round table, search by name (POST) | 14 | 18 |
+    | Round table, search by ID (POST) | 13 | 14 |
+    | Employees list (100) | 5 | 13 |
+    | Employees search by name (POST) | 9 | 13 |
+    | Manual handling list | 17 | 20 |
+    | Excel export (1,500 rows) | 353 | 393 |
+
+  - Not timed here: the ZIP (nothing is signed, so 409 `ROUND_HAS_NO_SIGNED_FILES`; the signed ZIP is timed by `round-exports-speed.db.spec.ts`); a Playwright page load (the Vite proxy is fixed to 3000; the HTTP times above are the API side of each page).
+- **Note for later tasks:**
+  - 7.6: rerun the script against the test environment: set `LOAD_DATABASE_URL` (a database ending in `_load`), `LOAD_S3_BUCKET` (ending in `-load`), `LOAD_S3_ENDPOINT`, and `LOAD_COMPARE_DATABASE_URL=` / `LOAD_MAILPIT_API_URL=` (empty = skip those checks). It reads the S3 keys from the root `.env`, so pass them there or extend the script. The send time is set by `EMAIL_SEND_RATE_PER_SECOND` (155 s at 10/s); the provider's real limit (7.5) decides the production value.
+  - Afterwards drop the load database (`docker compose exec postgres dropdb -U docsign docsign_load` locally); the `documents-load` bucket holds only the 20 test templates and can be removed in the MinIO console.
 
 ### [ ] 7.5 Real email provider
 - **Build:** Provider adapter (SES or Postmark) and its bounce webhook; SPF, DKIM, DMARC setup notes.
