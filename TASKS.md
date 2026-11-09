@@ -1167,7 +1167,7 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
   - Under `pnpm dev`, running `pnpm typecheck` rebuilds `packages/shared/dist`, and the API's watcher then restarts. An e2e run started right after can fail with 502 or a blank login page (seen twice here); wait for `/api/health`.
   - 7.3 / 7.4: `full-flow.e2e.ts` is the template for a bigger chain (more employees, several departments); the storage-path check through the 302 works only with path-style storage links (MinIO).
 
-### [ ] 7.2 Security pass
+### [x] 7.2 Security pass
 - **Build:** Helmet headers and CSP, CSRF protection, review of rate limits, test listing every route and confirming a role check.
 - **Depends on:** 7.1
 - **Note (Swagger page, dev only):** `/api/docs` (`common/api-docs/api-docs.ts`) is not registered when `NODE_ENV=production`; keep it that way. Swagger UI uses inline scripts, so the Helmet CSP will block it in development unless `/api/docs` gets a dev-only exception. Once CSRF protection is added, requests from the page must carry the token too (e.g. a Swagger `requestInterceptor`).
@@ -1177,7 +1177,7 @@ Do 3.19 and 3.20 (follow-ups to 3.2–3.5, PRD of Oct 15, 2026) and 3.18 before 
 - **Note (signing page, 6.1):** the page address `/sign/<token>` holds the link token. The web app must send `Referrer-Policy: no-referrer` on the signing pages (meta tag or header) and load no outside resources there (fonts, scripts, images from our own host only), or the token leaks in the `Referer` header.
 - **Note (3.13, signing routes):** the six `/api/sign/*` routes are public on purpose and send `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` and `frame-ancestors 'none'` (a middleware in `configureApp`); Helmet must not loosen them. The per-IP limits only stop floods (one filter IP can carry hundreds of employees; the 5-attempt lock per link is the real guard): after the pilot, compare them with the `sign.rate_limited` audit rows and the `signing_rate_hits` counters (kept 1 day) and adjust the `SIGN_RATE_LIMIT_*` values, never below their minimums.
 - **Done when:** No route without a role check except `/sign/*`, login, webhook.
-- **Status:** done, waiting for CI (parts A headers + CSP, B CSRF, C limits / routes / search text, D dependencies).
+- **Status:** green in CI (parts A headers + CSP, B CSRF, C limits / routes / search text, D dependencies).
 - **Done (rules):**
   - **A, API headers** (`app.setup.ts`, `helmet` 8.3.0 pinned): Helmet runs first, then our middlewares, whose values win. Helmet's CSP is off; we set our own per kind of answer:
     - every answer: `no-store`, `nosniff`, no `X-Powered-By`, Helmet's HSTS `max-age=15552000` (no `includeSubDomains`, no `preload`), COOP / CORP `same-origin`, `Origin-Agent-Cluster`, `X-DNS-Prefetch-Control: off`, `X-Download-Options`, `X-Permitted-Cross-Domain-Policies: none`, `X-XSS-Protection: 0`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, CSP `API_CSP` = `default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
